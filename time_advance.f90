@@ -46,7 +46,7 @@ module time_advance
                          explicit_option_rk4 = 3
 
    real :: xdriftknob, xdriftknob_zonal_g, xdriftknob_zonal_phi, ydriftknob, wstarknob
-   logical :: flip_flop, xdrift_vpamu_indep
+   logical :: flip_flop
 
    ! factor multiplying parallel nonlinearity
    real, dimension(:, :), allocatable :: par_nl_fac, d_par_nl_fac_dr
@@ -149,7 +149,7 @@ contains
       character(10) :: explicit_option
 
       namelist /time_advance_knobs/ xdriftknob, xdriftknob_zonal_g, xdriftknob_zonal_phi, ydriftknob, wstarknob, explicit_option, &
-                                    flip_flop, xdrift_vpamu_indep
+                                    flip_flop
 
       integer :: ierr, in_file
 
@@ -164,7 +164,6 @@ contains
          ydriftknob = 1.0
          wstarknob = 1.0
          flip_flop = .false.
-         xdrift_vpamu_indep = .false.
 
          in_file = input_unit_exist("time_advance_knobs", taexist)
          if (taexist) read (unit=in_file, nml=time_advance_knobs)
@@ -179,7 +178,6 @@ contains
       call broadcast(xdriftknob)
       call broadcast(xdriftknob_zonal_g)
       call broadcast(xdriftknob_zonal_phi)
-      call broadcast(xdrift_vpamu_indep)
       call broadcast(ydriftknob)
       call broadcast(wstarknob)
       call broadcast(flip_flop)
