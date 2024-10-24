@@ -28,6 +28,7 @@ module stella_diagnostics
    logical :: write_radial_fluxes
    logical :: write_radial_moments
    logical :: write_fluxes_kxkyz
+   logical :: write_energy_flux_in_k
    logical :: write_pol_mom_flux
    logical :: flux_norm
 
@@ -82,6 +83,7 @@ contains
       call broadcast(write_radial_fluxes)
       call broadcast(write_radial_moments)
       call broadcast(write_fluxes_kxkyz)
+      call broadcast(write_energy_flux_in_k)
       call broadcast(write_pol_mom_flux)
       call broadcast(flux_norm)
 
@@ -160,7 +162,7 @@ contains
       namelist /stella_diagnostics_knobs/ nwrite, navg, nsave, &
          save_for_restart, write_phi_vs_time, write_gvmus, write_gvmus_NZ, write_gvmus_Z, write_g00xyz, write_gzvs, &
          write_omega, write_kspectra, write_moments, write_radial_fluxes, &
-         write_radial_moments, write_fluxes_kxkyz, write_pol_mom_flux, &
+         write_radial_moments, write_fluxes_kxkyz, write_energy_flux_in_k, write_pol_mom_flux, &
          flux_norm, nc_mult
 
       if (proc0) then
@@ -180,6 +182,7 @@ contains
          write_radial_fluxes = radial_variation
          write_radial_moments = radial_variation
          write_fluxes_kxkyz = .false.
+         write_energy_flux_in_k = .false.
          write_pol_mom_flux = .false.
          nc_mult = 1
          flux_norm = .true.
@@ -300,6 +303,7 @@ contains
       use stella_io, only: write_radial_fluxes_nc
       use stella_io, only: write_radial_moments_nc
       use stella_io, only: write_fluxes_kxkyz_nc
+      use stella_io, only: write_energy_flux_in_k_nc
       use stella_io, only: write_pol_mom_flux_nc
       use stella_io, only: sync_nc
       use stella_time, only: code_time, code_dt, cfl_dt_ExB
@@ -330,6 +334,9 @@ contains
       real, dimension(:, :, :, :, :), allocatable :: pflx_kxkyz, vflx_kxkyz, qflx_kxkyz
       complex, dimension(:, :, :, :), allocatable :: vflx_pol_phi_slab_kxz,   vflx_pol_phi_shear_kxz
       complex, dimension(:, :, :, :), allocatable :: vflx_pol_Tperp_slab_kxz, vflx_pol_Tperp_shear_kxz
+      real, dimension(:, :, :),    allocatable :: PiNZ_Kx, PiNZ_Ky
+      real, dimension(:, :, :, :), allocatable :: PiZ_kxadv_Kx
+
       complex, dimension(:, :, :, :, :), allocatable :: density, upar, temperature, pressure, pressure_perp
       complex, dimension(:, :, :, :, :), allocatable :: qperp, qpar, chi, spitzer2
       real, dimension(:, :, :, :, :), allocatable :: Wenergy_g
@@ -386,7 +393,10 @@ contains
       allocate (vflx_pol_phi_shear_kxz(  nakx, nztot, ntubes, nspec))
       allocate (vflx_pol_Tperp_slab_kxz( nakx, nztot, ntubes, nspec))
       allocate (vflx_pol_Tperp_shear_kxz(nakx, nztot, ntubes, nspec))
-
+      allocate (PiNZ_Kx(int(nakx/2)+1, ntubes, nspec))
+      allocate (PiNZ_Ky(naky         , ntubes, nspec))
+      allocate (PiZ_kxadv_Kx(int(nakx/2)+1, int(nakx/2)+1, ntubes, nspec))
+     ! allocate (PiZ_kxadv_Kx( nakx, int(nakx/2)+1, ntubes, nspec))
 
       if (write_radial_fluxes) then
          allocate (part_flux_x(nakx, nspec))
@@ -429,6 +439,21 @@ contains
                          pflx_kxkyz, vflx_kxkyz, qflx_kxkyz)
          !> convert back from h to g
          call g_to_h(gvmu, phi, -fphi)
+      end if
+
+      !> obtain flux of energy through kperp-space due to zonal and nonzonal flows
+      if (write_energy_flux_in_k) then
+         if (radial_variation .or. write_radial_fluxes) then
+            write (*, *) 'To be implemented'
+         else if (full_flux_surface) then
+            write (*, *) 'To be implemented'
+         else
+            if (debug) write (*, *) 'stella_diagnostics::get_energy_flux_in_k'
+!            !> redistribute data so that data for each vpa and mu are guaranteed to be on each processor
+!            call scatter(kxkyz2vmu, gnew, gvmu)
+            !> compute the fluxes
+            call get_energy_flux_in_k(gnew, PiNZ_Kx, PiNZ_Ky, PiZ_kxadv_Kx)
+         end if
       end if
 
       !> obtain turbulent fluxes of poloidal momentum
@@ -518,6 +543,10 @@ contains
             if (debug) write (*, *) 'stella_diagnostics::diagnose_stella::write_fluxes_kxkyz'
             if (proc0) call write_fluxes_kxkyz_nc(nout, pflx_kxkyz, vflx_kxkyz, qflx_kxkyz)
          end if
+         if (write_energy_flux_in_k) then
+            if (debug) write (*, *) 'stella_diagnostics::diagnose_stella::write_energy_flux_in_k'
+            if (proc0) call write_energy_flux_in_k_nc(nout, PiNZ_Kx, PiNZ_Ky, PiZ_kxadv_Kx)
+         end if
          if (write_pol_mom_flux) then
             if (debug) write (*, *) 'stella_diagnostics::diagnose_stella::write_pol_mom_kx_nc'
             if (proc0) call write_pol_mom_flux_nc(nout, vflx_pol_phi_slab_kxz, vflx_pol_phi_shear_kxz, vflx_pol_Tperp_slab_kxz, vflx_pol_Tperp_shear_kxz)
@@ -581,6 +610,7 @@ contains
       deallocate (pflx_kxkyz, vflx_kxkyz, qflx_kxkyz)
       deallocate (phi_out)
       deallocate (vflx_pol_phi_slab_kxz, vflx_pol_phi_shear_kxz, vflx_pol_Tperp_slab_kxz, vflx_pol_Tperp_shear_kxz)
+      deallocate (PiNZ_Kx, PiNZ_Ky, PiZ_kxadv_Kx)
 
       if (allocated(part_flux_x)) deallocate (part_flux_x)
       if (allocated(mom_flux_x)) deallocate (mom_flux_x)
@@ -744,6 +774,241 @@ contains
 
    end subroutine get_fluxes
 
+   !> Calculate energy flux through kperp space from zonal and nonzonal flows
+   subroutine get_energy_flux_in_k(g, PiNZ_Kx, PiNZ_Ky, PiZ_kxadv_Kx)
+      use mp, only: sum_reduce, proc0
+      use constants, only: zi
+      use fields_arrays, only: phi
+      use stella_layouts, only: kxkyz_lo
+      use stella_layouts, only: iky_idx, ikx_idx, iz_idx, it_idx, is_idx, iv_idx, imu_idx
+      use species, only: spec, nspec
+      use stella_geometry, only: jacob, grho, bmag, btor
+      use stella_geometry, only: gds21, gds22
+      use stella_geometry, only: geo_surf
+      use zgrid, only: delzed, nzgrid, ntubes
+      use species, only: spec, nspec
+      use vpamu_grids, only: nvpa, nmu
+      use vpamu_grids, only: integrate_vmu, maxwell_vpa, maxwell_mu, maxwell_fac
+      use run_parameters, only: fphi, fapar
+      use kt_grids, only: aky, theta0
+
+      use dist_fn_arrays, only: g1
+      use gyro_averages, only: gyro_average, gyro_average_j1
+      use stella_transforms, only: transform_y2ky, transform_x2kx
+      use kt_grids, only: naky_all, ikx_max, nx, ny, naky, nakx, akx
+      use kt_grids, only: swap_kxky_back, swap_kxky
+      use stella_layouts, only: vmu_lo, imu_idx
+
+      implicit none
+
+      complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
+      real, dimension(:, :, :),    intent(out) :: PiNZ_Kx, PiNZ_Ky
+      real, dimension(:, :, :, :), intent(out) :: PiZ_kxadv_Kx
+
+      integer :: iv, imu, ivmu, ikxkyz, iky, ikx, ikxadv, iz, it, is, ia
+      complex, dimension(:, :)   , allocatable :: ikxchiZ, ikxchiNZ, ikychiNZ
+      real,    dimension(:, :, :), allocatable :: flx_x, flx_y
+      real,    dimension(:, :),    allocatable :: dchidxNZ, dchidyNZ
+      real,    dimension(:, :, :), allocatable :: dchidxZ
+      complex, dimension(:, :, :), allocatable :: h_r_fourier, h_r_K_fourier
+      real,    dimension(:, :, :), allocatable :: dh_r_dx, dh_r_dy, h_r_K
+      real, dimension(:), allocatable :: flx_norm
+      complex, dimension(:, :), allocatable :: tmp_kxy, tmp_k_swap, tmp_k
+      real,    dimension(:, :), allocatable :: tmp_xy
+
+      allocate (ikxchiZ( naky, nakx))
+      allocate (ikxchiNZ(naky, nakx))
+      allocate (ikychiNZ(naky, nakx))
+      allocate (dchidxZ( ny,   nx, nakx))
+      allocate (dchidxNZ(ny,   nx))
+      allocate (dchidyNZ(ny,   nx))
+      allocate (flx_x( ny, nx, nspec))
+      allocate (flx_y(ny, nx, nspec))
+      allocate (h_r_fourier(  naky, nakx, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      allocate (h_r_K_fourier(naky, nakx, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      allocate (h_r_K(          ny,   nx, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      allocate (dh_r_dx(        ny,   nx, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      allocate (dh_r_dy(        ny,   nx, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      allocate (flx_norm(-nzgrid:nzgrid))
+      allocate (tmp_xy(     naky_all, ikx_max))
+      allocate (tmp_kxy(    ny,       ikx_max))
+      allocate (tmp_k_swap( ny,       ikx_max))
+      allocate (tmp_k(      ny,       nx))
+
+      PiNZ_Kx      = 0
+      PiNZ_Ky      = 0
+      PiZ_kxadv_Kx = 0
+
+      ! zed normalisation
+      flx_norm = jacob(1, :) * delzed
+      flx_norm(-nzgrid) = 0.5 * flx_norm(-nzgrid)
+      flx_norm(nzgrid) = 0.5 * flx_norm(nzgrid)
+      if (flux_norm) then
+         ! Flux definition with an extra factor 1/<\nabla\rho> in front.
+         flx_norm = flx_norm / sum(flx_norm * grho(1, :))
+      else
+         ! Flux definition without the extra factor.
+         flx_norm = flx_norm / sum(flx_norm)
+      end if
+
+!      if (proc0) then
+      ! Obtain fluxes
+      ia = 1
+      do it = 1, ntubes
+         do iz = -nzgrid, nzgrid
+
+            !ikxchiNZ(8,6) = 1
+            !call forward_transform(ikxchiNZ, dchidxNZ)
+            !write (6, *) maxval(dchidxNZ)
+
+            ! Compute advecting flows
+            ikxchiNZ = 0
+            ikxchiNZ(2:, :) = zi*spread(akx,1,naky-1)*phi(2:,:,iz,it)
+            ikychiNZ(:, :)  = zi*spread(aky,2,nakx)  *phi(: ,:,iz,it)
+            call forward_transform(ikxchiNZ, dchidxNZ)
+            call forward_transform(ikychiNZ, dchidyNZ)
+
+
+            do ikxadv = 1, int(nakx/2)+1
+               ikxchiZ = 0
+               ikxchiZ(1, ikxadv) = zi*akx(ikxadv)*phi(1,ikxadv,iz,it)
+               call forward_transform(ikxchiZ,  dchidxZ(:,:,ikxadv))
+            end do
+
+            ! Evaluate gyro-averaged distribution <h>_r
+            do ikx = 1, nakx
+               do iky = 1, naky
+                  do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+                     call gyro_average(g(iky, ikx, iz, it, ivmu), iky, ikx, iz, ivmu, h_r_fourier(iky, ikx, ivmu))
+                  end do
+               end do
+            end do
+            do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+               call forward_transform(h_r_fourier(:,:,ivmu)*zi*spread(akx,1,naky), dh_r_dx(:,:,ivmu))
+               call forward_transform(h_r_fourier(:,:,ivmu)*zi*spread(aky,2,nakx), dh_r_dy(:,:,ivmu))
+            end do
+
+            ! Evaluate Kx transfer
+            h_r_K_fourier = 0
+            do ikx = 1, int(nakx/2)+1
+               h_r_K = 0
+               ! distribution up to |Kx|
+               do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+
+!                  if (proc0) then
+!                     write (6, *) 'proc0:'
+!                     write (6, *) ivmu
+!                  end if
+!                  write (6, *) 'All procs:'
+!                  write (6, *) ivmu
+
+                  h_r_K_fourier(:,ikx,            ivmu) = h_r_fourier(:,ikx,            ivmu)
+                  if (ikx > 1) h_r_K_fourier(:,nakx+2-ikx,ivmu) = h_r_fourier(:,nakx+2-ikx,ivmu)
+                  call forward_transform(h_r_K_fourier(:,:,ivmu), h_r_K(:,:,ivmu))
+
+                  ! Normalise by Maxwellian
+                  iv = iv_idx(vmu_lo, ivmu)
+                  imu = imu_idx(vmu_lo, ivmu)
+                  is = is_idx(vmu_lo, ivmu)
+                  h_r_K(:,:,ivmu) = h_r_K(:,:,ivmu)/(maxwell_vpa(iv,is)*maxwell_mu(ia,iz,imu,is)*maxwell_fac(is))
+               end do
+
+               ! velocity integral
+               call integrate_vmu(dh_r_dx*h_r_K, spec%temp_psi0*spec%dens_psi0, iz, flx_x)
+               call integrate_vmu(dh_r_dy*h_r_K, spec%temp_psi0*spec%dens_psi0, iz, flx_y)
+                      
+               ! spatial integral
+               do is = 1, nspec
+                  do ikxadv = 1, int(nakx/2)+1
+                     PiZ_kxadv_Kx(ikxadv, ikx, it, is)  = PiZ_kxadv_Kx(ikxadv, ikx, it, is) &
+                          + sum(flx_y(:,:,is)*dchidxZ(:,:,ikxadv))*flx_norm(iz)/(nx*ny)
+                  end do
+
+                  PiNZ_Kx(ikx, it, is)  =  PiNZ_Kx(ikx, it, is)&
+                          + sum(flx_y(:,:,is)*dchidxNZ-flx_x(:,:,is)*dchidyNZ)*flx_norm(iz)/(nx*ny)
+               end do
+            end do
+
+            ! Evaluate Ky transfer
+            h_r_K_fourier = 0
+            do iky = 1, naky
+               h_r_K = 0
+               ! distribution up to Ky
+               do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+                  h_r_K_fourier(iky,:,ivmu) = h_r_fourier(iky,:,ivmu)
+                  call forward_transform(h_r_K_fourier(:,:,ivmu), h_r_K(:,:,ivmu))
+
+                  ! Normalise by Maxwellian
+                  iv = iv_idx(vmu_lo, ivmu)
+                  imu = imu_idx(vmu_lo, ivmu)
+                  is = is_idx(vmu_lo, ivmu)
+                  h_r_K(:,:,ivmu) = h_r_K(:,:,ivmu)/(maxwell_vpa(iv,is)*maxwell_mu(ia,iz,imu,is)*maxwell_fac(is))
+               end do
+
+               ! velocity integral
+               call integrate_vmu(dh_r_dx*h_r_K, spec%temp_psi0*spec%dens_psi0, iz, flx_x)
+               call integrate_vmu(dh_r_dy*h_r_K, spec%temp_psi0*spec%dens_psi0, iz, flx_y)
+                      
+               ! spatial integral
+               do is = 1, nspec
+                  PiNZ_Ky(iky, it, is)  = PiNZ_Ky(iky, it, is)&
+                          + sum(flx_y(:,:,is)*dchidxNZ-flx_x(:,:,is)*dchidyNZ)*flx_norm(iz)/(nx*ny)
+               end do
+            end do
+         end do
+      end do
+!      end if
+
+      call sum_reduce(PiZ_kxadv_Kx, 0)
+      call sum_reduce(PiNZ_Kx,      0)
+      call sum_reduce(PiNZ_Ky,      0)
+        
+      deallocate(ikxchiZ, ikxchiNZ, ikychiNZ)
+      deallocate(dchidxZ, dchidxNZ, dchidyNZ)
+      deallocate(flx_x, flx_y)
+      deallocate(h_r_fourier, h_r_K_fourier)
+      deallocate(dh_r_dx, dh_r_dy, h_r_K)
+      deallocate(flx_norm)
+      deallocate (tmp_xy, tmp_kxy, tmp_k_swap, tmp_k)
+
+
+   contains
+
+      subroutine forward_transform(gk, gx)
+
+         use stella_transforms, only: transform_ky2y, transform_kx2x
+         use stella_transforms, only: transform_ky2y_xfirst, transform_kx2x_xfirst
+
+         implicit none
+
+         complex, dimension(:, :), intent(in) :: gk
+         real, dimension(:, :), intent(out) :: gx
+
+         !if (yfirst) then
+         ! we have i*ky*g(kx,ky) for ky >= 0 and all kx
+         ! want to do 1D complex to complex transform in y
+         ! which requires i*ky*g(kx,ky) for all ky and kx >= 0
+         ! use g(kx,-ky) = conjg(g(-kx,ky))
+         ! so i*(-ky)*g(kx,-ky) = -i*ky*conjg(g(-kx,ky)) = conjg(i*ky*g(-kx,ky))
+         ! and i*kx*g(kx,-ky) = i*kx*conjg(g(-kx,ky)) = conjg(i*(-kx)*g(-kx,ky))
+         ! and i*(-ky)*J0(kx,-ky)*phi(kx,-ky) = conjg(i*ky*J0(-kx,ky)*phi(-kx,ky))
+         ! and i*kx*J0(kx,-ky)*phi(kx,-ky) = conjg(i*(-kx)*J0(-kx,ky)*phi(-kx,ky))
+         ! i.e., can calculate dg/dx, dg/dy, d<phi>/dx and d<phi>/dy
+         ! on stella (kx,ky) grid, then conjugate and flip sign of (kx,ky)
+         ! NB: J0(kx,ky) = J0(-kx,-ky)
+         ! TODO DSO: coordinate change for shearing
+         call swap_kxky(gk, tmp_k_swap)
+         call transform_ky2y(tmp_k_swap, tmp_kxy)
+         call transform_kx2x(tmp_kxy, gx)
+         !else
+         !   call transform_kx2x_xfirst(gk, g0xky)
+         !   g0xky = g0xky * prefac
+         !   call transform_ky2y_xfirst(g0xky, gx)
+         !end if
+
+      end subroutine forward_transform
+
+   end subroutine get_energy_flux_in_k
 
    !> Calculate fluxes of poloidal momentum
    subroutine get_pol_mom_fluxes(g, vflx_pol_phi_slab_kxz, vflx_pol_phi_shear_kxz, &
@@ -778,7 +1043,7 @@ contains
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: vflx_pol_phi_slab_kxz,   vflx_pol_phi_shear_kxz
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: vflx_pol_Tperp_slab_kxz, vflx_pol_Tperp_shear_kxz
 
-      integer :: imu, ivmu, ikxkyz, iky, ikx, iz, it, is, ia
+      integer :: iv, imu, ivmu, ikxkyz, iky, ikx, iz, it, is, ia
       complex, dimension(:, :, :, :, :), allocatable :: Tperp
       complex, dimension(:, :), allocatable :: ikxchi, ikychi, ikyTperp
       real,    dimension(:, :), allocatable :: dchidx, dchidy, dTperpdy
@@ -2289,11 +2554,13 @@ contains
 
       use mp, only: nproc, sum_reduce
       use stella_layouts, only: kxkyz_lo
-      use stella_layouts, only: is_idx, iky_idx, iz_idx
+      use stella_layouts, only: is_idx, iky_idx, ikx_idx, iz_idx
       use zgrid, only: ntubes
       use vpamu_grids, only: nvpa, nmu
       use stella_geometry, only: dl_over_b
       use volume_averages, only: mode_fac
+      use run_parameters, only: secondary, secondary_ikx_P
+      use kt_grids, only: nakx
 
       implicit none
 
@@ -2301,7 +2568,7 @@ contains
       real, dimension(:, :, :), intent(out) :: gv
       logical, intent(in) :: only_zonal, remove_zonal
 
-      integer :: ikxkyz, iv, is, imu, iz, iky, ia!, ivp
+      integer :: ikxkyz, iv, is, imu, iz, iky, ikx, ia!, ivp
 
       ia = 1
 
@@ -2313,7 +2580,13 @@ contains
       do ikxkyz = kxkyz_lo%llim_proc, kxkyz_lo%ulim_proc
          is = is_idx(kxkyz_lo, ikxkyz)
          iky = iky_idx(kxkyz_lo, ikxkyz)
+         ikx = ikx_idx(kxkyz_lo, ikxkyz)
          if (( iky < 1.5 .and. remove_zonal) .or. (iky > 1.5 .and. only_zonal)) then
+            cycle
+         end if
+
+         ! for secondary setup, we are not interested in primary velocity distribution
+         if (secondary .and. iky .eq. 2 .and. (ikx .eq. secondary_ikx_P .or. ikx .eq. nakx-secondary_ikx_P+2)) then
             cycle
          end if
 
@@ -2341,6 +2614,7 @@ contains
       use vpamu_grids, only: integrate_mu
       use kt_grids, only: nakx, naky
       use volume_averages, only: mode_fac
+      use run_parameters, only: secondary, secondary_ikx_P
 
       implicit none
 
@@ -2361,7 +2635,13 @@ contains
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
          do ikx = 1, nakx
             do iky = 1, naky
+               ! for secondary setup, we are not interested in primary velocity distribution
+               if (secondary .and. iky .eq. 2 .and. (ikx .eq. secondary_ikx_P .or. ikx .eq. nakx-secondary_ikx_P+2)) then
+                  cycle
+               end if
+
                gtmp(:, :, ivmu) = gtmp(:, :, ivmu) + real(g(iky, ikx, :, :, ivmu) * conjg(g(iky, ikx, :, :, ivmu))) * mode_fac(iky)
+
             end do
          end do
       end do

@@ -24,6 +24,7 @@ module stella_io
    public :: write_radial_fluxes_nc
    public :: write_radial_moments_nc
    public :: write_fluxes_kxkyz_nc
+   public :: write_energy_flux_in_k_nc
    public :: write_pol_mom_flux_nc
    public :: get_nout
    public :: sync_nc
@@ -476,6 +477,27 @@ contains
                         long_name="Heat flux")
 # endif
    end subroutine write_fluxes_kxkyz_nc
+
+   subroutine write_energy_flux_in_k_nc(nout, PiNZ_kxadv_Ky_Kx, PiZ_kxadv_Ky_Kx)
+# ifdef NETCDF
+      use neasyf, only: neasyf_write
+# endif
+      implicit none
+      !> Current timestep
+      integer, intent(in) :: nout
+      real, dimension(:, :, :, :, :), intent(in) :: PiNZ_kxadv_Ky_Kx, PiZ_kxadv_Ky_Kx
+
+# ifdef NETCDF
+      call neasyf_write(ncid, "PiNZ_kxadv_Ky_Kx", PiNZ_kxadv_Ky_Kx, &
+                        dim_names=[character(len=7)::"kxadv", "Ky", "Kx", "tube", "species", "t"], &
+                        start=[1, 1, 1, 1, 1, nout], &
+                        long_name="Energy flux through wavenumbers (Kx,Ky) due to nonzonal flow with wavenumber kxadv")
+      call neasyf_write(ncid, "PiZ_kxadv_Ky_Kx", PiZ_kxadv_Ky_Kx, &
+                        dim_names=[character(len=7)::"kxadv", "Ky", "Kx", "tube", "species", "t"], &
+                        start=[1, 1, 1, 1, 1, nout], &
+                        long_name="Energy flux through wavenumbers (Kx,Ky) due to zonal flow with wavenumber kxadv")
+# endif
+   end subroutine write_energy_flux_in_k_nc
 
 
    subroutine write_pol_mom_flux_nc(nout, vflx_pol_phi_slab_kxz, vflx_pol_phi_shear_kxz, vflx_pol_Tperp_slab_kxz, vflx_pol_Tperp_shear_kxz)

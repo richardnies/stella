@@ -13,6 +13,9 @@ module hyper
    real :: tfac
    real :: k2max
 
+   logical :: zonal_damping
+   real :: D_zonal, D_zonal_kxmin, D_zonal_kxmax
+
 contains
 
    subroutine read_parameters_hyper
@@ -23,7 +26,8 @@ contains
 
       implicit none
 
-      namelist /hyper/ D_hyper, use_physical_ksqr, scale_to_outboard
+      namelist /hyper/ D_hyper, use_physical_ksqr, scale_to_outboard, &
+        zonal_damping, D_zonal, D_zonal_kxmin, D_zonal_kxmax
 
       integer :: in_file
       logical :: dexist
@@ -33,6 +37,11 @@ contains
          scale_to_outboard = .false.                                          ! scales hyperdissipation to zed = 0
          D_hyper = 0.05
 
+         zonal_damping = .false.
+         D_zonal = 0
+         D_zonal_kxmin = -1
+         D_zonal_kxmax = 1e10
+
          in_file = input_unit_exist("hyper", dexist)
          if (dexist) read (unit=in_file, nml=hyper)
       end if
@@ -40,6 +49,10 @@ contains
       call broadcast(use_physical_ksqr)
       call broadcast(scale_to_outboard)
       call broadcast(D_hyper)
+      call broadcast(zonal_damping)
+      call broadcast(D_zonal)
+      call broadcast(D_zonal_kxmin)
+      call broadcast(D_zonal_kxmax)
 
    end subroutine read_parameters_hyper
 
@@ -99,14 +112,14 @@ contains
       use zgrid, only: nzgrid, ntubes, zed
       use stella_layouts, only: vmu_lo
       use dist_fn_arrays, only: kperp2
-      use kt_grids, only: naky
+      use kt_grids, only: naky, nakx
       use kt_grids, only: aky, akx, theta0, zonal_mode
 
       implicit none
 
       complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in out) :: g
 
-      integer :: ia, ivmu, iz, it, iky
+      integer :: ia, ivmu, iz, it, iky, ikx
 
       ia = 1
 
@@ -119,6 +132,7 @@ contains
                   do iky = 1, naky
                      if (zonal_mode(iky)) then
                         g(iky, :, iz, it, ivmu) = g(iky, :, iz, it, ivmu) / (1.+code_dt * (akx(:)**2 / k2max)**2 * D_hyper)
+
                      else
                         g(iky, :, iz, it, ivmu) = g(iky, :, iz, it, ivmu) / (1.+code_dt * (aky(iky)**2 &
                                                                                  * (1.0 + tfac * (zed(iz) - theta0(iky, :))**2) / k2max)**2 * D_hyper)
@@ -131,6 +145,15 @@ contains
          !> add in hyper-dissipation of form dg/dt = -D*(k/kmax)^4*g
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             g(:, :, :, :, ivmu) = g(:, :, :, :, ivmu) / (1.+code_dt * (spread(kperp2(:, :, ia, :), 4, ntubes) / k2max)**2 * D_hyper)
+         end do
+      end if
+
+      !> Add constant zonal damping in range of kx's if desired
+      if (zonal_damping) then
+         do ikx = 1, nakx
+            if ( abs(akx(ikx)) >= D_zonal_kxmin .and. abs(akx(ikx)) < D_zonal_kxmax ) then
+               g(1, ikx, :, :, :) = g(1, ikx, :, :, :) / (1.+code_dt * D_zonal)
+            end if
          end do
       end if
 

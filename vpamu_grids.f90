@@ -55,6 +55,7 @@ module vpamu_grids
       module procedure integrate_vmu_local_real
       module procedure integrate_vmu_local_complex
       module procedure integrate_vmu_vmulo_complex
+      module procedure integrate_vmu_vmulo_real
       module procedure integrate_vmu_vmulo_ivmu_only_real
    end interface
 
@@ -340,6 +341,34 @@ contains
       end do
 
    end subroutine integrate_vmu_local_complex
+
+   ! integrate over v-space in vmu_lo
+   ! Note! Unlike complex version, there is no sum_reduce over procs here
+   subroutine integrate_vmu_vmulo_real(g, weights, iz, total)
+
+      use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
+
+      implicit none
+
+      integer :: ivmu, iv, is, imu, ia
+
+      real, dimension(:, :, vmu_lo%llim_proc:), intent(in) :: g
+      real, dimension(:), intent(in) :: weights
+      integer, intent(in) :: iz
+      real, dimension(:, :, :), intent(out) :: total
+
+      total = 0.
+
+      ia = 1
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+         total(:, :, is) = total(:, :, is) + &
+                          wgts_mu(ia, iz, imu) * wgts_vpa(iv) * g(:, :, ivmu) * weights(is)
+      end do
+
+   end subroutine integrate_vmu_vmulo_real
 
    ! integrave over v-space in vmu_lo
    subroutine integrate_vmu_vmulo_complex(g, weights, total)

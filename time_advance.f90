@@ -814,6 +814,7 @@ contains
       use run_parameters, only: fully_explicit, fully_implicit
       use run_parameters, only: secondary, secondary_ikx_P, secondary_source, secondary_freeze_P !, maxwellianize_gZ
       use run_parameters, only: tertiary, tertiary_hold_g
+      use zgrid, only: boundary_option_switch, boundary_option_linked
       use multibox, only: RK_step
       use sources, only: include_qn_source, update_quasineutrality_source
       use sources, only: source_option_switch, source_option_projection
@@ -990,6 +991,23 @@ contains
       !> i.e. kx=0 is kept constant
           gnew(:, 1, :, :, :) = gold(:, 1, :, :, :)
           phi( :, 1, :, :) = phi_old(:, 1, :, :)
+
+      !> if twist-and-shift B.C., set primary to 0 at ends to avoid polluting sideband
+          select case (boundary_option_switch)
+          case (boundary_option_linked)
+              gnew(:, 1,-nzgrid  , :, :) = 0
+              phi( :, 1,-nzgrid  , :)    = 0
+              gnew(:, 1,-nzgrid+1, :, :) = 0
+              phi( :, 1,-nzgrid+1, :)    = 0
+              gnew(:, 1, nzgrid-1, :, :) = 0
+              phi( :, 1, nzgrid-1, :)    = 0
+              gnew(:, 1,-nzgrid+2, :, :) = 0
+              phi( :, 1,-nzgrid+2, :)    = 0
+              gnew(:, 1, nzgrid-2, :, :) = 0
+              phi( :, 1, nzgrid-2, :)    = 0
+              gnew(:, 1, nzgrid  , :, :) = 0
+              phi( :, 1, nzgrid  , :)    = 0
+          end select
 
 !      !> i.e. kx=+-kx_P, ky=2 mode is kept constant
 !          gnew(2, secondary_ikx_P, :, :, :) = gold(2, secondary_ikx_P, :, :, :)

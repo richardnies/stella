@@ -225,6 +225,7 @@ contains
       use constants, only: zi
       use species, only: spec
       use zgrid, only: nzgrid, zed
+      use stella_geometry, only:  bmag
       use kt_grids, only: naky, nakx
       use kt_grids, only: theta0
       use kt_grids, only: reality, zonal_mode
@@ -242,6 +243,7 @@ contains
       logical :: right
       integer :: ikxkyz
       integer :: iz, iky, ikx, is, ia
+      real :: bmag0
 
       right = .not. left
 
@@ -251,11 +253,14 @@ contains
              ! (note zonal modes are rescaled below)
              phi(:, :,               iz) =  1.d-16* exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
              if (secondary_ikx_P .eq. 1) then
-                 phi(2, 1, iz) = exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
+                 phi(2, 1, iz) = exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 0.0)
+                 !phi(2, 1, iz) = exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
                  !phi(2, 1, iz) = 0.5* ( exp(-((zed(iz) + secondary_zed_P) / width0)**2) + exp(-((zed(iz) - secondary_zed_P) / width0)**2) )* cmplx(1.0, 1.0)
              else
-                 phi(2, secondary_ikx_P, iz) =        0.5 * exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
-                 phi(2, nakx-secondary_ikx_P+2, iz) = 0.5 * exp(-((zed(iz) + secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
+                 phi(2, secondary_ikx_P, iz) =        0.5 * exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 0.0)
+                 phi(2, nakx-secondary_ikx_P+2, iz) = 0.5 * exp(-((zed(iz) + secondary_zed_P) / width0)**2) * cmplx(1.0, 0.0)
+                 !phi(2, secondary_ikx_P, iz) =        0.5 * exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
+                 !phi(2, nakx-secondary_ikx_P+2, iz) = 0.5 * exp(-((zed(iz) + secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
              end if
              phi(1, :,               iz) =          exp(-((zed(iz) - secondary_zed_P) / width0)**2) * cmplx(1.0, 1.0)
          else
@@ -309,17 +314,31 @@ contains
 
       ia = 1
 
+      !bmag0 = sum(bmag)/max(1,size(bmag))
+
       gvmu = 0.
       do ikxkyz = kxkyz_lo%llim_proc, kxkyz_lo%ulim_proc
          iz = iz_idx(kxkyz_lo, ikxkyz)
          ikx = ikx_idx(kxkyz_lo, ikxkyz)
          iky = iky_idx(kxkyz_lo, ikxkyz)
          is = is_idx(kxkyz_lo, ikxkyz)
+
+!         if (is == 1) then
          gvmu(:, :, ikxkyz) = phiinit * phi(iky, ikx, iz) / abs(spec(is)%z) &
                               * (den0*exp(zi*den0_phase) + 2.0 * zi * spread(vpa, 2, nmu) * upar0 &
                                 + (spread(vpa, 2, nmu)**2 - 0.5) * tpar0 &
                                 + (spread(vperp2(ia,iz,:), 1, nvpa) - 1.) * tperp0 ) &
                               * spread(maxwell_mu(ia, iz, :, is), 1, nvpa) * spread(maxwell_vpa(:, is), 2, nmu) * maxwell_fac(is)
+
+!             !gvmu(:, :, ikxkyz) = phiinit * phi(iky, ikx, iz) * spec(is)%z/spec(is)%temp &
+!         else
+!             ! Initialise other species (e.g. electrons) as adiabatic
+!             !gvmu(:, :, ikxkyz) = 0
+!             gvmu(:, :, ikxkyz) = phiinit * phi(iky, ikx, iz) * abs(spec(is)%z)/spec(is)%temp &
+!                                  * den0*exp(zi*den0_phase)&
+!                                  * spread(maxwell_mu(ia, iz, :, is), 1, nvpa) * spread(maxwell_vpa(:, is), 2, nmu) * maxwell_fac(is)
+!         end if
+
       end do
 
    end subroutine ginit_default

@@ -15,7 +15,7 @@ module run_parameters
    public :: driftkinetic_implicit
    public :: fully_explicit, fully_implicit
    public :: secondary, secondary_ikx_P, secondary_zed_P, secondary_freeze_P, secondary_restart_zonal_small
-   public :: tertiary, tertiary_hold_g, secondary_source, enforce_uniform_phiZ
+   public :: tertiary, tertiary_hold_g, secondary_source, enforce_uniform_phiZ, remove_uniform_phiZ
    public :: zero_ZF, zero_ZF_kmin, zero_ZF_kmax
    public :: ky_solve_radial, ky_solve_real
    public :: maxwellian_inside_zed_derivative
@@ -48,7 +48,7 @@ module run_parameters
    logical :: use_deltaphi_for_response_matrix
    logical :: maxwellian_normalization
    logical :: secondary, secondary_freeze_P, secondary_restart_zonal_small
-   logical :: tertiary, tertiary_hold_g, secondary_source, enforce_uniform_phiZ, zero_ZF
+   logical :: tertiary, tertiary_hold_g, secondary_source, enforce_uniform_phiZ, remove_uniform_phiZ, zero_ZF
    real    :: zero_ZF_kmin, zero_ZF_kmax
    integer :: secondary_ikx_P
    real ::    secondary_zed_P
@@ -115,7 +115,7 @@ contains
          ky_solve_radial, ky_solve_real, &
          secondary, secondary_ikx_P, secondary_zed_P, secondary_freeze_P, &
          tertiary, tertiary_hold_g, secondary_source, enforce_uniform_phiZ, &
-         zero_ZF, zero_ZF_kmin, zero_ZF_kmax, &
+         remove_uniform_phiZ, zero_ZF, zero_ZF_kmin, zero_ZF_kmax, &
          secondary_restart_zonal_small
 
       if (proc0) then
@@ -149,11 +149,12 @@ contains
          secondary_source = .false.
          secondary_restart_zonal_small = .true.
          enforce_uniform_phiZ = .false.
+         remove_uniform_phiZ = .false.
          zero_ZF = .false.
          zero_ZF_kmin = -1
          zero_ZF_kmax = 1e10
          tertiary = .false.
-         tertiary_hold_g = .false.
+         tertiary_hold_g = .true.
          mat_gen = .false.
          mat_read = .false.
 
@@ -297,6 +298,7 @@ contains
       call broadcast(secondary_freeze_P)
       call broadcast(secondary_source)
       call broadcast(enforce_uniform_phiZ)
+      call broadcast(remove_uniform_phiZ)
       call broadcast(zero_ZF)
       call broadcast(zero_ZF_kmin)
       call broadcast(zero_ZF_kmax)
