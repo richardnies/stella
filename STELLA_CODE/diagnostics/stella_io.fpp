@@ -64,6 +64,9 @@ module stella_io
    public :: write_kspectra_nc
    public :: write_omega_nc
    public :: write_moments_nc
+   public :: write_RH_fluxes_nc
+   public :: write_RH_inertia_nc
+   public :: write_RH_integrands_nc
    public :: write_radial_fluxes_nc
    public :: write_radial_moments_nc
    public :: write_fluxes_kxkyzs_nc
@@ -81,7 +84,7 @@ module stella_io
    !>
    !> Converts the `complex` array to a `real` array with an extra dimension
    interface netcdf_write_complex
-      module procedure write_complex_rank2, write_complex_rank4, write_complex_rank5
+      module procedure write_complex_rank2, write_complex_rank4, write_complex_rank5, write_complex_rank6
    end interface netcdf_write_complex
 #endif
 
@@ -765,6 +768,75 @@ contains
 #endif
 
    end subroutine write_moments_nc
+
+
+   !----------------------- RH fluxes -----------------------
+   subroutine write_RH_fluxes_nc(nout, RH_fluxes_even, RH_fluxes_odd)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_even, RH_fluxes_odd
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: start
+      start = [1, 1, 1, 1, 1, 1, nout]
+
+      ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
+      call netcdf_write_complex(ncid, "RH_fluxes_even",  RH_fluxes_even, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton Fluxes to ZF with kx from NZ modes with ky, even in vparallel") 
+      call netcdf_write_complex(ncid, "RH_fluxes_odd",  RH_fluxes_odd, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton Fluxes to ZF with kx from NZ modes with ky, odd in vparallel") 
+
+#endif
+
+   end subroutine write_RH_fluxes_nc
+
+   !----------------------- RH inertia ----------------------
+   subroutine write_RH_inertia_nc(RH_inertia)
+      implicit none
+
+      complex, dimension(:, :, :, :), intent(in) :: RH_inertia
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species"]
+      integer, dimension(5) :: start
+      start = [1, 1, 1, 1, 1]
+
+      ! Write the RH inertia (kx,z,tube,s,ri)
+      call netcdf_write_complex(ncid, "RH_inertia", RH_inertia, dim_names=dims, start=start, long_name="Rosenbluth-Hinton Inertia for ZF with kx")
+
+#endif
+
+   end subroutine write_RH_inertia_nc
+
+
+   !----------------------- RH integrands -------------------
+   subroutine write_RH_integrands_nc(RH_integrand_even, RH_integrand_odd)
+      implicit none
+
+      complex, dimension(:, :, :, :, :, :), intent(in) :: RH_integrand_even, RH_integrand_odd
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "vpa", "mu"]
+      integer, dimension(7) :: start
+      start = [1, 1, 1, 1, 1, 1, 1]
+
+      ! Write the RH integrands (kx,z,tube,s,vpa,mu,ri)
+      call netcdf_write_complex(ncid, "RH_integrand_even", RH_integrand_even, dim_names=dims, start=start, &
+      long_name="Rosenbluth-Hinton velocity-space integrand (even in vpa) for RH inertia and fluxes")
+      call netcdf_write_complex(ncid, "RH_integrand_odd",  RH_integrand_odd,  dim_names=dims, start=start, &
+      long_name="Rosenbluth-Hinton velocity-space integrand (odd  in vpa) for RH inertia and fluxes")
+
+#endif
+
+   end subroutine write_RH_integrands_nc
 
 
 
@@ -1582,5 +1654,35 @@ contains
       call c2r(values, real_values)
       call neasyf_write(parent_id, name, real_values, dim_names=dim_names, units=units, long_name=long_name, start=start)
    end subroutine write_complex_rank5
+
+   subroutine write_complex_rank6(parent_id, name, values, dim_names, units, long_name, start)
+      use neasyf, only: neasyf_write
+      use convert, only: c2r
+      !> Name of the variable
+      character(len=*), intent(in) :: name
+      !> NetCDF ID of the parent group/file
+      integer, intent(in) :: parent_id
+      !> Array to be written
+      complex, dimension(:, :, :, :, :, :), intent(in) :: values
+      !> Array of dimension names
+      character(len=*), dimension(:), intent(in) :: dim_names
+      !> Units of coordinate
+      character(len=*), optional, intent(in) :: units
+      !> Long descriptive name
+      character(len=*), optional, intent(in) :: long_name
+      integer, dimension(:), optional, intent(in) :: start
+
+      real, dimension(2, &
+                      size(values, 1), &
+                      size(values, 2), &
+                      size(values, 3), &
+                      size(values, 4), &
+                      size(values, 5), &
+                      size(values, 6) &
+                      ) :: real_values
+
+      call c2r(values, real_values)
+      call neasyf_write(parent_id, name, real_values, dim_names=dim_names, units=units, long_name=long_name, start=start)
+   end subroutine write_complex_rank6
 
 end module stella_io

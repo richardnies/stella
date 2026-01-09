@@ -49,6 +49,9 @@ module parameters_diagnostics
    public :: write_radial_moments
    public :: write_moments  
 
+   ! Write RH inertia & fluxes in <diagnostics_RH_inertia_fluxes>
+   public :: write_RH_inertia_fluxes
+
    private
 
    ! Variables used to write diagnostics
@@ -91,7 +94,11 @@ module parameters_diagnostics
 
    ! Write moments in <diagnostics_moments>
    logical :: write_radial_moments
-   logical :: write_moments     
+   logical :: write_moments
+
+   ! Write RH inertia & fluxes in <diagnostics_RH_inertia_fluxes>
+   logical :: write_RH_inertia_fluxes
+
 
 contains
 
@@ -214,6 +221,13 @@ contains
          
          ! Write the density, temperature and upar
          write_moments = .false.
+
+         !------------------------------
+         !   R-H Inertia and Fluxes    !
+         !------------------------------ 
+
+         ! Write the Rosenbluth-Hinton inertia and fluxes
+         write_RH_inertia_fluxes = .false.
          
          !------------------------------
          !      Radial variation       !
@@ -265,7 +279,7 @@ contains
             write_g2_vs_vpamus, write_g2_vs_zvpas, write_g2_vs_zmus, &
             write_g2_vs_kxkyzs, write_g2_vs_zvpamus, write_distribution_g, write_distribution_h, write_distribution_f, &
             write_phi2_vs_kxky, write_apar2_vs_kxky, write_bpar2_vs_kxky, &
-            write_omega_vs_kxky, write_omega_avg_vs_kxky, write_moments, write_radial_fluxes, &
+            write_omega_vs_kxky, write_omega_avg_vs_kxky, write_moments, write_RH_inertia_fluxes, write_radial_fluxes, &
             write_radial_moments, write_fluxes_kxkyz, write_fluxes_kxky, write_all, flux_norm, nc_mult, &
             ! Backwards compatibility for old stella code
             write_omega, write_phi_vs_time, write_apar_vs_time, write_bpar_vs_time, &
@@ -304,6 +318,7 @@ contains
             write_apar2_vs_kxky = .true.
             write_bpar2_vs_kxky = .true.
             write_moments = .true.
+            write_RH_inertia_fluxes = .true.
             write_fluxes_kxkyz = .true.
             write_fluxes_kxky = .true.
             write_g2_vs_vpamus = .true.
@@ -369,6 +384,7 @@ contains
          call broadcast(write_apar2_vs_kxky)
          call broadcast(write_bpar2_vs_kxky)
          call broadcast(write_moments)
+         call broadcast(write_RH_inertia_fluxes)
          call broadcast(write_g2_vs_vpamus)
          call broadcast(write_g2_vs_zvpas)
          call broadcast(write_g2_vs_zmus)

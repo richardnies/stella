@@ -18,7 +18,7 @@ module diagnostics
    logical :: diagnostics_initialized = .false.
 
    ! Needed for timing various pieces of the diagnostics
-   real, dimension(2, 6) :: time_diagnostics = 0.
+   real, dimension(2, 7) :: time_diagnostics = 0.
 
 contains
 
@@ -45,6 +45,7 @@ contains
       use diagnostics_potential, only: write_potential_to_netcdf_file 
       use diagnostics_fluxes, only: write_fluxes_to_netcdf_file
       use diagnostics_moments, only: write_moments_to_netcdf_file
+      use diagnostics_RH_inertia_fluxes, only: write_RH_fluxes_to_netcdf_file
       use diagnostics_distribution, only: write_distribution_to_netcdf_file
       use stella_io, only: sync_nc
    
@@ -103,6 +104,8 @@ contains
       call write_moments_to_netcdf_file(nout, time_diagnostics(:, 5))
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::netcdf_files_distribution' 
       call write_distribution_to_netcdf_file(nout, time_diagnostics(:, 6))
+      if (debug) write (*, *) 'diagnostics::diagnostics_stella::netcdf_files_RH_fluxes' 
+      call write_RH_fluxes_to_netcdf_file(nout, time_diagnostics(:, 7))
 
       ! Synchronize the disk copy of a netCDF dataset with in-memory buffers    
       if (proc0) call sync_nc
@@ -137,6 +140,8 @@ contains
       use diagnostics_omega, only: init_diagnostics_omega
       use diagnostics_fluxes, only: init_diagnostics_fluxes 
       use diagnostics_potential, only: init_diagnostics_potential 
+      use diagnostics_RH_inertia_fluxes, only: init_diagnostics_RH_inertia_fluxes
+      use parameters_diagnostics, only: write_RH_inertia_fluxes
       use mp, only: broadcast, proc0
 
       implicit none
@@ -177,6 +182,9 @@ contains
       if (proc0) call get_nout(tstart, nout)
       call broadcast(nout)
 
+      ! Initialise RH inertia_fluxes diagnostics (including first write to netcdf)
+      if (write_RH_inertia_fluxes) call init_diagnostics_RH_inertia_fluxes()
+
    end subroutine init_diagnostics
 
    !============================================================================
@@ -193,6 +201,8 @@ contains
       use diagnostics_omega, only: finish_diagnostics_omega
       use diagnostics_fluxes, only: finish_diagnostics_fluxes 
       use diagnostics_potential, only: finish_diagnostics_potential
+      use diagnostics_RH_inertia_fluxes, only: finish_diagnostics_RH_inertia_fluxes
+      use parameters_diagnostics, only: write_RH_inertia_fluxes
       use parameters_diagnostics, only: save_for_restart 
 
       implicit none
@@ -213,6 +223,7 @@ contains
       call finish_diagnostics_omega    
       call finish_diagnostics_fluxes    
       call finish_diagnostics_potential   
+      if (write_RH_inertia_fluxes) call finish_diagnostics_RH_inertia_fluxes
 
       nout = 1
       diagnostics_initialized = .false.

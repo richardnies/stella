@@ -1,0 +1,647 @@
+
+!###############################################################################
+!############### DIAGNOSE ROSENBLUTH-HINTON INERTIA AND FLUXES #################
+!###############################################################################
+! 
+! Routines for calculating and writing the "Rosenbluth-Hinton" inertia and fluxes,
+! governing the evolution of long-wavelength stationary zonal flows.
+! 
+! The RH_inertia_vs_kxzts             is denoted by RH_inertia
+! The RH_integrand_even_vs_kxztsvpamu is denoted by RH_integrand_even
+! The RH_integrand_odd_vs_kxztsvpamu  is denoted by RH_integrand_odd
+! The RH_fluxes_even_vs_kykxzts       is denoted by RH_fluxes_even
+! The RH_fluxes_odd_vs_kykxzts        is denoted by RH_fluxes_odd
+! 
+!###############################################################################
+ 
+module diagnostics_RH_inertia_fluxes
+
+   implicit none
+ 
+   public :: init_diagnostics_RH_inertia_fluxes
+   public :: finish_diagnostics_RH_inertia_fluxes
+   public :: eval_transit_avgs
+   public :: eval_transit_avg_integrand
+   public :: eval_Q_fac
+   public :: write_RH_fluxes_to_netcdf_file
+   public :: write_RH_inertia_to_netcdf_file
+
+   private 
+
+   ! Debugging
+   logical :: debug = .false.
+
+   complex, dimension(:,:,:,:), allocatable :: RH_integrand_even, RH_integrand_odd
+   ! (nakx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
+
+contains
+
+!###############################################################################
+!###################### WRITE RH_INERTIA_FLUXES ################################
+!###############################################################################
+
+   !============================================================================
+   !========== CALCULATE AND WRITE RH_INTEGRANDS TO NETCDF FILE ================
+   !============================================================================
+   subroutine write_RH_integrands_to_netcdf_file()
+
+      ! Dimensions
+      use parameters_kxky_grids, only: naky, nakx
+      use vpamu_grids, only: nvpa, nmu
+      use zgrid, only: nztot, ntubes
+      use species, only: nspec
+      use stella_layouts, only: vmu_lo
+      use stella_layouts, only: iv_idx, imu_idx, is_idx
+      use mp, only: broadcast
+      
+      ! Flags 
+      use parameters_physics, only: full_flux_surface
+
+      ! Write to netcdf file 
+      use stella_io, only: write_RH_integrands_nc
+      
+      ! Routines
+      use mp, only: proc0
+      
+      ! Input file
+      use parameters_diagnostics, only: write_RH_inertia_fluxes
+
+      implicit none 
+
+      integer :: ivmu, iv, imu, is
+
+      ! Variables needed to write and calculate diagnostics 
+      complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_even_vs_kxztsvpamu
+      complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_odd_vs_kxztsvpamu
+
+      !---------------------------------------------------------------------- 
+
+      ! Only continue if the RH_inertia_fluxes have to be written
+      if (.not. write_RH_inertia_fluxes) return
+
+      ! Allocate the arrays for the RH_integrands
+      allocate (RH_integrand_even_vs_kxztsvpamu(nakx, nztot, ntubes, nspec, nvpa, nmu))
+      allocate (RH_integrand_odd_vs_kxztsvpamu( nakx, nztot, ntubes, nspec, nvpa, nmu))
+
+      ! Calculate the RH inertia (kx,tube,s); RH fluxes(kx,tube,s)
+      if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_integrands'
+
+      ! TODO-RN : implement for radial variation and full flux surface
+
+      ! Put the RH_integrands in form expected in stella_io
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+
+         RH_integrand_even_vs_kxztsvpamu(:,:,:,is,iv,imu) = RH_integrand_even(:,:,:,ivmu)
+         RH_integrand_odd_vs_kxztsvpamu( :,:,:,is,iv,imu) = RH_integrand_odd( :,:,:,ivmu)
+      end do
+
+      ! Make sure proc0 has full array 
+      ! TODO-RN: might lead to memory issues! Average first in zed?
+      call broadcast(RH_integrand_even_vs_kxztsvpamu)
+      call broadcast(RH_integrand_odd_vs_kxztsvpamu)
+
+      ! Write the RH_fluxes to the netcdf file
+      if (proc0 .and. write_RH_inertia_fluxes) then 
+          call write_RH_integrands_nc(RH_integrand_even_vs_kxztsvpamu, &
+                                      RH_integrand_odd_vs_kxztsvpamu)
+      end if
+
+      ! Deallocate the arrays for the RH_fluxes
+      deallocate (RH_integrand_even_vs_kxztsvpamu)
+      deallocate (RH_integrand_odd_vs_kxztsvpamu)
+
+   end subroutine write_RH_integrands_to_netcdf_file
+ 
+
+   !============================================================================
+   !========== CALCULATE AND WRITE RH_INERTIA TO NETCDF FILE ===================
+   !============================================================================
+   subroutine write_RH_inertia_to_netcdf_file()
+
+      ! Dimensions
+      use parameters_kxky_grids, only: naky, nakx
+      use zgrid, only: nztot, ntubes
+      use species, only: nspec
+      
+      ! Flags 
+      use parameters_physics, only: full_flux_surface
+
+      ! Write to netcdf file 
+      use stella_io, only: write_RH_inertia_nc
+      
+      ! Routines
+      use mp, only: proc0
+      
+      ! Input file
+      use parameters_diagnostics, only: write_RH_inertia_fluxes
+
+      implicit none 
+
+      ! Variables needed to write and calculate diagnostics 
+      complex, dimension(:, :, :, :), allocatable :: RH_inertia_vs_kxzts
+
+      !---------------------------------------------------------------------- 
+
+      ! Only continue if the RH_inertia_fluxes have to be written
+      if (.not. write_RH_inertia_fluxes) return
+
+      ! Allocate the arrays for the RH_inertia
+      allocate (RH_inertia_vs_kxzts(nakx, nztot, ntubes, nspec))
+
+      ! Calculate the RH inertia (kx,tube,s); RH fluxes(kx,tube,s)
+      if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_inertia'
+
+      ! TODO-RN : implement for radial variation and full flux surface
+
+      ! Calculate the RH_inertia for a flux tube simulation
+      if (write_RH_inertia_fluxes) then
+         call get_RH_inertia_fluxtube(RH_inertia_vs_kxzts)
+      end if
+
+      ! Write the RH_fluxes to the netcdf file
+      if (proc0 .and. write_RH_inertia_fluxes) call write_RH_inertia_nc(RH_inertia_vs_kxzts)
+
+      ! Deallocate the arrays for the RH_fluxes
+      deallocate (RH_inertia_vs_kxzts)
+
+   end subroutine write_RH_inertia_to_netcdf_file
+ 
+   !============================================================================
+   !========== CALCULATE AND WRITE RH_FLUXES TO NETCDF FILE ====================
+   !============================================================================
+   subroutine write_RH_fluxes_to_netcdf_file(nout, timer)
+
+      ! Data
+      use arrays_dist_fn, only: gnew
+
+      ! Dimensions
+      use parameters_kxky_grids, only: naky, nakx
+      use zgrid, only: nztot, ntubes
+      use species, only: nspec
+      
+      ! Flags 
+      use parameters_physics, only: full_flux_surface
+
+      ! Write to netcdf file 
+      use stella_io, only: write_RH_fluxes_nc
+      
+      ! Routines
+      use job_manage, only: time_message
+      use mp, only: proc0
+      
+      ! Input file
+      use parameters_diagnostics, only: write_RH_inertia_fluxes
+
+      implicit none 
+
+      ! The pointer in the netcdf file and a timer
+      real, dimension(:), intent(in out) :: timer   
+      integer, intent(in) :: nout    
+
+      ! Variables needed to write and calculate diagnostics 
+      complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_even_vs_kykxzts, RH_fluxes_odd_vs_kykxzts
+
+      !---------------------------------------------------------------------- 
+
+      ! Only continue if the RH_inertia_fluxes have to be written
+      if (.not. write_RH_inertia_fluxes) return  
+
+      ! Start timer
+      if (proc0) call time_message(.false., timer(:), 'Write RH_fluxes')
+      
+      ! Allocate the arrays for the RH_fluxes
+      allocate (RH_fluxes_even_vs_kykxzts(naky, nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_odd_vs_kykxzts( naky, nakx, nztot, ntubes, nspec))
+
+      ! Calculate the RH inertia (kx,tube,s); RH fluxes(kx,tube,s)
+      if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_fluxes'
+
+      ! TODO-RN : implement for radial variation and full flux surface
+
+      ! Calculate the RH_fluxes for a flux tube simulation
+      if (write_RH_inertia_fluxes) then
+         call get_RH_fluxes_fluxtube(gnew, RH_fluxes_even_vs_kykxzts, RH_fluxes_odd_vs_kykxzts)
+      end if
+
+      ! Write the RH_fluxes to the netcdf file
+      if (proc0 .and. write_RH_inertia_fluxes) call write_RH_fluxes_nc(nout, RH_fluxes_even_vs_kykxzts, RH_fluxes_odd_vs_kykxzts)
+
+      ! Deallocate the arrays for the RH_fluxes
+      deallocate (RH_fluxes_even_vs_kykxzts, RH_fluxes_odd_vs_kykxzts)
+
+       ! End timer
+       if (proc0) call time_message(.false., timer(:), 'Write RH_fluxes')
+ 
+   end subroutine write_RH_fluxes_to_netcdf_file
+   
+
+   !============================================================================
+   !====================== GET RH_inertia FOR THE FLUX TUBE =====================
+   !============================================================================
+   subroutine get_RH_inertia_fluxtube(RH_inertia)
+
+      use zgrid, only: nzgrid, ntubes
+      use species, only: spec, nspec
+      use vpamu_grids, only: vpa, vperp2, integrate_vmu
+      use vpamu_grids, only: maxwell_mu, ztmax, maxwell_fac, maxwell_vpa
+      use parameters_kxky_grids, only: naky, nakx, nx
+      use grids_kxky, only: aky
+      use calculations_kxky, only: multiply_by_rho
+      use stella_layouts, only: vmu_lo
+      use stella_layouts, only: iv_idx, imu_idx, is_idx
+      use gyro_averages, only: aj0x, gyro_average
+      use arrays_fields, only: phi
+      use parameters_numerical, only: fphi
+      use parameters_numerical, only: maxwellian_normalization
+      use constants, only: zi
+      
+      ! Import temp array g1 with dimension (nky, nkx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
+      use arrays_dist_fn, only: integrand_vpamu => g1
+
+      implicit none
+
+      ! The RH inertia is returned with dimensions (kx, z, tube, spec)
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_inertia
+
+      ! Temp variable holding RH inertia with dimensions (ky, kx, z, tube, spec) (1st is dummy)
+      complex, dimension(:, :, :, :, :), allocatable :: RH_inertia_tmp
+
+      ! Local variables
+      integer :: ivmu, iv, imu, is, ia, iz, it
+      
+      ! We only have one field line because <full_flux_surface> = .false.
+      ia = 1
+
+      allocate (RH_inertia_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_inertia_tmp = 0.
+ 
+      !=========================================================================
+      !                     ROSENBLUTH-HINTON FLUXES                           !
+      !=========================================================================
+      ! The Rosenbluth-Hinton inertia is calculated as:
+      !		<RH_inertia> = - sum_s Z_s^2 e/T_s * velocity_integral( F_Ms * (1 - <J_0s exp(-i*Q_s)>_tau * J_0s exp(i*Q_s)) )
+      !=========================================================================
+      
+      integrand_vpamu = 0.
+
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+
+         do it = 1, ntubes
+            do iz = -nzgrid, nzgrid
+
+                !integrand_vpamu(1, :, iz, it, ivmu) = (1 - aj0x(1,:,iz,ivmu)*RH_integrand_even(:,iz,it,ivmu)) * &
+                integrand_vpamu(1, :, iz, it, ivmu) = (1-aj0x(1,:,iz,ivmu)*(RH_integrand_even(:,iz,it,ivmu)+RH_integrand_odd(:,iz,it,ivmu))) * &
+                                       maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is)*maxwell_fac(is) * spec(is)%zt
+
+            end do
+         end do
+
+      end do
+      
+      ! TODO-RN: check normalisation
+      ! Calculate <RH_fluxes>(even/odd)
+      call integrate_vmu(integrand_vpamu, spec%dens_psi0*spec%z, RH_inertia_tmp)
+
+      RH_inertia(:,:,:,:) = RH_inertia_tmp(1,:,:,:,:)
+
+      deallocate (RH_inertia_tmp)
+
+   end subroutine get_RH_inertia_fluxtube
+    !============================================================================
+   !====================== GET RH_fluxes FOR THE FLUX TUBE =====================
+   !============================================================================
+   subroutine get_RH_fluxes_fluxtube(g, RH_fluxes_even, RH_fluxes_odd)
+
+      use zgrid, only: nzgrid, ntubes
+      use species, only: spec, nspec
+      use vpamu_grids, only: vpa, vperp2, integrate_vmu
+      use vpamu_grids, only: maxwell_mu, ztmax, maxwell_fac, maxwell_vpa
+      use parameters_kxky_grids, only: naky, nakx, nx
+      use grids_kxky, only: aky
+      use calculations_kxky, only: multiply_by_rho
+      use stella_layouts, only: vmu_lo
+      use stella_layouts, only: iv_idx, imu_idx, is_idx
+      use gyro_averages, only: aj0x, gyro_average
+      use arrays_fields, only: phi
+      use parameters_numerical, only: maxwellian_normalization
+      use stella_transforms, only: transform_kx2x_xfirst, transform_x2kx_xfirst
+      use constants, only: zi
+      
+      ! Import temp arrays g1, g2 with dimensions (nky, nkx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
+      use arrays_dist_fn, only: integrand_even  => g1
+      use arrays_dist_fn, only: integrand_odd   => g2
+
+      implicit none
+
+      ! Gyroaveraged ExB and NL term in k-space
+      complex, dimension(naky, nakx) :: vchix_gyro, NL_term
+
+      ! Gyroaveraged ExB term, distribution function, and integrand in x and ky
+      complex, dimension(naky, nx) :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
+
+      ! The distribution function enters with dimensions (ky, kx, z, tube, ivmus)
+      complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
+      
+      ! The RH fluxes are returned with dimensions (ky, kx, z, tube, s)
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_fluxes_even, RH_fluxes_odd
+
+      ! Local variables
+      integer :: ivmu, iv, imu, is, ia, iz, it
+      
+      ! We only have one field line because <full_flux_surface> = .false.
+      ia = 1
+ 
+      !=========================================================================
+      !                     ROSENBLUTH-HINTON FLUXES                           !
+      !=========================================================================
+      ! The Rosenbluth-Hinton fluxes are calculated as:
+      !		<RH_fluxes>(even/odd) = -Z_s * velocity_integral( <J_0s exp(-i*Q_s)>_tau * exp(i*Q_s) 
+      !		                                    ( <vchi_ky>_R * nabla(x)  * conj(h_s(even/odd))_ky )_kx )
+      ! We do this in the following steps
+      ! 		ivmu, it, iz loop: <vchix_gyro> = vchix*J0 = i*ky*<chi> * <aj0x(iky, ikx, iz, ivmu)>
+      ! 		FFT: g(ky,kx) -> g(ky, x)
+      ! 		FFT: vchix_gyro(ky,kx) -> vchix_gyro(ky, x)
+      ! 		<vchix_g_NL>(ky,x)  = <vchix_gyro>(ky,x)*conj(g(ky,x))
+      ! 		IFFT: vchix_g_NL(ky,x) -> vchix_g_NL(ky,kx)
+      ! 		<integrand_even> = -Zs*(<J_0s exp(-i*Q_s)>_tau * exp(i*Q_s))(even)*<vchix_g_NL>
+      ! 		<integrand_odd>  = -Zs*(<J_0s exp(-i*Q_s)>_tau * exp(i*Q_s))(odd )*<vchix_g_NL>
+      ! 		RH_fluxes  = integrate_vmu(integrand)
+      !=========================================================================
+      
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+         !call gyro_average(zi*spread(spread(spread(aky,2,nakx),3,nzgrid),4,ntubes)*phi, ivmu, vchix_gyro(:, :, :, :, ivmu))
+
+         do it = 1, ntubes
+            do iz = -nzgrid, nzgrid
+
+                call gyro_average(zi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_gyro)
+                call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
+                call transform_kx2x_xfirst(g(:,:,iz,it,iv), g_ky_x)
+                NL_term_ky_x = vchix_gyro_ky_x * conjg(g_ky_x)
+                call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
+
+                integrand_even(:,:,iz,it,ivmu) = NL_term * spread(RH_integrand_even(:,iz,it,ivmu), 1, naky)
+                integrand_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_integrand_odd( :,iz,it,ivmu), 1, naky)
+
+            end do
+         end do
+
+      end do
+      
+      ! TODO-RN: check normalisation
+      ! Calculate <RH_fluxes>(even/odd)
+      call integrate_vmu(integrand_even, spec%dens_psi0*spec%z, RH_fluxes_even)
+      call integrate_vmu(integrand_odd,  spec%dens_psi0*spec%z, RH_fluxes_odd)
+!      write(*, *) RH_fluxes_even(1,1,1,1,1)
+!      write(*, *) RH_fluxes_odd( 1,1,1,1,1)
+
+   end subroutine get_RH_fluxes_fluxtube
+ 
+
+!###############################################################################
+!############################ INITALIZE & FINALIZE #############################
+!###############################################################################
+
+   !============================================================================
+   !======================== INITALIZE THE DIAGNOSTICS =========================
+   !============================================================================
+   subroutine init_diagnostics_RH_inertia_fluxes()
+      !TODO-RN: call only when needed??
+
+      use mp, only: proc0
+
+      ! Dimensions
+      use parameters_kxky_grids, only: nakx
+      use grids_kxky, only: akx
+      use zgrid, only: nzgrid, ntubes
+      use stella_layouts, only: vmu_lo
+      use stella_layouts, only: iv_idx, imu_idx, is_idx
+      use vpamu_grids, only: vpa, vperp2, mu
+      use geometry, only: bmag
+
+      implicit none
+
+      real :: energyval, muval
+      complex :: Q_fac
+      real :: transit_avg_tau_b_pls, transit_avg_tau_b_min
+      complex :: transit_avg_eiQJ0_pls, transit_avg_eiQJ0_min
+      complex :: integrand_tmp_pls, integrand_tmp_min
+
+      integer :: ivmu, iv, imu, is, ia, iz, it, ikx
+      ia = 1
+
+      ! Only debug on the first processor
+      debug = debug .and. proc0
+
+      ! Allocate the arrays for the Rosenbluth-Hinton integrand term
+      allocate (RH_integrand_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_even = 0.
+      allocate (RH_integrand_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_odd  = 0.
+
+      ! Evaluate the transit averages
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+
+         do ikx = 1, nakx
+            do it = 1, ntubes
+               do iz = -nzgrid, nzgrid
+
+               ! Determine energy and magnetic moment
+               energyval = vpa(iv)**2 + vperp2(ia,iz,imu)
+               muval     = mu(imu)
+
+               ! Evaluate transit averages for vpa and -vpa
+               call eval_transit_avgs(energyval, muval, sign(1., vpa(iv)), ikx, is, transit_avg_eiQJ0_pls, transit_avg_tau_b_pls)
+               call eval_transit_avgs(energyval, muval, sign(1.,-vpa(iv)), ikx, is, transit_avg_eiQJ0_min, transit_avg_tau_b_min)
+
+               ! Get Q factor
+               !call eval_Q_fac(abs(vpa(iv)), akx(ikx), iz, is, Q_fac)
+               call eval_Q_fac(vpa(iv), akx(ikx), iz, is, Q_fac)
+
+               ! Evaluate integrands in vpa-mu integral
+               integrand_tmp_pls = transit_avg_eiQJ0_pls/transit_avg_tau_b_pls * exp( Q_fac)
+               integrand_tmp_min = transit_avg_eiQJ0_min/transit_avg_tau_b_pls * exp(-Q_fac)
+               !integrand_tmp_min = transit_avg_eiQJ0_min/transit_avg_tau_b_min * exp(-Q_fac)
+
+               ! Split into contributions that are even and odd in vpa
+               !RH_integrand_even(ikx,iz,it,ivmu) = integrand_tmp_pls
+               !RH_integrand_odd( ikx,iz,it,ivmu) = integrand_tmp_min
+               RH_integrand_even(ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls+integrand_tmp_min)
+               RH_integrand_odd( ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls-integrand_tmp_min)
+
+               !write(*,*) 'RH integrand even:'
+               !write(*,*) RH_integrand_even(ikx,iz,it,ivmu)
+               !write(*,*) 'RH integrand odd:'
+               !write(*,*) RH_integrand_odd(ikx,iz,it,ivmu)
+
+               ! For trapped particles, the odd contribution vanishes automatically
+               if (energyval <= 2*muval*maxval(bmag(ia,:))) RH_integrand_odd(ikx,iz,it,ivmu) = 0.
+
+               end do !iz
+            end do !it
+         end do !ikx
+      end do !ivmu
+
+      ! Evaluate and write RH_inertia to netcdf file
+      call write_RH_inertia_to_netcdf_file()
+
+      ! Write RH_integrand_(even/odd) to netcdf file
+      call write_RH_integrands_to_netcdf_file()
+
+   end subroutine init_diagnostics_RH_inertia_fluxes
+
+
+   !============================================================================
+   !======================== FINALIZE THE DIAGNOSTICS ==========================
+   !============================================================================
+   subroutine finish_diagnostics_RH_inertia_fluxes()
+      !TODO-RN: call only when needed??
+
+      use mp, only: proc0
+
+      implicit none
+
+      ! Deallocate the arrays for the Rosenbluth-Hinton integrand term
+      if (allocated(RH_integrand_even)) deallocate (RH_integrand_even)
+      if (allocated(RH_integrand_odd )) deallocate (RH_integrand_odd)
+
+
+   end subroutine finish_diagnostics_RH_inertia_fluxes
+
+   !============================================================================
+   !======================== USEFUL MISC FUNCTIONS =============================
+   !============================================================================
+
+   ! Evaluate RH transit averages
+   subroutine eval_transit_avgs(energy, mu, sigma, ikx, is, transit_avg_eiQJ0, bounce_time)
+
+      use geometry, only: bmag, dl_over_b
+      use grids_kxky, only: akx
+      use zgrid, only: nzgrid
+      use constants, only: zi
+
+      implicit none
+
+      real,    intent(in)  :: energy, mu, sigma
+      integer, intent(in)  :: ikx, is
+      complex, intent(out) :: transit_avg_eiQJ0
+      real,    intent(out) :: bounce_time
+
+      complex, dimension(-nzgrid:nzgrid) :: integrand_eiQJ0
+      complex, dimension(-nzgrid:nzgrid) :: integrand_tau_b
+      real    :: vpa2, vpa
+      complex :: Q_fac
+      integer :: ia, iz
+      ia = 1
+
+      ! Evaluate integrands on z-grid
+      do iz = -nzgrid, nzgrid
+
+         call eval_transit_avg_integrand(energy, mu, sigma, ikx, iz, is, .false., integrand_eiQJ0(iz))
+         call eval_transit_avg_integrand(energy, mu, sigma, ikx, iz, is, .true.,  integrand_tau_b(iz))
+         !write(*,*) integrand_eiQJ0(iz)
+
+      end do
+
+      ! Evaluate integrals (integrand has 1/vpa factor, need to integrate dl/vpa (...) = dl/B * B (...) )
+      transit_avg_eiQJ0 = sum(integrand_eiQJ0 * bmag(ia,:) * dl_over_b(ia, :))
+      bounce_time       = sum(integrand_tau_b * bmag(ia,:) * dl_over_b(ia, :))
+
+   end subroutine eval_transit_avgs
+
+
+   ! Evaluate integrand in RH transit average
+   subroutine eval_transit_avg_integrand(energy, mu, sigma, ikx, iz, is, bounce_time_bool, transit_avg_integrand)
+
+      use geometry, only: bmag
+      use species, only: spec
+      use spfunc, only: j0
+      use arrays_dist_fn, only: kperp2
+      use grids_kxky, only: akx
+
+      implicit none
+
+      real,    intent(in)  :: energy, mu, sigma ! energy=vpa^2+vperp^2, mu=vperp^2/(2B)
+      integer, intent(in)  :: ikx, iz, is
+      logical, intent(in)  :: bounce_time_bool ! if true, evaluate integrand for bounce time
+      complex, intent(out) :: transit_avg_integrand
+
+      real    :: vpa2, vpa, vperp2
+      complex :: Q_fac, aj0x
+      integer :: ia
+      ia = 1
+
+      ! Evaluate integrand (=0 if in forbidden region)
+      ! TODO-RN: implement for multiple wells
+      vpa2 = energy-2.*mu*bmag(ia,iz)
+      if (vpa2 <= epsilon(0.)) then
+         transit_avg_integrand = 0
+      else
+         ! Parallel velocity
+         vpa = sigma*sqrt(vpa2)
+
+         if (bounce_time_bool) then
+            transit_avg_integrand = 1./abs(vpa)
+
+         else
+            ! Evaluate Bessel function
+            vperp2 = 2*mu*bmag(ia,iz)
+            aj0x = j0( sqrt(kperp2(1,ikx,ia,iz)*vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia,iz) )
+
+            ! Evaluate Q factor
+            call eval_Q_fac(vpa, akx(ikx), iz, is, Q_fac)
+
+            ! Integrand
+            transit_avg_integrand = exp(-Q_fac) * aj0x / abs(vpa)
+
+         end if
+      end if
+
+
+   end subroutine eval_transit_avg_integrand
+
+   ! Evaluate Q factor (i*kx*vmx = vpa*nabla_par(Q))
+   subroutine eval_Q_fac(vpa, akx, iz, is, Q_fac)
+      ! TODO-RN : implement correctly for general geometry
+
+      use geometry, only: bmag, geo_surf, btor, Rmajor
+      use species, only: spec
+      use constants, only: zi
+
+      implicit none
+
+      real,    intent(in)  :: vpa, akx
+      integer, intent(in)  :: iz, is
+      complex, intent(out) :: Q_fac
+
+      integer :: ia
+      ia = 1
+
+      ! TODO-RN : Need particle vthermal etc?
+      !Q_fac = -zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 &
+      !        * geo_surf%qinp*btor(iz)*Rmajor(iz) ! Note Btor*Rmajor should be constant along field-line
+
+      Q_fac = -zi*sqrt(2.)*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 &
+              * geo_surf%qinp*btor(iz)*Rmajor(iz)/geo_surf%rhoc ! Note Btor*Rmajor should be constant along field-line
+
+      !        * geo_surf%qinp*btor(iz)*Rmajor(iz) ! Note Btor*Rmajor should be constant along field-line
+!      write(*, *) btor(iz)*Rmajor(iz)
+!      write(*, *) spec(is)%smz_psi0
+
+!            aj0x = j0( sqrt(kperp2(1,ikx,ia,iz)*vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia,iz) )
+
+   end subroutine eval_Q_fac
+
+
+
+end module diagnostics_RH_inertia_fluxes
+
