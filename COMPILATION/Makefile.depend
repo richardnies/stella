@@ -21,6 +21,7 @@ stella_mod = \
 	 $(OBJ_DIR)/diagnostics_fluxes_fullfluxsurface.o \
 	 $(OBJ_DIR)/diagnostics_fluxes_radialvariation.o \
 	 $(OBJ_DIR)/diagnostics_moments.o \
+	 $(OBJ_DIR)/diagnostics_RH_inertia_fluxes.o \
 	 $(OBJ_DIR)/diagnostics_omega.o \
 	 $(OBJ_DIR)/diagnostics_potential.o \
 	 $(OBJ_DIR)/dissipation.o \
@@ -166,6 +167,7 @@ $(OBJ_DIR)/diagnostics.o: \
 	 $(OBJ_DIR)/diagnostics_distribution.o \
 	 $(OBJ_DIR)/diagnostics_fluxes.o \
 	 $(OBJ_DIR)/diagnostics_moments.o \
+	 $(OBJ_DIR)/diagnostics_RH_inertia_fluxes.o \
 	 $(OBJ_DIR)/diagnostics_omega.o \
 	 $(OBJ_DIR)/diagnostics_potential.o \
 	 $(OBJ_DIR)/dist_fn.o \
@@ -276,6 +278,25 @@ $(OBJ_DIR)/diagnostics_fluxes_radialvariation.o: \
 	 $(OBJ_DIR)/vpamu_grids.o \
 	 $(OBJ_DIR)/zgrid.o 
 $(OBJ_DIR)/diagnostics_moments.o: \
+	 $(OBJ_DIR)/arrays_dist_fn.o \
+	 $(OBJ_DIR)/arrays_fields.o \
+	 $(OBJ_DIR)/calculations_kxky.o \
+	 $(OBJ_DIR)/geometry.o \
+	 $(OBJ_DIR)/grids_kxky.o \
+	 $(OBJ_DIR)/gyro_averages.o \
+	 $(OBJ_DIR)/job_manage.o \
+	 $(OBJ_DIR)/mp.o \
+	 $(OBJ_DIR)/parameters_diagnostics.o \
+	 $(OBJ_DIR)/parameters_kxky_grids.o \
+	 $(OBJ_DIR)/parameters_numerical.o \
+	 $(OBJ_DIR)/parameters_physics.o \
+	 $(OBJ_DIR)/species.o \
+	 $(OBJ_DIR)/stella_io.o \
+	 $(OBJ_DIR)/stella_layouts.o \
+	 $(OBJ_DIR)/stella_transforms.o \
+	 $(OBJ_DIR)/vpamu_grids.o \
+	 $(OBJ_DIR)/zgrid.o 
+$(OBJ_DIR)/diagnostics_RH_inertia_fluxes.o: \
 	 $(OBJ_DIR)/arrays_dist_fn.o \
 	 $(OBJ_DIR)/arrays_fields.o \
 	 $(OBJ_DIR)/calculations_kxky.o \
