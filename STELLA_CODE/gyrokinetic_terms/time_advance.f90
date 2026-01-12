@@ -892,8 +892,8 @@ contains
       call advance_fields(gnew, phi, apar, bpar, dist='g')
 
       if (freeze_nonzonal) then
-         gnew(1:, :, :, :, :) =    gold(1:, :, :, :, :)
-         phi( 1:, :, :, :)    = phi_old(1:, :, :, :)
+         gnew(2:, :, :, :, :) =    gold(2:, :, :, :, :)
+         phi( 2:, :, :, :)    = phi_old(2:, :, :, :)
       end if
 
       !update the delay parameters for the Krook operator
