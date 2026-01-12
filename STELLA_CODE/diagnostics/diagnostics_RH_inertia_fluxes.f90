@@ -397,7 +397,7 @@ contains
 
                 call gyro_average(zi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_gyro)
                 call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
-                call transform_kx2x_xfirst(g(:,:,iz,it,iv), g_ky_x)
+                call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
                 NL_term_ky_x = vchix_gyro_ky_x * conjg(g_ky_x)
                 call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
 
