@@ -119,7 +119,6 @@ module mp
       module procedure broadcast_complex_2array
       module procedure broadcast_complex_3array
       module procedure broadcast_complex_4array
-      module procedure broadcast_complex_6array
 
       module procedure broadcast_logical
       module procedure broadcast_logical_array
@@ -158,6 +157,7 @@ module mp
       module procedure sum_reduce_complex_3array
       module procedure sum_reduce_complex_4array
       module procedure sum_reduce_complex_5array
+      module procedure sum_reduce_complex_6array
    end interface
 
    !KDN 100526: Allows summing into alternate variable
@@ -703,13 +703,6 @@ contains
       call mpi_bcast(z, size(z), mpicmplx, 0, mp_comm, ierror)
    end subroutine broadcast_complex_4array
 
-   subroutine broadcast_complex_6array(z)
-      implicit none
-      complex, dimension(:, :, :, :, :, :), intent(in out) :: z
-      integer :: ierror
-      call mpi_bcast(z, size(z), mpicmplx, 0, mp_comm, ierror)
-   end subroutine broadcast_complex_6array
-
    subroutine broadcast_logical(f)
       implicit none
       logical, intent(in out) :: f
@@ -1015,6 +1008,21 @@ contains
             (z, z, size(z), mpicmplx, MPI_SUM, dest, mp_comm, ierror)
       end if
    end subroutine sum_reduce_complex_5array
+
+
+   subroutine sum_reduce_complex_6array(z, dest)
+      implicit none
+      complex, dimension(:, :, :, :, :, :), intent(in out) :: z
+      integer, intent(in) :: dest
+      integer :: ierror
+      if (iproc == dest) then
+         call mpi_reduce &
+            (MPI_IN_PLACE, z, size(z), mpicmplx, MPI_SUM, dest, mp_comm, ierror)
+      else
+         call mpi_reduce &
+            (z, z, size(z), mpicmplx, MPI_SUM, dest, mp_comm, ierror)
+      end if
+   end subroutine sum_reduce_complex_6array
 
 ! Sum all z1 values into z2 at dest
 !   subroutine sum_reduce_alt_complex_3array (z1,z2,dest)

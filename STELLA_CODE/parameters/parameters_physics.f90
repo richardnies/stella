@@ -37,6 +37,7 @@ module parameters_physics
    public :: include_geometric_variation
    public :: include_parallel_nonlinearity
    public :: suppress_zonal_interaction
+   public :: freeze_nonzonal
    
    !> Large scale physics options of the system - e.g. whether we have full flux effects, 
    !> electromagnetic effects, or radially global effects.
@@ -67,6 +68,7 @@ module parameters_physics
    logical :: include_geometric_variation
    logical :: include_parallel_nonlinearity
    logical :: suppress_zonal_interaction
+   logical :: freeze_nonzonal
    
    logical :: full_flux_surface
    logical :: include_apar
@@ -134,6 +136,7 @@ contains
       include_geometric_variation = .true.
       include_parallel_nonlinearity = .false.
       suppress_zonal_interaction = .false.
+      freeze_nonzonal = .false.
       
       full_flux_surface = .false.
       include_apar = .false.
@@ -182,8 +185,8 @@ contains
       namelist /parameters_physics/ include_parallel_streaming, include_mirror, nonlinear, &
         xdriftknob, ydriftknob, wstarknob, adiabatic_option, prp_shear_enabled, &
         hammett_flow_shear, include_pressure_variation, include_geometric_variation, &
-        include_parallel_nonlinearity, suppress_zonal_interaction, full_flux_surface, &
-        include_apar, include_bpar, radial_variation, &
+        include_parallel_nonlinearity, suppress_zonal_interaction, freeze_nonzonal, &
+        full_flux_surface, include_apar, include_bpar, radial_variation, &
         beta, zeff, tite, nine, rhostar, vnew_ref, &
         g_exb, g_exbfac, omprimfac, irhostar
         
@@ -230,7 +233,8 @@ contains
          include_parallel_nonlinearity, include_parallel_streaming, &
          include_mirror, include_apar, include_bpar, nonlinear, &
          include_pressure_variation, include_geometric_variation, &
-         adiabatic_option, const_alpha_geo, suppress_zonal_interaction
+         adiabatic_option, const_alpha_geo, suppress_zonal_interaction, &
+         freeze_nonzonal
 
       namelist /parameters/ beta, zeff, tite, nine, rhostar, vnew_ref, &
          g_exb, g_exbfac, omprimfac, irhostar
@@ -322,6 +326,7 @@ contains
      call broadcast(include_geometric_variation)
      call broadcast(include_parallel_nonlinearity)
      call broadcast(suppress_zonal_interaction)
+     call broadcast(freeze_nonzonal)
      
      call broadcast(full_flux_surface)
      call broadcast(include_apar)

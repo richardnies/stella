@@ -786,7 +786,7 @@ contains
       use sources, only: source_option_switch, source_option_projection
       use sources, only: source_option_krook
       use sources, only: update_tcorr_krook, project_out_zero
-      use parameters_physics, only: include_apar
+      use parameters_physics, only: include_apar, freeze_nonzonal
       use mp, only: proc0, broadcast
 
       use parameters_numerical, only: flip_flop
@@ -890,6 +890,11 @@ contains
 
       !> Ensure fields are updated so that omega calculation is correct.
       call advance_fields(gnew, phi, apar, bpar, dist='g')
+
+      if (freeze_nonzonal) then
+         gnew(1:, :, :, :, :) =    gold(1:, :, :, :, :)
+         phi( 1:, :, :, :)    = phi_old(1:, :, :, :)
+      end if
 
       !update the delay parameters for the Krook operator
       if (source_option_switch == source_option_krook) call update_tcorr_krook(gnew)

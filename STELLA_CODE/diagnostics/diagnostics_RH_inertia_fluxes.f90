@@ -52,7 +52,7 @@ contains
       use species, only: nspec
       use stella_layouts, only: vmu_lo
       use stella_layouts, only: iv_idx, imu_idx, is_idx
-      use mp, only: broadcast
+      use mp, only: sum_reduce
       
       ! Flags 
       use parameters_physics, only: full_flux_surface
@@ -100,8 +100,8 @@ contains
 
       ! Make sure proc0 has full array 
       ! TODO-RN: might lead to memory issues! Average first in zed?
-      call broadcast(RH_integrand_even_vs_kxztsvpamu)
-      call broadcast(RH_integrand_odd_vs_kxztsvpamu)
+      call sum_reduce(RH_integrand_even_vs_kxztsvpamu, 0)
+      call sum_reduce(RH_integrand_odd_vs_kxztsvpamu,  0)
 
       ! Write the RH_fluxes to the netcdf file
       if (proc0 .and. write_RH_inertia_fluxes) then 
