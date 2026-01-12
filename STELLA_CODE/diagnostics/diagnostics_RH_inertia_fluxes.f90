@@ -276,6 +276,9 @@ contains
       ia = 1
 
       allocate (RH_inertia_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_inertia_tmp = 0.
+
+      if (.not. allocated(integrand_vpamu)) &
+         allocate (integrand_vpamu(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
  
       !=========================================================================
       !                     ROSENBLUTH-HINTON FLUXES                           !
@@ -294,7 +297,8 @@ contains
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
 
-                !integrand_vpamu(1, :, iz, it, ivmu) = (1 - aj0x(1,:,iz,ivmu)*RH_integrand_even(:,iz,it,ivmu)) * &
+!                integrand_vpamu(1, 1, iz, it, ivmu) = 1.
+
                 integrand_vpamu(1, :, iz, it, ivmu) = (1-aj0x(1,:,iz,ivmu)*(RH_integrand_even(:,iz,it,ivmu)+RH_integrand_odd(:,iz,it,ivmu))) * &
                                        maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is)*maxwell_fac(is) * spec(is)%zt
 
@@ -331,10 +335,12 @@ contains
       use parameters_numerical, only: maxwellian_normalization
       use stella_transforms, only: transform_kx2x_xfirst, transform_x2kx_xfirst
       use constants, only: zi
+      use parameters_physics, only: nonlinear
       
       ! Import temp arrays g1, g2 with dimensions (nky, nkx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
       use arrays_dist_fn, only: integrand_even  => g1
       use arrays_dist_fn, only: integrand_odd   => g2
+ 
 
       implicit none
 
@@ -355,7 +361,14 @@ contains
       
       ! We only have one field line because <full_flux_surface> = .false.
       ia = 1
- 
+
+      ! Only compute RH fluxes for nonlinear run
+      if (.not. nonlinear) then
+         RH_fluxes_even = 0.
+         RH_fluxes_odd  = 0.
+         return 
+      end if
+
       !=========================================================================
       !                     ROSENBLUTH-HINTON FLUXES                           !
       !=========================================================================
