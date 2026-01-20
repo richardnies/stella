@@ -64,7 +64,10 @@ module stella_io
    public :: write_kspectra_nc
    public :: write_omega_nc
    public :: write_moments_nc
-   public :: write_RH_fluxes_nc
+   public :: write_RH_fluxes_phi_nc
+   public :: write_RH_fluxes_apar_nc
+   public :: write_RH_fluxes_bpar_nc
+   public :: write_RH_phi_I_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
    public :: write_radial_fluxes_nc
@@ -769,13 +772,12 @@ contains
 
    end subroutine write_moments_nc
 
-
-   !----------------------- RH fluxes -----------------------
-   subroutine write_RH_fluxes_nc(nout, RH_fluxes_even, RH_fluxes_odd)
+   !----------------------- RH phi fluxes -----------------------
+   subroutine write_RH_fluxes_phi_nc(nout, RH_fluxes_phi_even, RH_fluxes_phi_odd)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_even, RH_fluxes_odd
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_phi_even, RH_fluxes_phi_odd
 
 #ifdef NETCDF
 
@@ -785,14 +787,86 @@ contains
       start = [1, 1, 1, 1, 1, 1, nout]
 
       ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_even",  RH_fluxes_even, &
-               dim_names=dims, start=start, long_name="Rosenbluth-Hinton Fluxes to ZF with kx from NZ modes with ky, even in vparallel") 
-      call netcdf_write_complex(ncid, "RH_fluxes_odd",  RH_fluxes_odd, &
-               dim_names=dims, start=start, long_name="Rosenbluth-Hinton Fluxes to ZF with kx from NZ modes with ky, odd in vparallel") 
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_even",  RH_fluxes_phi_even, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, even in vparallel") 
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd",  RH_fluxes_phi_odd, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, odd in vparallel") 
 
 #endif
 
-   end subroutine write_RH_fluxes_nc
+   end subroutine write_RH_fluxes_phi_nc
+
+
+   !----------------------- RH apar fluxes -----------------------
+   subroutine write_RH_fluxes_apar_nc(nout, RH_fluxes_apar_even, RH_fluxes_apar_odd)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_apar_even, RH_fluxes_apar_odd
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: start
+      start = [1, 1, 1, 1, 1, 1, nout]
+
+      ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
+      call netcdf_write_complex(ncid, "RH_fluxes_apar_even",  RH_fluxes_apar_even, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, even in vparallel") 
+      call netcdf_write_complex(ncid, "RH_fluxes_apar_odd",  RH_fluxes_apar_odd, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel") 
+
+#endif
+
+   end subroutine write_RH_fluxes_apar_nc
+
+
+   !----------------------- RH bpar fluxes -----------------------
+   subroutine write_RH_fluxes_bpar_nc(nout, RH_fluxes_bpar_even, RH_fluxes_bpar_odd)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_bpar_even, RH_fluxes_bpar_odd
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: start
+      start = [1, 1, 1, 1, 1, 1, nout]
+
+      ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
+      call netcdf_write_complex(ncid, "RH_fluxes_bpar_even",  RH_fluxes_bpar_even, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, even in vparallel") 
+      call netcdf_write_complex(ncid, "RH_fluxes_bpar_odd",  RH_fluxes_bpar_odd, &
+               dim_names=dims, start=start, long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel") 
+
+#endif
+
+   end subroutine write_RH_fluxes_bpar_nc
+
+   !----------------------- RH phi -----------------------
+   subroutine write_RH_phi_I_nc(nout, RH_phi_I)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :), intent(in) :: RH_phi_I
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(6) :: start
+      start = [1, 1, 1, 1, 1, nout]
+
+      ! Write the RH phi (kx,z,tube,s,t,ri)
+      call netcdf_write_complex(ncid, "RH_phi_I",  RH_phi_I, &
+              dim_names=dims, start=start, long_name="Rosenbluth-Hinton potential*inertia (=<phi*I_RH>_psi in RH limit where H_s = <H_s>_tau") 
+
+#endif
+
+   end subroutine write_RH_phi_I_nc
 
    !----------------------- RH inertia ----------------------
    subroutine write_RH_inertia_nc(RH_inertia)

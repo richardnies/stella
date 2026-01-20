@@ -18,7 +18,7 @@ module diagnostics
    logical :: diagnostics_initialized = .false.
 
    ! Needed for timing various pieces of the diagnostics
-   real, dimension(2, 7) :: time_diagnostics = 0.
+   real, dimension(2, 8) :: time_diagnostics = 0.
 
 contains
 
@@ -46,6 +46,7 @@ contains
       use diagnostics_fluxes, only: write_fluxes_to_netcdf_file
       use diagnostics_moments, only: write_moments_to_netcdf_file
       use diagnostics_RH_inertia_fluxes, only: write_RH_fluxes_to_netcdf_file
+      use diagnostics_RH_inertia_fluxes, only: write_RH_phi_I_to_netcdf_file
       use diagnostics_distribution, only: write_distribution_to_netcdf_file
       use stella_io, only: sync_nc
    
@@ -106,6 +107,8 @@ contains
       call write_distribution_to_netcdf_file(nout, time_diagnostics(:, 6))
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::netcdf_files_RH_fluxes' 
       call write_RH_fluxes_to_netcdf_file(nout, time_diagnostics(:, 7))
+      if (debug) write (*, *) 'diagnostics::diagnostics_stella::netcdf_files_RH_phi_I' 
+      call write_RH_phi_I_to_netcdf_file(nout, time_diagnostics(:, 8))
 
       ! Synchronize the disk copy of a netCDF dataset with in-memory buffers    
       if (proc0) call sync_nc

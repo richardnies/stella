@@ -886,8 +886,6 @@ contains
          fields_updated = .false.
       end if
 
-      gold = gnew
-
       !> Ensure fields are updated so that omega calculation is correct.
       call advance_fields(gnew, phi, apar, bpar, dist='g')
 
@@ -895,6 +893,8 @@ contains
          gnew(2:, :, :, :, :) =    gold(2:, :, :, :, :)
          phi( 2:, :, :, :)    = phi_old(2:, :, :, :)
       end if
+
+      gold = gnew
 
       !update the delay parameters for the Krook operator
       if (source_option_switch == source_option_krook) call update_tcorr_krook(gnew)
