@@ -61,6 +61,14 @@ module vpamu_grids
       module procedure integrate_vmu_vmulo_ivmu_only_real
    end interface
 
+   interface integrate_vmu_passing
+      module procedure integrate_vmu_passing_vmulo_complex
+   end interface
+
+   interface integrate_vmu_trapped
+      module procedure integrate_vmu_trapped_vmulo_complex
+   end interface
+
    interface integrate_mu
       module procedure integrate_mu_local
       module procedure integrate_mu_nonlocal
@@ -393,7 +401,7 @@ contains
 
    end subroutine integrate_vmu_local_complex
 
-   ! integrave over v-space in vmu_lo
+   ! integrate over v-space in vmu_lo
    subroutine integrate_vmu_vmulo_complex(g, weights, total)
 
       use mp, only: sum_allreduce
@@ -424,6 +432,79 @@ contains
       call sum_allreduce(total)
 
    end subroutine integrate_vmu_vmulo_complex
+
+   ! integrate over v-space of passing particles in vmu_lo
+   subroutine integrate_vmu_passing_vmulo_complex(g, weights, total)
+
+      use mp, only: sum_allreduce
+      use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
+      use zgrid, only: nzgrid
+      use geometry, only: bmag
+
+      implicit none
+
+      integer :: ivmu, iv, iz, is, imu, ia
+
+      complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
+      real, dimension(:), intent(in) :: weights
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: total
+
+      total = 0.
+
+      ia = 1
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+         do iz = -nzgrid, nzgrid
+            ! Passing particle condition
+            if (vpa(iv)**2 + vperp2(ia,iz,imu) > 2*mu(imu)*maxval(bmag(ia,:))) then
+               total(:, :, iz, :, is) = total(:, :, iz, :, is) + &
+                                        wgts_mu(ia, iz, imu) * wgts_vpa(iv) * g(:, :, iz, :, ivmu) * weights(is)
+            end if
+         end do
+      end do
+
+      call sum_allreduce(total)
+
+   end subroutine integrate_vmu_passing_vmulo_complex
+
+
+   ! integrate over v-space of trapped particles in vmu_lo
+   subroutine integrate_vmu_trapped_vmulo_complex(g, weights, total)
+
+      use mp, only: sum_allreduce
+      use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
+      use zgrid, only: nzgrid
+      use geometry, only: bmag
+
+      implicit none
+
+      integer :: ivmu, iv, iz, is, imu, ia
+
+      complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
+      real, dimension(:), intent(in) :: weights
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: total
+
+      total = 0.
+
+      ia = 1
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+         do iz = -nzgrid, nzgrid
+            ! Trapped particle condition
+            if (vpa(iv)**2 + vperp2(ia,iz,imu) <= 2*mu(imu)*maxval(bmag(ia,:))) then
+               total(:, :, iz, :, is) = total(:, :, iz, :, is) + &
+                                        wgts_mu(ia, iz, imu) * wgts_vpa(iv) * g(:, :, iz, :, ivmu) * weights(is)
+            end if
+         end do
+      end do
+
+      call sum_allreduce(total)
+
+   end subroutine integrate_vmu_trapped_vmulo_complex
 
    ! integrave over v-space in vmu_lo
    subroutine integrate_vmu_vmulo_ivmu_only_real(g, ia, iz, total)

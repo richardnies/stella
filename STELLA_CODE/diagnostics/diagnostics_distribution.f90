@@ -51,10 +51,12 @@ contains
       use stella_io, only: write_g2_vs_zmus_nc 
       use stella_io, only: write_g2_vs_zkykxs_nc
       use stella_io, only: write_g2_vs_zvpamus_nc 
+      use stella_io, only: write_g2_vs_kxvpamus_nc
       use stella_io, only: write_g2nozonal_vs_vpamus_nc
       use stella_io, only: write_g2nozonal_vs_zvpas_nc
       use stella_io, only: write_g2nozonal_vs_zmus_nc  
       use stella_io, only: write_g2nozonal_vs_zvpamus_nc 
+      use stella_io, only: write_g2nozonal_vs_kxvpamus_nc
       use stella_io, only: write_h2_vs_vpamus_nc
       use stella_io, only: write_h2_vs_zvpas_nc
       use stella_io, only: write_h2_vs_zmus_nc 
@@ -83,6 +85,7 @@ contains
       use parameters_diagnostics, only: write_g2_vs_zmus
       use parameters_diagnostics, only: write_g2_vs_kxkyzs 
       use parameters_diagnostics, only: write_g2_vs_zvpamus 
+      use parameters_diagnostics, only: write_g2_vs_kxvpamus 
       
       ! Routines
       use g_tofrom_h, only: g_to_f, g_to_h
@@ -99,6 +102,7 @@ contains
       ! And we will do this for g, h and delta f
       real, dimension(:, :, :), allocatable :: g2_vs_vpamus, g2nozonal_vs_vpamus
       real, dimension(:, :, :, :), allocatable :: g2_vs_zvpas, g2_vs_zmus, g2nozonal_vs_zvpas, g2nozonal_vs_zmus
+      real, dimension(:, :, :, :), allocatable :: g2_vs_kxvpamus, g2nozonal_vs_kxvpamus
       real, dimension(:, :, :, :, :), allocatable :: g2_vs_zkykxs, g2_vs_zvpamus, g2nozonal_vs_zvpamus
 
       !----------------------------------------------------------------------  
@@ -106,7 +110,8 @@ contains
       ! Only continue if we write data 
       if ((.not. write_distribution_g) .and. (.not. write_distribution_h) .and. (.not. write_distribution_f)) return
       if ((.not. write_g2_vs_vpamus) .and. (.not. write_g2_vs_zvpas) .and. (.not. write_g2_vs_zmus) &
-            .and. (.not. write_g2_vs_kxkyzs) .and. (.not. write_g2_vs_zvpamus)) return 
+            .and. (.not. write_g2_vs_kxkyzs) .and. (.not. write_g2_vs_zvpamus)  &
+            .and. (.not. write_g2_vs_kxvpamus) .and. (.not. write_g2_vs_kxvpamus)) return 
 
       ! Start timer
       if (proc0) call time_message(.false., timer(:), 'Write distribution')
@@ -122,6 +127,8 @@ contains
       if (write_g2_vs_zvpamus) allocate (g2_vs_zvpamus(nztot, ntubes, nvpa, nmu, nspec)) 
       if (write_g2_vs_zvpamus) allocate (g2nozonal_vs_zvpamus(nztot, ntubes, nvpa, nmu, nspec)) 
       if (write_g2_vs_kxkyzs) allocate (g2_vs_zkykxs(ntubes, nztot, naky, nakx, nspec))   
+      if (write_g2_vs_kxvpamus) allocate (g2_vs_kxvpamus(nakx, nvpa, nmu, nspec)) 
+      if (write_g2_vs_kxvpamus) allocate (g2nozonal_vs_kxvpamus(nakx, nvpa, nmu, nspec))
 
       ! Redistribute the data from <gnew>(ky,kx,z,tube,i[vpa,mu,s]) to <gvmu>(vpa,mu,i[kx,ky,z,s]) for |g|^2(z,kx,ky,s)
       if (write_g2_vs_kxkyzs) call scatter(kxkyz2vmu, gnew, gvmu) 
@@ -131,8 +138,8 @@ contains
       if (write_distribution_g) then
 
          ! Use gnew(ky, kx, z, tube, ivmus) to calculate |g|^2(z, vpa, s), |g|^2(z, mu, s) and |g|^2(vpa, mu, s)
-         call calculate_distribution(gnew, gvmu, g2_vs_zmus, g2_vs_zvpas, g2_vs_vpamus, g2_vs_zkykxs, g2_vs_zvpamus, &
-                  g2nozonal_vs_zmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus)
+         call calculate_distribution(gnew, gvmu, g2_vs_zmus, g2_vs_zvpas, g2_vs_vpamus, g2_vs_zkykxs, g2_vs_zvpamus, g2_vs_kxvpamus, &
+                  g2nozonal_vs_zmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus, g2nozonal_vs_kxvpamus)
 
          ! Write the distribution data to the netcdf file
          if (write_g2_vs_vpamus .and. proc0) call write_g2_vs_vpamus_nc(nout, g2_vs_vpamus)  
@@ -140,10 +147,12 @@ contains
          if (write_g2_vs_zmus .and. proc0) call write_g2_vs_zmus_nc(nout, g2_vs_zmus)  
          if (write_g2_vs_kxkyzs .and. proc0) call write_g2_vs_zkykxs_nc(nout, g2_vs_zkykxs)  
          if (write_g2_vs_zvpamus .and. proc0) call write_g2_vs_zvpamus_nc(nout, g2_vs_zvpamus) 
+         if (write_g2_vs_kxvpamus .and. proc0) call write_g2_vs_kxvpamus_nc(nout, g2_vs_kxvpamus)  
          if (write_g2_vs_vpamus .and. proc0) call write_g2nozonal_vs_vpamus_nc(nout, g2nozonal_vs_vpamus)  
          if (write_g2_vs_zvpas .and. proc0) call write_g2nozonal_vs_zvpas_nc(nout, g2nozonal_vs_zvpas) 
          if (write_g2_vs_zmus .and. proc0) call write_g2nozonal_vs_zmus_nc(nout, g2nozonal_vs_zmus)   
          if (write_g2_vs_zvpamus .and. proc0) call write_g2nozonal_vs_zvpamus_nc(nout, g2nozonal_vs_zvpamus)   
+         if (write_g2_vs_kxvpamus .and. proc0) call write_g2nozonal_vs_kxvpamus_nc(nout, g2nozonal_vs_kxvpamus)  
 
       end if 
 
@@ -156,8 +165,8 @@ contains
          call g_to_h(gnew, phi, bpar, fphi)
 
          ! Use gnew(ky, kx, z, tube, ivmus) to calculate |g|^2(z, vpa, s), |g|^2(z, mu, s) and |g|^2(vpa, mu, s)
-         call calculate_distribution(gnew, gvmu, g2_vs_zmus, g2_vs_zvpas, g2_vs_vpamus, g2_vs_zkykxs, g2_vs_zvpamus, &
-                  g2nozonal_vs_zmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus)
+         call calculate_distribution(gnew, gvmu, g2_vs_zmus, g2_vs_zvpas, g2_vs_vpamus, g2_vs_zkykxs, g2_vs_zvpamus, g2_vs_kxvpamus, &
+                  g2nozonal_vs_zmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus, g2nozonal_vs_kxvpamus)
  
          ! Write the distribution data to the netcdf file
          if (write_g2_vs_vpamus .and. proc0) call write_h2_vs_vpamus_nc(nout, g2_vs_vpamus)  
@@ -185,8 +194,8 @@ contains
          call g_to_f(gnew, phi, fphi)
 
          ! Use gnew(ky, kx, z, tube, ivmus) to calculate |g|^2(z, vpa, s), |g|^2(z, mu, s) and |g|^2(vpa, mu, s)
-         call calculate_distribution(gnew, gvmu, g2_vs_zmus, g2_vs_zvpas, g2_vs_vpamus, g2_vs_zkykxs, g2_vs_zvpamus, &
-                  g2nozonal_vs_zmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus)
+         call calculate_distribution(gnew, gvmu, g2_vs_zmus, g2_vs_zvpas, g2_vs_vpamus, g2_vs_zkykxs, g2_vs_zvpamus, g2_vs_kxvpamus, &
+                  g2nozonal_vs_zmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus, g2nozonal_vs_kxvpamus)
 
          ! Write the distribution data to the netcdf file
          if (write_g2_vs_vpamus .and. proc0) call write_f2_vs_vpamus_nc(nout, g2_vs_vpamus)  
@@ -211,6 +220,12 @@ contains
       if (write_g2_vs_zmus) deallocate (g2_vs_zmus)  
       if (write_g2_vs_kxkyzs) deallocate (g2_vs_zkykxs)   
       if (write_g2_vs_zvpamus) deallocate (g2_vs_zvpamus)  
+      if (write_g2_vs_kxvpamus) deallocate (g2_vs_kxvpamus) 
+      if (write_g2_vs_vpamus) deallocate (g2nozonal_vs_vpamus) 
+      if (write_g2_vs_zvpas) deallocate (g2nozonal_vs_zvpas)
+      if (write_g2_vs_zmus) deallocate (g2nozonal_vs_zmus)  
+      if (write_g2_vs_zvpamus) deallocate (g2nozonal_vs_zvpamus)  
+      if (write_g2_vs_kxvpamus) deallocate (g2nozonal_vs_kxvpamus) 
 
       ! End timer
       if (proc0) call time_message(.false., timer(:), 'Write distribution') 
@@ -224,7 +239,9 @@ contains
    ! We use Parsevals theorem: int dxdy |g(x,y)|^2 = sum_{kx,ky} |g(kx,ky)|^2 
    ! And the mirror condition: int dxdy |g(x,y)|^2 = sum_ky |g(ky=0,kx)|^2 + 2 * sum_{kx,ky} |g(ky>0,kx)|^2  
    subroutine calculate_distribution(g_vs_kykxztube, g_vs_vpamuikxkyzs, g2_vs_tzmus, g2_vs_zvpas, g2_vs_vpamus, g2_vs_zkykxs, g2_vs_zvpamus, &
-                  g2nozonal_vs_tzmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus)
+                 g2_vs_kxvpamus, &
+                  g2nozonal_vs_tzmus, g2nozonal_vs_zvpas, g2nozonal_vs_vpamus, g2nozonal_vs_zvpamus, &
+                  g2nozonal_vs_kxvpamus)
 
       ! Geometry
       use geometry, only: dl_over_b
@@ -250,6 +267,7 @@ contains
       use parameters_diagnostics, only: write_g2_vs_zmus
       use parameters_diagnostics, only: write_g2_vs_kxkyzs 
       use parameters_diagnostics, only: write_g2_vs_zvpamus 
+      use parameters_diagnostics, only: write_g2_vs_kxvpamus 
 
       implicit none
 
@@ -257,6 +275,7 @@ contains
       complex, dimension(:, :, kxkyz_lo%llim_proc:), intent(in) :: g_vs_vpamuikxkyzs 
       real, dimension(:, :, :, :, :), intent(out) :: g2_vs_zkykxs, g2_vs_zvpamus, g2nozonal_vs_zvpamus
       real, dimension(:, :, :, :), intent(out) :: g2_vs_tzmus, g2_vs_zvpas, g2nozonal_vs_tzmus, g2nozonal_vs_zvpas
+      real, dimension(:, :, :, :), intent(out) :: g2_vs_kxvpamus, g2nozonal_vs_kxvpamus
       real, dimension(:, :, :), intent(out) :: g2_vs_vpamus, g2nozonal_vs_vpamus
 
       ! Arrays needed to perform calculations
@@ -278,6 +297,7 @@ contains
       if (write_g2_vs_zmus) then; g2_vs_tzmus = 0.; g2nozonal_vs_tzmus = 0.; end if
       if (write_g2_vs_vpamus) then; g2_vs_vpamus = 0.; g2nozonal_vs_vpamus = 0.; end if
       if (write_g2_vs_zvpamus) then; g2_vs_zvpamus = 0.; g2nozonal_vs_zvpamus = 0.; end if
+      if (write_g2_vs_kxvpamus) then; g2_vs_kxvpamus = 0.; g2nozonal_vs_kxvpamus = 0.; end if
       if (write_g2_vs_kxkyzs) then; g2_vs_zkykxs = 0.; end if 
 
       ! Assume we only have one flux tube (assume <radial_variation> = False)
@@ -303,11 +323,20 @@ contains
                end if
 
                ! Now take the field line average 
-               if (write_g2_vs_vpamus) then
+               if (write_g2_vs_vpamus .or. write_g2_vs_kxvpamus) then
                   do it = 1, ntubes
-                     g2_vs_vpamus(iv, imu, is) = g2_vs_vpamus(iv, imu, is) + sum(g2_vs_ztube(:, it) * dl_over_b(ia, :)) 
-                     if (.not. zonal_mode(iky)) then 
-                        g2nozonal_vs_vpamus(iv, imu, is) = g2nozonal_vs_vpamus(iv, imu, is) + sum(g2_vs_ztube(:, it) * dl_over_b(ia, :)) 
+                     if (write_g2_vs_vpamus) then
+                        g2_vs_vpamus(iv, imu, is) = g2_vs_vpamus(iv, imu, is) + sum(g2_vs_ztube(:, it) * dl_over_b(ia, :)) 
+                        if (.not. zonal_mode(iky)) then 
+                           g2nozonal_vs_vpamus(iv, imu, is) = g2nozonal_vs_vpamus(iv, imu, is) + sum(g2_vs_ztube(:, it) * dl_over_b(ia, :)) 
+                        end if
+                     end if
+
+                     if (write_g2_vs_kxvpamus) then
+                        g2_vs_kxvpamus(ikx, iv, imu, is) = g2_vs_kxvpamus(ikx, iv, imu, is) + sum(g2_vs_ztube(:, it) * dl_over_b(ia, :)) 
+                        if (.not. zonal_mode(iky)) then 
+                           g2nozonal_vs_kxvpamus(ikx, iv, imu, is) = g2nozonal_vs_kxvpamus(ikx, iv, imu, is) + sum(g2_vs_ztube(:, it) * dl_over_b(ia, :)) 
+                        end if
                      end if
                   end do
                end if
@@ -367,6 +396,10 @@ contains
       end if
       if (write_g2_vs_kxkyzs) then 
          if (nproc > 1) call sum_reduce(g2_vs_zkykxs, 0) 
+      end if
+      if (write_g2_vs_kxvpamus) then   
+         if (nproc > 1) call sum_reduce(g2_vs_kxvpamus, 0)  
+         if (nproc > 1) call sum_reduce(g2nozonal_vs_kxvpamus, 0)   
       end if
 
       ! Deallocate local arrays

@@ -786,7 +786,10 @@ contains
       use sources, only: source_option_switch, source_option_projection
       use sources, only: source_option_krook
       use sources, only: update_tcorr_krook, project_out_zero
-      use parameters_physics, only: include_apar, freeze_nonzonal
+      use parameters_physics, only: include_apar, freeze_nonzonal, freeze_zonal
+      use parameters_physics, only: freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax
+      use parameters_kxky_grids, only: nakx
+      use grids_kxky, only: akx
       use mp, only: proc0, broadcast
 
       use parameters_numerical, only: flip_flop
@@ -796,7 +799,7 @@ contains
       logical, intent(in out) :: stop_stella
 
       logical :: restart_time_step, time_advance_successful
-      integer :: count_restarts
+      integer :: count_restarts, ikx
 
       !> unless running in multibox mode, no need to worry about
       !> mb_communicate calls as the subroutine is immediately exited
@@ -892,6 +895,15 @@ contains
       if (freeze_nonzonal) then
          gnew(2:, :, :, :, :) =    gold(2:, :, :, :, :)
          phi( 2:, :, :, :)    = phi_old(2:, :, :, :)
+      end if
+
+      if (freeze_zonal) then
+         do ikx = 1, nakx
+            if ((abs(akx(ikx)) >= freeze_zonal_kmin) .and. (abs(akx(ikx)) <= freeze_zonal_kmax)) then
+               gnew(1, ikx, :, :, :) = freeze_zonal_factor*   gold(1, ikx, :, :, :) + (1-freeze_zonal_factor)*gnew(1, ikx, :, :, :)
+               phi( 1, ikx, :, :)    = freeze_zonal_factor*phi_old(1, ikx, :, :)    + (1-freeze_zonal_factor)* phi(1, ikx, :, :)    
+            end if
+         end do
       end if
 
       gold = gnew
@@ -1790,7 +1802,8 @@ contains
       use calculations_kxky, only: swap_kxky, swap_kxky_back
       use constants, only: pi, zi
       use file_utils, only: runtype_option_switch, runtype_multibox
-      use parameters_physics, only: suppress_zonal_interaction
+      use parameters_physics, only: suppress_zonal_interaction, only_zonal_interaction
+      use parameters_physics, only: freeze_zonal
       use arrays_dist_fn, only: g_scratch
       use g_tofrom_h, only: g_to_h
 
@@ -1869,6 +1882,10 @@ contains
                if (suppress_zonal_interaction) then
                   g0k(1,:) = 0.0
                end if
+               !> keep only the zonal contribution to d<chi>/dx if requested
+               if (only_zonal_interaction) then
+                  g0k(2:,:) = 0.0
+               end if
                !> if running with equilibrium flow shear, make adjustment to
                !> the term multiplying dg/dy
                if (prp_shear_enabled .and. hammett_flow_shear) then
@@ -1903,6 +1920,10 @@ contains
                !> zero out the zonal contribution to dg/dx if requested
                if (suppress_zonal_interaction) then
                   g0k(1,:) = 0.0
+               end if
+               !> keep only the zonal contribution to dg/dx if requested
+               if (only_zonal_interaction) then
+                  g0k(2:,:) = 0.0
                end if
                !> if running with equilibrium flow shear, correct dg/dx term
                if (prp_shear_enabled .and. hammett_flow_shear) then
@@ -1970,6 +1991,10 @@ contains
       call min_allreduce(cfl_dt_ExB)
 
       if (runtype_option_switch == runtype_multibox) call scope(subprocs)
+
+      !> If keeping only zonal interaction but zonal fields are frozen, ignore CFL
+      if ((only_zonal_interaction) .and. (freeze_zonal)) cfl_dt_ExB = cfl_dt_linear
+
 
       !> check estimated cfl_dt to see if the time step size needs to be changed
       cfl_dt = min(cfl_dt_ExB, cfl_dt_linear)

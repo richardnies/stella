@@ -37,7 +37,19 @@ module parameters_physics
    public :: include_geometric_variation
    public :: include_parallel_nonlinearity
    public :: suppress_zonal_interaction
+   public :: only_zonal_interaction
    public :: freeze_nonzonal
+   public :: freeze_zonal
+   public :: freeze_zonal_factor
+   public :: freeze_zonal_kmin
+   public :: freeze_zonal_kmax
+   public :: triangular_ZF
+   public :: cos_ZF 
+   public :: triangular_ZF_RH
+   public :: triangular_ZF_PS
+   public :: triangular_ZF_upar
+   public :: triangular_ZF_upar_fac
+   public :: triangular_ZF_g_exb
    
    !> Large scale physics options of the system - e.g. whether we have full flux effects, 
    !> electromagnetic effects, or radially global effects.
@@ -47,7 +59,7 @@ module parameters_physics
    public :: radial_variation
    
    public :: beta, zeff, tite, nine, rhostar, vnew_ref
-   public :: g_exb, g_exbfac, omprimfac 
+   public :: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
    
    private
 
@@ -68,7 +80,14 @@ module parameters_physics
    logical :: include_geometric_variation
    logical :: include_parallel_nonlinearity
    logical :: suppress_zonal_interaction
+   logical :: only_zonal_interaction
    logical :: freeze_nonzonal
+   logical :: freeze_zonal
+   logical :: triangular_ZF
+   logical :: cos_ZF
+   logical :: triangular_ZF_RH
+   logical :: triangular_ZF_PS
+   logical :: triangular_ZF_upar
    
    logical :: full_flux_surface
    logical :: include_apar
@@ -76,7 +95,9 @@ module parameters_physics
    logical :: radial_variation
 
    real :: beta, zeff, tite, nine, rhostar, irhostar, vnew_ref
-   real :: g_exb, g_exbfac, omprimfac
+   real :: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
+   real :: triangular_ZF_g_exb, triangular_ZF_upar_fac 
+   real :: freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax
    logical :: initialised = .false.
 
    !!> Need to fix for the warning messages
@@ -136,7 +157,19 @@ contains
       include_geometric_variation = .true.
       include_parallel_nonlinearity = .false.
       suppress_zonal_interaction = .false.
+      only_zonal_interaction = .false.
       freeze_nonzonal = .false.
+      freeze_zonal = .false.
+      freeze_zonal_factor = 1.0
+      freeze_zonal_kmin = -1.0
+      freeze_zonal_kmax = 1e10
+      triangular_ZF = .false.
+      cos_ZF = .false.
+      triangular_ZF_RH   = .true.
+      triangular_ZF_PS   = .false.
+      triangular_ZF_upar = .false.
+      triangular_ZF_g_exb    = 0.0
+      triangular_ZF_upar_fac = 1.0
       
       full_flux_surface = .false.
       include_apar = .false.
@@ -151,9 +184,11 @@ contains
       vnew_ref = -1.0 ! various input options will override this value if it is negative
 
       !> Zonal flow options -> TODO-HT: how to turn on/off
-      g_exb = 0.0
-      g_exbfac = 1.0
-      omprimfac = 1.0
+      g_exb = 0.0          ! ExB shear
+      g_exbfac = 1.0       ! Scale factor for perp. flow shear
+      omprimfac = 1.0      ! Scale factor for equilibrium parallel flow shear
+      omprimfac_RH = 0.0   ! Scale factor for Rosenbluth-Hinton "parallel flow" (velocity-space dep.)
+      omprimfac_PS = 0.0   ! Scale factor for Pfirsch-Schlueter parallel flow (~q*cos(theta))
       irhostar = -1.0 
       
    end subroutine set_default_parameters
@@ -185,10 +220,13 @@ contains
       namelist /parameters_physics/ include_parallel_streaming, include_mirror, nonlinear, &
         xdriftknob, ydriftknob, wstarknob, adiabatic_option, prp_shear_enabled, &
         hammett_flow_shear, include_pressure_variation, include_geometric_variation, &
-        include_parallel_nonlinearity, suppress_zonal_interaction, freeze_nonzonal, &
+        include_parallel_nonlinearity, suppress_zonal_interaction, only_zonal_interaction, freeze_nonzonal, freeze_zonal, &
+        freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
+        triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_PS, triangular_ZF_g_exb, &
+        triangular_ZF_upar, triangular_ZF_upar_fac, &
         full_flux_surface, include_apar, include_bpar, radial_variation, &
         beta, zeff, tite, nine, rhostar, vnew_ref, &
-        g_exb, g_exbfac, omprimfac, irhostar
+        g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
         
      !> Overwrite the default options with any that are explicitly given in the input file
      !> under the heading '&parameters_physics'
@@ -233,11 +271,13 @@ contains
          include_parallel_nonlinearity, include_parallel_streaming, &
          include_mirror, include_apar, include_bpar, nonlinear, &
          include_pressure_variation, include_geometric_variation, &
-         adiabatic_option, const_alpha_geo, suppress_zonal_interaction, &
-         freeze_nonzonal
+         adiabatic_option, const_alpha_geo, suppress_zonal_interaction, only_zonal_interaction, &
+         freeze_nonzonal, freeze_zonal, freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
+         triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_PS, triangular_ZF_g_exb, &
+         triangular_ZF_upar, triangular_ZF_upar_fac
 
       namelist /parameters/ beta, zeff, tite, nine, rhostar, vnew_ref, &
-         g_exb, g_exbfac, omprimfac, irhostar
+         g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
 
       namelist /time_advance_knobs/ xdriftknob, ydriftknob, wstarknob, explicit_option, flip_flop
       
@@ -326,7 +366,19 @@ contains
      call broadcast(include_geometric_variation)
      call broadcast(include_parallel_nonlinearity)
      call broadcast(suppress_zonal_interaction)
+     call broadcast(only_zonal_interaction)
      call broadcast(freeze_nonzonal)
+     call broadcast(freeze_zonal)
+     call broadcast(freeze_zonal_factor)
+     call broadcast(freeze_zonal_kmin)
+     call broadcast(freeze_zonal_kmax)
+     call broadcast(triangular_ZF)
+     call broadcast(cos_ZF)
+     call broadcast(triangular_ZF_RH)
+     call broadcast(triangular_ZF_PS)
+     call broadcast(triangular_ZF_upar)
+     call broadcast(triangular_ZF_g_exb)
+     call broadcast(triangular_ZF_upar_fac)
      
      call broadcast(full_flux_surface)
      call broadcast(include_apar)
@@ -342,6 +394,8 @@ contains
      call broadcast(g_exb)
      call broadcast(g_exbfac)
      call broadcast(omprimfac)
+     call broadcast(omprimfac_RH)
+     call broadcast(omprimfac_PS)
 
    end subroutine broadcast_parameters
 

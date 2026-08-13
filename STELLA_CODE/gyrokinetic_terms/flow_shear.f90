@@ -29,13 +29,13 @@ contains
       use stella_time, only: code_dt
       use species, only: spec
       use constants, only: zi, pi
-      use zgrid, only: nzgrid
+      use zgrid, only: nzgrid, zed
       use grids_kxky, only: x, x_d, akx, aky, zonal_mode, box
       use parameters_kxky_grids, only: nalpha, nx, nakx, naky, ikx_max
       use arrays_fields, only: shift_state
       use geometry, only: q_as_x, geo_surf, bmag, btor, rmajor, dBdrho, dIdrho
       use geometry, only: dydalpha, drhodpsi
-      use parameters_physics, only: g_exb, g_exbfac, omprimfac
+      use parameters_physics, only: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
       use vpamu_grids, only: vperp2, vpa, mu
       use vpamu_grids, only: maxwell_vpa, maxwell_mu, maxwell_fac
       use parameters_physics, only: radial_variation, prp_shear_enabled, hammett_flow_shear
@@ -43,6 +43,7 @@ contains
       use job_manage, only: njobs
       use mp, only: job, send, receive, crossdomprocs, subprocs, scope
       use parameters_numerical, only: maxwellian_normalization
+      use diagnostics_RH_inertia_fluxes, only: RH_U_parallel_fac
 
       implicit none
 
@@ -96,6 +97,29 @@ contains
                                       * dydalpha * drhodpsi &
                                       * (geo_surf%qinp_psi0 / geo_surf%rhoc_psi0) &
                                       * (btor(iz) * rmajor(iz) / bmag(ia, iz)) * (spec(is)%mass / spec(is)%temp)
+            ! Include Pfirsch-Schlüter contribution (2*q*cos(theta)*vE)
+            if (omprimfac_PS > epsilon(0.)) then
+
+               prl_shear(ia, iz, ivmu) = prl_shear(ia, iz, ivmu) &
+                                       + omprimfac_PS * g_exb * code_dt  * vpa(iv) * spec(is)%stm_psi0 &
+                                         * dydalpha * drhodpsi &
+                                         * 2*geo_surf%qinp_psi0 * cos(zed(iz)) &
+                                         * (spec(is)%mass / spec(is)%temp)
+            end if
+
+
+            ! Include Rosenbluth-Hinton contribution (assuming <H_s>_tau = 0)
+            if (omprimfac_RH > epsilon(0.)) then
+
+               prl_shear(ia, iz, ivmu) = prl_shear(ia, iz, ivmu) &
+                                       + omprimfac_RH * g_exb * code_dt  &
+                                         * dydalpha * drhodpsi &
+                                         * RH_U_parallel_fac(iz,1,ivmu) &
+                                         * (spec(is)%z / spec(is)%temp)
+            end if
+
+
+
          end do
          if (.not. maxwellian_normalization) then
             do iz = -nzgrid, nzgrid

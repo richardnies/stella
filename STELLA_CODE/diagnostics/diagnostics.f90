@@ -145,6 +145,7 @@ contains
       use diagnostics_potential, only: init_diagnostics_potential 
       use diagnostics_RH_inertia_fluxes, only: init_diagnostics_RH_inertia_fluxes
       use parameters_diagnostics, only: write_RH_inertia_fluxes
+      use parameters_physics, only: omprimfac_RH
       use mp, only: broadcast, proc0
 
       implicit none
@@ -186,7 +187,7 @@ contains
       call broadcast(nout)
 
       ! Initialise RH inertia_fluxes diagnostics (including first write to netcdf)
-      if (write_RH_inertia_fluxes) call init_diagnostics_RH_inertia_fluxes()
+      if (write_RH_inertia_fluxes .or. abs(omprimfac_RH) > epsilon(0.)) call init_diagnostics_RH_inertia_fluxes()
 
    end subroutine init_diagnostics
 
@@ -206,6 +207,7 @@ contains
       use diagnostics_potential, only: finish_diagnostics_potential
       use diagnostics_RH_inertia_fluxes, only: finish_diagnostics_RH_inertia_fluxes
       use parameters_diagnostics, only: write_RH_inertia_fluxes
+      use parameters_physics, only: omprimfac_RH
       use parameters_diagnostics, only: save_for_restart 
 
       implicit none
@@ -226,7 +228,7 @@ contains
       call finish_diagnostics_omega    
       call finish_diagnostics_fluxes    
       call finish_diagnostics_potential   
-      if (write_RH_inertia_fluxes) call finish_diagnostics_RH_inertia_fluxes
+      if (write_RH_inertia_fluxes .or. abs(omprimfac_RH) > epsilon(0.)) call finish_diagnostics_RH_inertia_fluxes
 
       nout = 1
       diagnostics_initialized = .false.

@@ -297,6 +297,13 @@ contains
       !> solve the field equations; e.g., sum_s (Z_s^2 n_s / T_s)*(1-Gamma0_s)
       if (debug) write (6, *) 'stella::init_stella::init_fields'
       call init_fields
+
+      !> read diagnostics_knob namelist from the input file,
+      !> open ascii output files and initialise the neetcdf file with extension .out.nc
+      !> RN: Calling this early to have access to Rosenbluth-Hinton (RH) quantities
+      if (debug) write (6, *) 'stella::init_stella::init_diagnostics'
+      call init_diagnostics(restarted, tstart, git_commit, git_date)
+
       !> initialise the distribution function in the kxkyz_lo and store in gvmu
       if (debug) write (6, *) "stella::init_stella::ginit"
       call ginit(restarted, istep0)
@@ -315,6 +322,7 @@ contains
       !> set the internal time step size variable code_dt from the input variable delt
       if (debug) write (6, *) "stella::init_stella::init_delt"
       call init_delt(delt, delt_max, delt_min)
+
       !> allocate and calculate arrays needed for the mirror, parallel streaming,
       !> magnetic drifts, gradient drive, etc. terms during time advance
       if (debug) write (6, *) 'stella::init_stella::init_time_advance'
@@ -357,10 +365,6 @@ contains
       !> rescale to phiinit if just beginning a new run
       if (.not. restarted .and. scale_to_phiinit) call rescale_fields(phiinit)
 
-      !> read diagnostics_knob namelist from the input file,
-      !> open ascii output files and initialise the neetcdf file with extension .out.nc
-      if (debug) write (6, *) 'stella::init_stella::init_diagnostics'
-      call init_diagnostics(restarted, tstart, git_commit, git_date)
       !> initialise the code_time
       if (debug) write (6, *) 'stella::init_stella::init_tstart'
       call init_tstart(tstart)

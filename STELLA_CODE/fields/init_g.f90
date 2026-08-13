@@ -25,7 +25,7 @@ module init_g
    real :: den0, upar0, tpar0, tperp0
    real :: den1, upar1, tpar1, tperp1
    real :: den2, upar2, tpar2, tperp2
-   real :: tstart, scale, kxmax, kxmin
+   real :: tstart, scale, kxmax, kxmin, scale_zonal, scale_kmin, scale_kmax, kfilter_zonal
    logical :: chop_side, left, scale_to_phiinit, oddparity
    character(300), public :: restart_file
    character(len=150) :: restart_dir
@@ -96,6 +96,10 @@ contains
       call broadcast(read_many)
       call broadcast(scale_to_phiinit)
       call broadcast(scale)
+      call broadcast(scale_zonal)
+      call broadcast(scale_kmin)
+      call broadcast(scale_kmax)
+      call broadcast(kfilter_zonal)
       call broadcast(oddparity)
 
       call init_save(restart_file)
@@ -167,11 +171,16 @@ contains
          den1, upar1, tpar1, tperp1, &
          den2, upar2, tpar2, tperp2, &
          kxmax, kxmin, scale_to_phiinit, &
+         scale_zonal, scale_kmin, scale_kmax, kfilter_zonal, &
          oddparity
       integer :: ierr, in_file
 
       tstart = 0. ! Used for restarted simulations
-      scale = 1.0 ! Used for restarted simulations
+      scale = 1.0 ! Only applies to nonzonal modes, backwards-INcompatible with < 8th Nov 23
+      scale_zonal = 1.0
+      scale_kmin = -1
+      scale_kmax = 1e5
+      kfilter_zonal = 1e5
       ginit_option = "default" ! Select the <ginit_options> 
       width0 = -3.5 ! Used for <ginit_options> = {default, kpar}
       refac = 1. ! Used for <ginit_options> = {kpar}
@@ -223,13 +232,14 @@ contains
       use arrays_dist_fn, only: gvmu
       use stella_layouts, only: kxkyz_lo, iz_idx, ikx_idx, iky_idx, is_idx
       use ran, only: ranf
+      use parameters_physics, only: triangular_ZF, triangular_ZF_g_exb
 
       implicit none
 
       complex, dimension(naky, nakx, -nzgrid:nzgrid) :: phi
       logical :: right
       integer :: ikxkyz
-      integer :: iz, iky, ikx, is, ia
+      integer :: iz, iky, ikx, is, ia, ivmu
 
       right = .not. left
 
@@ -258,6 +268,19 @@ contains
       end if
 
       if (zonal_mode(1)) then
+
+         if (triangular_ZF) then
+
+            !Setup lowest kx of zonal flow profile
+            phi(1, 2, :) = zi*0.5*triangular_ZF_g_exb
+
+            ! Triangular v_ZF, adjust k > kmin modes accordingly
+            do ikx = 3, nakx / 2 + 1
+               phi(1, ikx, :) = phi(1, 2, :) / (akx(ikx)/akx(2)) * (1 - (-1)**(ikx-1))/2.0
+               !phi(1, ikx, :) = phi(1, 2, :) / (akx(ikx)/akx(2))**2 * (1 - (-1)**(ikx-1))/2.0
+            end do
+         end if
+
          ! zero out kx = ky = 0 mode
          if (abs(akx(1)) < epsilon(0.0)) then
             phi(1, 1, :) = 0.0
@@ -414,7 +437,7 @@ contains
       use mp, only: proc0, broadcast, max_allreduce
       use mp, only: scope, crossdomprocs, subprocs
       use file_utils, only: runtype_option_switch, runtype_multibox
-      use parameters_physics, only: nonlinear 
+      use parameters_physics, only: nonlinear, triangular_ZF
       use ran
 
       implicit none
@@ -424,10 +447,11 @@ contains
       integer :: ikxkyz, iz, it, iky, ikx, is, ie, iseg, ia
       integer :: itmod
 
-      if ((naky == 1 .and. nakx == 1) .or. (.not. nonlinear)) then
+      if ((naky == 1 .and. nakx == 1) .or. (.not. nonlinear) .or. (triangular_ZF)) then
          if (proc0) then
             write (*, *) 'Noise initialization option is not suited for single mode simulations,'
-            write (*, *) 'or linear simulations, using default initialization option instead.'
+            write (*, *) 'or linear simulations, or triangular ZF initialisation,'
+            write (*, *) 'using default initialization option instead.'
             write (*, *)
          end if
          call ginit_default
@@ -622,6 +646,7 @@ contains
       use stella_layouts, only: iky_idx, ikx_idx, iz_idx, is_idx
       use vpamu_grids, only: maxwell_vpa, maxwell_mu, maxwell_fac
       use vpamu_grids, only: nvpa, nmu
+      use vpamu_grids, only: vpa, vperp2
       use grids_kxky, only: akx
 
       implicit none
@@ -642,7 +667,12 @@ contains
          is = is_idx(kxkyz_lo, ikxkyz)
 
          if (abs(akx(ikx)) < kxmax .and. abs(akx(ikx)) > kxmin) then
-            gvmu(:, :, ikxkyz) = spec(is)%z * 0.5 * phiinit * kperp2(iky, ikx, ia, iz) &
+!            gvmu(:, :, ikxkyz) = spec(is)%z * 0.5 * phiinit * kperp2(iky, ikx, ia, iz) &
+
+            gvmu(:, :, ikxkyz) = (spec(is)%z * 0.5 * phiinit * kperp2(iky, ikx, ia, iz) &
+                                   + 2.0 * spread(vpa,2,nmu) * upar0 &
+                                   + (spread(vpa,2,nmu)**2 - 0.5) * tpar0 &
+                                   + (spread(vperp2(ia, iz,:),1,nvpa) - 1.) * tperp0 ) &
                                  * spread(maxwell_vpa(:, is), 2, nmu) * spread(maxwell_mu(ia, iz, :, is), 1, nvpa) * maxwell_fac(is)
          end if
       end do
@@ -695,7 +725,7 @@ contains
 
       ! should really check if profile_variation=T here but need
       ! to move profile_variation to module that is accessible here
-      call stella_restore(gvmu, scale, istatus)
+      call stella_restore(gvmu, scale, scale_zonal, scale_kmin, scale_kmax, kfilter_zonal, istatus)
 
       if (istatus /= 0) then
          ierr = error_unit()

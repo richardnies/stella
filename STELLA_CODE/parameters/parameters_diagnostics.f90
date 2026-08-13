@@ -41,6 +41,7 @@ module parameters_diagnostics
    public :: write_g2_vs_zmus 
    public :: write_g2_vs_kxkyzs 
    public :: write_g2_vs_zvpamus 
+   public :: write_g2_vs_kxvpamus 
    public :: write_distribution_g
    public :: write_distribution_h
    public :: write_distribution_f
@@ -88,6 +89,7 @@ module parameters_diagnostics
    logical :: write_g2_vs_zmus 
    logical :: write_g2_vs_kxkyzs 
    logical :: write_g2_vs_zvpamus 
+   logical :: write_g2_vs_kxvpamus 
    logical :: write_distribution_g
    logical :: write_distribution_h
    logical :: write_distribution_f
@@ -182,6 +184,7 @@ contains
          write_g2_vs_zmus = .false.
          write_g2_vs_kxkyzs = .false.
          write_g2_vs_zvpamus = .false.
+         write_g2_vs_kxvpamus = .false.
          write_distribution_g = .true.
          write_distribution_h = .false.
          write_distribution_f = .false. 
@@ -276,8 +279,8 @@ contains
          namelist /stella_diagnostics_knobs/ nwrite, navg, nsave, autostop, save_for_restart, flux_norm, nc_mult, &
             write_phi2_vs_time, write_apar2_vs_time, write_bpar2_vs_time, write_fluxes_vs_time, &
             write_phi_vs_kxkyz, write_apar_vs_kxkyz, write_bpar_vs_kxkyz, &
-            write_g2_vs_vpamus, write_g2_vs_zvpas, write_g2_vs_zmus, &
-            write_g2_vs_kxkyzs, write_g2_vs_zvpamus, write_distribution_g, write_distribution_h, write_distribution_f, &
+            write_g2_vs_vpamus, write_g2_vs_zvpas, write_g2_vs_zmus, write_g2_vs_kxkyzs, write_g2_vs_zvpamus, &
+            write_g2_vs_kxvpamus, write_distribution_g, write_distribution_h, write_distribution_f, &
             write_phi2_vs_kxky, write_apar2_vs_kxky, write_bpar2_vs_kxky, &
             write_omega_vs_kxky, write_omega_avg_vs_kxky, write_moments, write_RH_inertia_fluxes, write_radial_fluxes, &
             write_radial_moments, write_fluxes_kxkyz, write_fluxes_kxky, write_all, flux_norm, nc_mult, &
@@ -326,6 +329,7 @@ contains
             write_g2_vs_zmus = .true.
             write_g2_vs_kxkyzs = .true.
             write_g2_vs_zvpamus = .true.
+            write_g2_vs_kxvpamus = .true.
             write_distribution_g = .true.
             write_distribution_h = .true.
             write_distribution_f = .true.
@@ -390,6 +394,7 @@ contains
          call broadcast(write_g2_vs_zmus)
          call broadcast(write_g2_vs_kxkyzs)
          call broadcast(write_g2_vs_zvpamus)
+         call broadcast(write_g2_vs_kxvpamus)
          call broadcast(write_distribution_g)
          call broadcast(write_distribution_f)
          call broadcast(write_distribution_h)
