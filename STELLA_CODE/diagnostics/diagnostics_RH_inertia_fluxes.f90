@@ -650,8 +650,12 @@ contains
          RH_fluxes_coll = RH_fluxes_coll_tmp(1,:,:,:,:)
 
          ! Note : extra factor of -1/(1j*kx) to match definition of nonlinear fluxes
-         RH_fluxes_coll(1, :,:,:) = 0.0
-         RH_fluxes_coll(2:,:,:,:) = -RH_fluxes_coll(2:,:,:,:)/(zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
+         if (abs(akx(1)) < epsilon(0.)) then
+             RH_fluxes_coll(1, :,:,:) = 0.0
+             RH_fluxes_coll(2:,:,:,:) = -RH_fluxes_coll(2:,:,:,:)/(zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
+         else
+             RH_fluxes_coll(1:,:,:,:) = -RH_fluxes_coll(1:,:,:,:)/(zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
+         end if
 
          deallocate(RH_fluxes_coll_tmp)
 
