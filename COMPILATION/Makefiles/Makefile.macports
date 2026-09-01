@@ -51,5 +51,7 @@ endif
 
 FC=gfortran
 CC=gcc
-MPIFC=openmpif90
-MPICC=openmpicc
+MPIFC=mpif90
+MPICC=mpicc
+#MPIFC=openmpif90
+#MPICC=openmpicc
