@@ -1204,6 +1204,7 @@ contains
       use dissipation, only: include_collisions, advance_collisions_explicit, collisions_implicit
       use sources, only: source_option_switch, source_option_krook
       use sources, only: add_krook_operator
+      use tertiary_sponge, only: add_tertiary_sponge
       use parallel_streaming, only: advance_parallel_streaming_explicit
       use fields, only: fields_updated, advance_fields
       use fields_radial_variation, only: get_radial_correction
@@ -1350,6 +1351,11 @@ contains
          if (radial_variation) call advance_radial_variation(pdf, rhs)
 
          if (source_option_switch == source_option_krook) call add_krook_operator(pdf, rhs)
+
+         !> x-dependent Krook drag that absorbs the mode away from the zonal-flow
+         !> extremum at the centre of the box, so that a tertiary eigenmode can
+         !> decay at large |x| in a periodic box (no-op unless requested)
+         call add_tertiary_sponge(pdf, rhs)
 
          if (include_multibox_krook) call add_multibox_krook(pdf, rhs)
 

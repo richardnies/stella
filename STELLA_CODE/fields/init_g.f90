@@ -437,7 +437,7 @@ contains
       use mp, only: proc0, broadcast, max_allreduce
       use mp, only: scope, crossdomprocs, subprocs
       use file_utils, only: runtype_option_switch, runtype_multibox
-      use parameters_physics, only: nonlinear, triangular_ZF
+      use parameters_physics, only: nonlinear
       use ran
 
       implicit none
@@ -447,10 +447,16 @@ contains
       integer :: ikxkyz, iz, it, iky, ikx, is, ie, iseg, ia
       integer :: itmod
 
-      if ((naky == 1 .and. nakx == 1) .or. (.not. nonlinear) .or. (triangular_ZF)) then
+      !> RN: <triangular_ZF>/<cos_ZF> used to force the fallback to ginit_default here,
+      !> but dist_fn::init_gxyz overwrites the whole zonal component of g with the
+      !> prescribed profile after ginit has run, so noise cannot corrupt the zonal
+      !> background any more. Noise is the useful seed for a tertiary run: it is broad
+      !> in x, whereas ginit_default is nearly kx-independent and therefore piles the
+      !> initial non-zonal perturbation up at x = 0, i.e. inside the sponge region.
+      if ((naky == 1 .and. nakx == 1) .or. (.not. nonlinear)) then
          if (proc0) then
             write (*, *) 'Noise initialization option is not suited for single mode simulations,'
-            write (*, *) 'or linear simulations, or triangular ZF initialisation,'
+            write (*, *) 'or linear simulations,'
             write (*, *) 'using default initialization option instead.'
             write (*, *)
          end if
