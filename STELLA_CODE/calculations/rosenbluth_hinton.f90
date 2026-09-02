@@ -337,6 +337,7 @@ contains
       use stella_time, only: code_dt
 
       ! Import temp arrays g1, g2 with dimensions (nky, nkx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
+      use arrays_dist_fn, only: gvmu
       use arrays_dist_fn, only: integrand_even   => g0
       use arrays_dist_fn, only: integrand_odd    => g1
 
@@ -358,6 +359,10 @@ contains
 
       ! The RH collisional flux is returned with dimensions (kx, z, tube, s)
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_coll_tmp
+
+      ! Copies shielding the simulation state from the collision time-advance
+      complex, dimension(:, :, :, :), allocatable :: phi_copy, apar_copy, bpar_copy
+      complex, dimension(:, :, :), allocatable :: gvmu_saved
       complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_coll
 
       ! Local variables
@@ -490,11 +495,28 @@ contains
          !!!!!!!!!!!!!!!!!!!!!!!!!
          allocate (RH_fluxes_coll_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_fluxes_coll_tmp = 0.
 
-         ! Evaluate dt * collision operator (stored in integrand_even)
+         !> Evaluate dt * collision operator (stored in integrand_even).
+         !>
+         !> <advance_collisions_implicit> is a time-advance routine, not a
+         !> side-effect-free evaluation of C[g]: it declares phi, apar and bpar
+         !> intent(in out) and updates them as part of the implicit solve, and it
+         !> overwrites the module-level <gvmu> through the scatter/gather to the
+         !> kxkyz layout.  Calling it here with the live fields let a diagnostic
+         !> corrupt the simulation state.  Electrostatically the damage was
+         !> survivable, but with apar evolving it produced NaNs within ten steps.
+         !> So hand it copies and put <gvmu> back afterwards.
          if (collisions_implicit) then
+            allocate (phi_copy, source=phi)
+            allocate (apar_copy, source=apar)
+            allocate (bpar_copy, source=bpar)
+            allocate (gvmu_saved, source=gvmu)
+
             integrand_even = g
-            call advance_collisions_implicit(.false., phi, apar, bpar, integrand_even)
+            call advance_collisions_implicit(.false., phi_copy, apar_copy, bpar_copy, integrand_even)
             integrand_even = integrand_even - g
+
+            gvmu = gvmu_saved
+            deallocate (phi_copy, apar_copy, bpar_copy, gvmu_saved)
          else
             integrand_even = 0.
             call advance_collisions_explicit(g, phi, bpar, integrand_even)

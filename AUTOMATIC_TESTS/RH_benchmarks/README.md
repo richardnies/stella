@@ -44,8 +44,8 @@ Cases
 | `rh_linear_collisional.in`     | linear, collisional damping of one zonal mode; the only source is `RH_fluxes_collisional` | whole run | 8.6e-3 |
 | `rh_nl_adiabatic_electrons.in` | nonlinear, modified adiabatic electrons (flux-surface-average term kept) | t = 15..27 | 6.5e-3 |
 | `rh_nl_adiabatic_ions.in`      | nonlinear, unmodified adiabatic electrons (plain Boltzmann) | t = 15..27 | 3.9e-3 |
-| `rh_nl_kinetic.in`             | nonlinear, kinetic ions and kinetic electrons | t = 10..20, kx <= 1.1 | 5.9e-3 |
-| `rh_nl_electromagnetic.in`     | nonlinear electromagnetic, apar and bpar channels | -- | skipped, deck unstable |
+| `rh_nl_kinetic.in`             | nonlinear, kinetic ions and kinetic electrons | t = 10..20, kx <= 1.1 | 4.0e-3 |
+| `rh_nl_electromagnetic.in`     | nonlinear electromagnetic, apar and bpar channels | t = 6..16, kx <= 1.1 | 5.9e-2 |
 
 Two things decide whether a nonlinear case is meaningful, and both were learned the
 hard way:
@@ -97,13 +97,13 @@ Tolerances are 5%, set with that floor in mind.
 
 Known gaps
 ----------
-- `rh_nl_electromagnetic.in` goes NaN from the second step at beta = 0.004, under
-  both implicit and explicit streaming/mirror and with delt cut to 5e-3.  The
-  deck needs stabilising before the budget can be assessed at all.  Worth noting
-  when it is: stella's own `advance_ExB_nonlinearity` converts g to h only when
-  `include_apar .or. include_bpar` (time_advance.f90), because electrostatically
-  the correction cancels out of the flux -- so the electromagnetic case is
-  exactly where the g/h distinction in eq (23) starts to matter.
+- stella goes NaN when `include_bpar` and `include_collisions` are both on in a
+  nonlinear run.  The fields decay rather than blow up and then NaN abruptly.
+  This reproduces with the RH diagnostics switched off and on the branch point,
+  so it is not from this work.  `rh_nl_electromagnetic.in` therefore runs
+  collisionless; nothing is lost, since the nonlinear cases assert the nonlinear
+  channel and the collisional channel is verified on its own by the linear
+  benchmark.
 
 - The unexplained ~7e-3 floor described above.
 
