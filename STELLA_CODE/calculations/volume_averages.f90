@@ -12,7 +12,6 @@ module volume_averages
    private
 
    interface fieldline_average
-      module procedure fieldline_average_real_1d
       module procedure fieldline_average_real
       module procedure fieldline_average_complex
    end interface
@@ -94,29 +93,6 @@ contains
    !==============================================
    !============ FIELD LINE AVERAGE ==============
    !==============================================
-   subroutine fieldline_average_real_1d(unavg, avg)
-
-      use zgrid, only: nzgrid, ntubes
-      use geometry, only: dl_over_b
-      use species, only: nspec
-
-      implicit none
-
-      real, dimension(-nzgrid:, :), intent(in) :: unavg
-      real, intent(out) :: avg
-
-      integer :: it, ia
-
-      ia = 1
-
-      avg = 0.0
-      do it = 1, ntubes
-         avg = avg + sum( dl_over_b(ia, :) * unavg(:, it))
-      end do
-      avg = avg / real(ntubes)
-
-   end subroutine fieldline_average_real_1d
-
    subroutine fieldline_average_real(unavg, avg)
 
       use zgrid, only: nzgrid, ntubes

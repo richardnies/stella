@@ -38,8 +38,9 @@ module rosenbluth_hinton
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
 
-   real, dimension(:,:,:), allocatable :: RH_U_parallel_fac
-   ! (-nzgrid:nzgrid, ntubes, -vmu-layout-)
+   real, dimension(:,:), allocatable :: RH_U_parallel_fac
+   ! (-nzgrid:nzgrid, -vmu-layout-)
+   ! No tube index: the construction below depends only on (iz, ivmu).
 
    complex, dimension(:,:,:,:), allocatable :: RH_inertia
    ! (nakx, -nzgrid:nzgrid, ntubes, nspec)
@@ -51,6 +52,13 @@ module rosenbluth_hinton
 
    ! Debugging
    logical :: debug = .false.
+
+   !> Surrogate for kx -> 0 used when evaluating RH_U_parallel_fac.  The
+   !> response is expanded about kx = 0 and divided by kx, so kxsmall must be
+   !> small enough that the O(kxsmall^2) error is negligible, yet large enough
+   !> that cancellation in (1 - <...>)/kxsmall stays well inside double
+   !> precision.  1e-8 sits near the sqrt(epsilon) sweet spot for both.
+   real, parameter :: kxsmall = 1.e-8
 
    ! Has this module been initialised?
    logical :: rosenbluth_hinton_initialized = .false.
@@ -67,7 +75,9 @@ contains
    !============================================================================
    subroutine init_rosenbluth_hinton()
 
-      use mp, only: proc0
+      use mp, only: proc0, mp_abort
+      use geometry, only: geo_option_switch, geo_option_vmec
+      use parameters_physics, only: full_flux_surface, radial_variation
 
       ! Dimensions
       use parameters_kxky_grids, only: nakx
@@ -83,17 +93,12 @@ contains
 
       implicit none
 
-      real :: energyval, muval
-      complex :: Q_fac
-      real :: transit_int_tau_b_pls, transit_int_tau_b_min
-      complex :: transit_int_eiQJ0_pls, transit_int_eiQJ0_min
+      real :: energyval, muval, bmag_max
       complex :: integrand_tmp_pls, integrand_tmp_min
-      complex :: tmp
-      real :: kxsmall
+      logical :: trapped
 
       integer :: ivmu, iv, imu, is, ia, iz, it, ikx
 
-      kxsmall = 1.d-8
       ia = 1
 
       !> The RH response functions are needed when they are diagnosed, when the
@@ -101,6 +106,19 @@ contains
       !> zonal profile is built from the RH closure.  Building them costs an
       !> O(nvmu * nz^2 * nakx) transit-average loop, so skip it otherwise.
       if (.not. rosenbluth_hinton_needed()) return
+
+      !> eval_Q_fac uses the axisymmetric closed form of the drift-orbit phase,
+      !> which is built from <btor> and <Rmajor>.  Those are not defined under
+      !> VMEC (geometry.f90 sets them to -1000.), so an RH run in stellarator
+      !> geometry would silently produce nonsense.  Refuse instead.  The same
+      !> applies to the configurations the transit average has never handled.
+      if (geo_option_switch == geo_option_vmec) call mp_abort &
+         ('Rosenbluth-Hinton diagnostics are not implemented for VMEC geometry &
+          &(btor and Rmajor are undefined there).  Aborting.')
+      if (full_flux_surface) call mp_abort &
+         ('Rosenbluth-Hinton diagnostics are not implemented for full_flux_surface.  Aborting.')
+      if (radial_variation) call mp_abort &
+         ('Rosenbluth-Hinton diagnostics are not implemented for radial_variation.  Aborting.')
 
       ! Only initialize once
       if (rosenbluth_hinton_initialized) return
@@ -115,10 +133,15 @@ contains
       allocate (RH_integrand_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_odd  = 0.
 
       ! Allocate array for RH_U_parallel_fac
-      allocate (RH_U_parallel_fac( -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_U_parallel_fac = 0.
+      allocate (RH_U_parallel_fac( -nzgrid:nzgrid, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_U_parallel_fac = 0.
 
       ! Allocate the array for the RH_inertia
       allocate (RH_inertia(nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_inertia = 0
+
+      !> Trapped/passing separatrix.  For a single-well tokamak flux tube this is
+      !> the global maximum of B; see the TODO in eval_transit_int_integrand_RH
+      !> for the multiple-well (stellarator) generalisation.
+      bmag_max = maxval(bmag(ia,:))
 
       ! Evaluate the transit averages
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
@@ -132,59 +155,31 @@ contains
             energyval = vpa(iv)**2 + vperp2(ia,iz,imu)
             muval     = mu(imu)
 
+            ! Is this particle trapped in the well?
+            trapped = energyval <= 2*muval*bmag_max
+
             do it = 1, ntubes
+
                do ikx = 1, nakx
 
-                  ! Evaluate transit averages for vpa and -vpa
-                  call eval_transit_ints(energyval, muval, sign(1., vpa(iv)), akx(ikx), is, transit_int_eiQJ0_pls, transit_int_tau_b_pls)
-                  call eval_transit_ints(energyval, muval, sign(1.,-vpa(iv)), akx(ikx), is, transit_int_eiQJ0_min, transit_int_tau_b_min)
-
-                  ! For trapped particles, the result is the average of +vpa and -vpa transit averages
-                  ! => transit_int_eiQJ0_{pls,min} is even in vpa for trapped particles
-                  if (energyval <= 2*muval*maxval(bmag(ia,:))) then
-                     tmp = 0.5*(transit_int_eiQJ0_pls + transit_int_eiQJ0_min)
-                     transit_int_eiQJ0_pls = tmp
-                     transit_int_eiQJ0_min = tmp
-                  end if
-
-                  ! Get Q factor
-                  call eval_Q_fac(vpa(iv), akx(ikx), iz, is, Q_fac)
-
-                  ! Evaluate integrands in vpa-mu integral
-                  integrand_tmp_pls = transit_int_eiQJ0_pls/transit_int_tau_b_pls * exp( Q_fac)
-                  integrand_tmp_min = transit_int_eiQJ0_min/transit_int_tau_b_pls * exp(-Q_fac)
+                  call get_RH_transit_integrands(energyval, muval, vpa(iv), akx(ikx), iz, is, trapped, &
+                                                 integrand_tmp_pls, integrand_tmp_min)
 
                   ! Split into contributions that are even and odd in vpa
                   RH_integrand_even(ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls+integrand_tmp_min)
                   RH_integrand_odd( ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls-integrand_tmp_min)
 
+               end do !ikx
 
-               ! Evaluate RH_U_parallel_fac (same as above but tiny kx!)
+               !> RH_U_parallel_fac is the same construction evaluated at a tiny
+               !> kx, so it does not depend on <ikx> and is evaluated once per
+               !> (iz, it, ivmu) rather than nakx times.
+               call get_RH_transit_integrands(energyval, muval, vpa(iv), kxsmall, iz, is, trapped, &
+                                              integrand_tmp_pls, integrand_tmp_min)
 
-               ! Evaluate transit averages for vpa and -vpa
-               call eval_transit_ints(energyval, muval, sign(1., vpa(iv)), kxsmall, is, transit_int_eiQJ0_pls, transit_int_tau_b_pls)
-               call eval_transit_ints(energyval, muval, sign(1.,-vpa(iv)), kxsmall, is, transit_int_eiQJ0_min, transit_int_tau_b_min)
-
-               ! Get Q factor
-               call eval_Q_fac(vpa(iv), kxsmall, iz, is, Q_fac)
-
-               ! For trapped particles, the result is the average of +vpa and -vpa transit averages
-               ! Note: it follows that transit_int_eiQJ0_{pls,min} should be even in vpa
-               if (energyval <= 2*muval*maxval(bmag(ia,:))) then
-                  tmp = 0.5*(transit_int_eiQJ0_pls + transit_int_eiQJ0_min)
-                  transit_int_eiQJ0_pls = tmp
-                  transit_int_eiQJ0_min = tmp
-               end if
-
-               ! Evaluate integrands in vpa-mu integral
-               integrand_tmp_pls = transit_int_eiQJ0_pls/transit_int_tau_b_pls * exp( Q_fac)
-               integrand_tmp_min = transit_int_eiQJ0_min/transit_int_tau_b_pls * exp(-Q_fac)
-
-               ! RH_U_parallel_fac
-               RH_U_parallel_fac(iz,it,ivmu) = real( (1 - 0.5*(integrand_tmp_pls-integrand_tmp_min))/(zi*kxsmall) &
+               RH_U_parallel_fac(iz,ivmu) = real( (1 - 0.5*(integrand_tmp_pls-integrand_tmp_min))/(zi*kxsmall) &
                                                * spec(is)%z/spec(is)%mass )
 
-               end do !ikx
             end do !it
          end do !iz
       end do !ivmu
@@ -592,6 +587,64 @@ contains
 
    !==============================================
    !============== BOUNCE AVERAGES ===============
+   !============================================================================
+   !=============== TRANSIT-AVERAGED RESPONSE AT ONE (kx, z, v) ================
+   !============================================================================
+   !> Evaluate <J0 exp(-iQ)>_tau / <1>_tau * exp(+/-iQ), the transit-averaged
+   !> response entering the RH integrands, for both signs of vpa.
+   !>
+   !> The bounce-time integrand is 1/|vpa|, which does not depend on the sign of
+   !> vpa, so the two calls to eval_transit_ints return the same bounce time and
+   !> only one is kept.
+   subroutine get_RH_transit_integrands(energyval, muval, vpaval, akxval, iz, is, trapped, &
+                                        integrand_pls, integrand_min)
+
+      use species, only: spec
+
+      implicit none
+
+      real,    intent(in)  :: energyval, muval, vpaval, akxval
+      integer, intent(in)  :: iz, is
+      logical, intent(in)  :: trapped
+      complex, intent(out) :: integrand_pls, integrand_min
+
+      real    :: transit_int_tau_b
+      complex :: transit_int_eiQJ0_pls, transit_int_eiQJ0_min
+      complex :: Q_fac, tmp
+
+      ! Evaluate transit averages for vpa and -vpa
+      call eval_transit_ints(energyval, muval, sign(1., vpaval), akxval, is, transit_int_eiQJ0_pls, transit_int_tau_b)
+      call eval_transit_ints(energyval, muval, sign(1.,-vpaval), akxval, is, transit_int_eiQJ0_min, transit_int_tau_b)
+
+      !> A particle whose integrand vanishes at every z on the grid (it is in the
+      !> forbidden region everywhere) has zero bounce time and contributes
+      !> nothing.  Guard the division rather than producing a NaN; this is
+      !> reachable when vpa = 0 at a maximum of B.
+      if (transit_int_tau_b <= 0.) then
+         integrand_pls = 0.
+         integrand_min = 0.
+         return
+      end if
+
+      !> A trapped particle traverses both signs of vpa within one bounce, so its
+      !> transit average is the mean of the +vpa and -vpa averages, and is
+      !> therefore even in vpa.
+      if (trapped) then
+         tmp = 0.5*(transit_int_eiQJ0_pls + transit_int_eiQJ0_min)
+         transit_int_eiQJ0_pls = tmp
+         transit_int_eiQJ0_min = tmp
+      end if
+
+      ! Get Q factor
+      call eval_Q_fac(vpaval, akxval, iz, is, Q_fac)
+
+      ! Evaluate integrands in the vpa-mu integral
+      integrand_pls = transit_int_eiQJ0_pls/transit_int_tau_b * exp( Q_fac)
+      integrand_min = transit_int_eiQJ0_min/transit_int_tau_b * exp(-Q_fac)
+
+   end subroutine get_RH_transit_integrands
+
+
    !==============================================
 
    ! Evaluate RH transit averages
@@ -599,7 +652,6 @@ contains
 
       use geometry, only: bmag, dl_over_b
       use zgrid, only: nzgrid
-      use constants, only: zi
 
       implicit none
 
@@ -610,8 +662,6 @@ contains
 
       complex, dimension(-nzgrid:nzgrid) :: integrand_eiQJ0
       complex, dimension(-nzgrid:nzgrid) :: integrand_tau_b
-      real    :: vpa2, vpa
-      complex :: Q_fac
       integer :: ia, iz
       ia = 1
 
@@ -665,11 +715,15 @@ contains
          else
             ! Evaluate Bessel function
             vperp2 = 2*mu*bmag(ia,iz)
+            !> Note this cannot simply reuse gyro_averages::aj0x: the transit
+            !> average is also evaluated at <kxsmall>, which is not a grid kx.
             if (q_as_x) then
                kperp2 = akx**2 * gds22(ia,iz)
             else
                kperp2 = akx**2 * gds22(ia,iz) / (geo_surf%shat**2)
             end if
+            ! gds22 can carry small negative interpolation noise; kperp2 >= 0
+            kperp2 = max(kperp2, 0.)
             aj0x = j0( sqrt(kperp2*vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia,iz) )
 
             ! Evaluate Q factor

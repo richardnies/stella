@@ -111,7 +111,7 @@ contains
       if ((.not. write_distribution_g) .and. (.not. write_distribution_h) .and. (.not. write_distribution_f)) return
       if ((.not. write_g2_vs_vpamus) .and. (.not. write_g2_vs_zvpas) .and. (.not. write_g2_vs_zmus) &
             .and. (.not. write_g2_vs_kxkyzs) .and. (.not. write_g2_vs_zvpamus)  &
-            .and. (.not. write_g2_vs_kxvpamus) .and. (.not. write_g2_vs_kxvpamus)) return 
+            .and. (.not. write_g2_vs_kxvpamus)) return 
 
       ! Start timer
       if (proc0) call time_message(.false., timer(:), 'Write distribution')

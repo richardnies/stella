@@ -98,7 +98,7 @@ contains
                                       * (geo_surf%qinp_psi0 / geo_surf%rhoc_psi0) &
                                       * (btor(iz) * rmajor(iz) / bmag(ia, iz)) * (spec(is)%mass / spec(is)%temp)
             ! Include Pfirsch-Schlüter contribution (2*q*cos(theta)*vE)
-            if (omprimfac_PS > epsilon(0.)) then
+            if (abs(omprimfac_PS) > epsilon(0.)) then
 
                prl_shear(ia, iz, ivmu) = prl_shear(ia, iz, ivmu) &
                                        + omprimfac_PS * g_exb * code_dt  * vpa(iv) * spec(is)%stm_psi0 &
@@ -109,12 +109,12 @@ contains
 
 
             ! Include Rosenbluth-Hinton contribution (assuming <H_s>_tau = 0)
-            if (omprimfac_RH > epsilon(0.)) then
+            if (abs(omprimfac_RH) > epsilon(0.)) then
 
                prl_shear(ia, iz, ivmu) = prl_shear(ia, iz, ivmu) &
                                        + omprimfac_RH * g_exb * code_dt  &
                                          * dydalpha * drhodpsi &
-                                         * RH_U_parallel_fac(iz,1,ivmu) &
+                                         * RH_U_parallel_fac(iz,ivmu) &
                                          * (spec(is)%z / spec(is)%temp)
             end if
 
