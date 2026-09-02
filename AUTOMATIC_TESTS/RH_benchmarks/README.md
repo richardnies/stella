@@ -15,6 +15,13 @@ channel written to the netCDF file,
 Both sides come from the same run, so no reference data is needed and the tests
 keep working when the physics of a case legitimately changes.
 
+P_RH splits into a nonlinear part (the phi/apar/bpar fluxes) and a collisional
+part, and `get_rh_budget` returns them separately.  The linear case is checked on
+the total, since there the collisional channel is the only source.  The nonlinear
+cases are checked on the nonlinear channel alone, by subtracting the collisional
+channel from dE_RH/dt -- the collisional channel is already verified in isolation
+by the linear benchmark, and isolating the nonlinear one tightens the check.
+
 `rh_budget.py` holds the shared evaluation.  These definitions mirror
 `stella_diagnostics/physics/rosenbluth_hinton.py` in stella_diagnostics_v2
 (`get_E_RH_t_kx` / `get_P_RH`) and the two must be kept in step.
@@ -70,8 +77,46 @@ Tolerances are 5%, set with that floor in mind.
 
 Known gaps
 ----------
-- `rh_nl_kinetic.in` does not close: the residual sits near 0.6 and is
-  insensitive to the choice of time window, so it is not a noise or windowing
-  artefact.  Something about the two-kinetic-species case is genuinely
-  inconsistent and needs investigating before a tolerance is set.
+- `rh_nl_kinetic.in` does not close, and the failure is entirely in the electron
+  species.  The budget reduces to the charge relation `dRH_phi_I/dt = -i kx F`,
+  and checking that per species over the clean growth phase gives
+
+      ions       |-i kx F| / |dRH_phi_I/dt| = 0.989    residual 1.1e-2
+      electrons  |-i kx F| / |dRH_phi_I/dt| = 4 - 6    residual 0.78 - 0.84
+
+  A linear collisionless two-species run isolates it further.  There the RH
+  fluxes are identically zero, so any change in RH_phi_I is pure
+  transit-average annihilation error:
+
+      nzed        24        48        96
+      ions      2.0e-2    4.1e-3    3.0e-4     converges
+      electrons 8.3e-3    4.3e-3    3.3e-3     plateaus
+
+  The electron error is also insensitive to velocity resolution (unchanged
+  across nvgrid 24-96 and nmu 12-24), and only halves (3.3e-3 -> 1.9e-3) with
+  the magnetic drifts switched off.  So it is a defect in the electron RH
+  response rather than a resolution or setup problem.
+
+  What makes it concrete is that the electron species is suppressed in the RH
+  inertia but not in the quantities built from the same transit average.  Field-
+  line averaged, at kx = 2.5:
+
+      RH_inertia      electrons / ions = 0.0085     correctly negligible
+      RH_phi_I        electrons / ions = 1.03
+      nonlinear flux  electrons / ions = 1.0 - 2.7
+
+  The inertia integrand carries a factor (1 - J0 <J0 exp(-iQ)>_tau), which tends
+  to zero for electrons because J0 -> 1 and Q -> 0 as the electron gyroradius and
+  drift vanish.  RH_phi_I and the fluxes are weighted by the bare
+  <J0 exp(-iQ)>_tau exp(iQ), which tends to one instead, so the electron
+  contribution to those is not suppressed at all.  Dropping the electron species
+  from the sum makes the budget close: ion-only residual 1.1e-2, against 0.64 for
+  the two summed and 0.76 for electrons alone.  Whether the electron weighting
+  should carry the same suppression is a physics decision, not a coding one.
+
+- `RH_phi_I` is integrated with weight `spec%z`, while `RH_inertia` and every RH
+  flux use `spec%dens_psi0*spec%z` (rosenbluth_hinton.f90:581 against :301, :420
+  and the rest).  Every deck here has `dens = 1.0`, so the two agree and the
+  inconsistency is invisible, but it would break the budget for any run with a
+  non-unit density.
 - The unexplained ~7e-3 floor above.

@@ -28,14 +28,20 @@
 import numpy as np
 from netCDF4 import Dataset
 
-# Every RH flux channel written by stella.  Absent variables are skipped, so the
-# same helper works for electrostatic and electromagnetic runs alike.
-RH_FLUX_VARIABLES = [
+# The RH flux channels written by stella, split by the physics that drives them.
+# Absent variables are skipped, so the same helper works for electrostatic and
+# electromagnetic runs alike.
+#
+# The two are kept apart because they are verified differently.  The collisional
+# channel is checked on its own by the linear benchmark, where it is the only
+# source; in a nonlinear run it is a known, independently verified correction,
+# and what needs testing is the nonlinear channel.
+RH_FLUX_VARIABLES_NONLINEAR = [
     'RH_fluxes_phi_even', 'RH_fluxes_phi_odd',
     'RH_fluxes_apar_even', 'RH_fluxes_apar_odd',
     'RH_fluxes_bpar_even', 'RH_fluxes_bpar_odd',
-    'RH_fluxes_collisional',
 ]
+RH_FLUX_VARIABLES_COLLISIONAL = ['RH_fluxes_collisional']
 
 
 def _complex(ncdata, name):
@@ -66,7 +72,8 @@ def _field_line_average(ncdata, name, weight):
 
 
 def get_rh_budget(netcdf_file, time_min=None, time_max=None):
-    '''Return (time, E_RH, dE_RH/dt, sum P_RH) summed over kx.
+    '''Return (time, E_RH, dE_RH/dt, P_RH, P_RH_nonlinear, P_RH_collisional), all
+    summed over kx.
 
     dE_RH/dt is a centred difference, so it is defined on the interior points;
     P_RH is returned on the same points.
@@ -90,11 +97,16 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None):
     RH_phi_I = _field_line_average(ncdata, 'RH_phi_I', weight)
     RH_inertia = _field_line_average(ncdata, 'RH_inertia', weight)
 
-    RH_fluxes = np.zeros_like(RH_phi_I)
-    for name in RH_FLUX_VARIABLES:
-        contribution = _field_line_average(ncdata, name, weight)
-        if contribution is not None:
-            RH_fluxes = RH_fluxes + contribution
+    def summed_fluxes(names):
+        total = np.zeros_like(RH_phi_I)
+        for name in names:
+            contribution = _field_line_average(ncdata, name, weight)
+            if contribution is not None:
+                total = total + contribution
+        return total
+
+    RH_fluxes_nonlinear = summed_fluxes(RH_FLUX_VARIABLES_NONLINEAR)
+    RH_fluxes_collisional = summed_fluxes(RH_FLUX_VARIABLES_COLLISIONAL)
 
     # kx = 0 carries no zonal-flow energy: 1-Gamma0 and the RH inertia both
     # vanish there, so the energy is 0/0.  Drop it.
@@ -102,7 +114,8 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None):
     kx = kx[finite_kx]
     RH_phi_I = RH_phi_I[:, finite_kx]
     RH_inertia = RH_inertia[finite_kx]
-    RH_fluxes = RH_fluxes[:, finite_kx]
+    RH_fluxes_nonlinear = RH_fluxes_nonlinear[:, finite_kx]
+    RH_fluxes_collisional = RH_fluxes_collisional[:, finite_kx]
 
     # Gamma0 = <I0(b) exp(-b)>, with b = kperp^2 rho^2 evaluated along the field line
     b = (kx[:, None] / bmag[None, :])**2 * gds22[None, :]
@@ -110,7 +123,12 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None):
 
     prefactor = (1 - Gamma0)[None, :] / np.abs(RH_inertia)[None, :]**2
     E_RH = np.abs(RH_phi_I)**2 / (2 * np.abs(RH_inertia)[None, :]**2) * (1 - Gamma0)[None, :]
-    P_RH = -np.real(1j * kx[None, :] * RH_fluxes * np.conj(RH_phi_I)) * prefactor
+
+    def power(fluxes):
+        return -np.real(1j * kx[None, :] * fluxes * np.conj(RH_phi_I)) * prefactor
+
+    P_RH_nonlinear = power(RH_fluxes_nonlinear)
+    P_RH_collisional = power(RH_fluxes_collisional)
 
     # np.gradient rather than a fixed-step difference: a nonlinear run may adapt
     # delt, so the time axis is not guaranteed to be uniformly spaced.  Drop the
@@ -118,20 +136,35 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None):
     E_RH_total = E_RH.sum(axis=1)
     dE_RH_dt = np.gradient(E_RH_total, time)
 
-    time, E_RH_total = time[1:-1], E_RH_total[1:-1]
-    dE_RH_dt, P_RH_total = dE_RH_dt[1:-1], P_RH[1:-1].sum(axis=1)
+    interior = slice(1, -1)
+    time, E_RH_total, dE_RH_dt = time[interior], E_RH_total[interior], dE_RH_dt[interior]
+    P_nonlinear = P_RH_nonlinear[interior].sum(axis=1)
+    P_collisional = P_RH_collisional[interior].sum(axis=1)
 
     window = np.ones_like(time, dtype=bool)
     if time_min is not None: window &= time >= time_min
     if time_max is not None: window &= time <= time_max
 
-    return time[window], E_RH_total[window], dE_RH_dt[window], P_RH_total[window]
+    return (time[window], E_RH_total[window], dE_RH_dt[window],
+            (P_nonlinear + P_collisional)[window],
+            P_nonlinear[window], P_collisional[window])
 
 
-def budget_residual(netcdf_file, time_min=None, time_max=None):
-    '''Relative L2 mismatch between dE_RH/dt and sum P_RH.'''
-    _, _, dE_RH_dt, P_RH = get_rh_budget(netcdf_file, time_min, time_max)
-    norm = np.linalg.norm(P_RH)
+def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total'):
+    '''Relative L2 mismatch for the whole budget or for one channel.
+
+    channel='total'      dE_RH/dt                    against P_RH
+    channel='nonlinear'  dE_RH/dt - P_collisional    against P_nonlinear
+    '''
+    _, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional = get_rh_budget(
+        netcdf_file, time_min, time_max)
+
+    if channel == 'nonlinear':
+        measured, expected = dE_RH_dt - P_collisional, P_nonlinear
+    else:
+        measured, expected = dE_RH_dt, P_RH
+
+    norm = np.linalg.norm(expected)
     if norm == 0.0:
         return np.inf
-    return np.linalg.norm(dE_RH_dt - P_RH) / norm
+    return np.linalg.norm(measured - expected) / norm

@@ -23,16 +23,23 @@
 # window in which the zonal flow is genuinely nonlinearly driven and the run is
 # still well behaved.  Use plot_rh_budget.py to inspect a run and choose one.
 #
+# Channels.  P_RH splits into a nonlinear part (the phi/apar/bpar fluxes) and a
+# collisional part.  The linear case is checked on the total, because there the
+# collisional channel is the only source and the nonlinear one is identically
+# zero.  The nonlinear cases are checked on the nonlinear channel alone, by
+# subtracting the collisional channel from dE_RH/dt: the collisional channel is
+# already verified in isolation by the linear benchmark, so re-testing it in a
+# nonlinear run adds nothing, while the nonlinear channel is what those decks
+# exist to exercise.  Isolating it also tightens the check -- the collisional
+# channel is about a quarter of the nonlinear one here, and carrying it along
+# imported its own error.
+#
 # Tolerances.  The nonlinear cases grow exponentially, so round-off differences
-# (a different MPI decomposition, say) are amplified over the ~13 e-folding times
-# of the comparison window and the residual is not reproducible to better than a
-# few times 1e-2 between runs of the same deck: repeated runs of these two decks
-# gave 1.8e-3, 5.9e-3, 3.1e-2 and 8.0e-2.  The relative L2 measure is also
-# dominated by the largest values, i.e. the end of the window.  Their tolerance
-# is therefore 15%, roughly twice the worst observed value, which still
-# discriminates sharply against a real break -- a broken budget gives O(1), as
-# rh_nl_kinetic.in does at 0.6-1.2.  The linear case is reproducible and keeps a
-# 5% tolerance.
+# (a different MPI decomposition, say) are amplified over the comparison window
+# and the residual is not bit-reproducible between runs of the same deck.  On the
+# nonlinear channel, repeated runs gave 1.9e-3, 2.5e-3, 7.8e-3, 9.0e-3, 1.1e-2
+# and 3.2e-2, so 8% leaves a factor of a few in margin while still discriminating
+# sharply: a broken budget gives O(1), as rh_nl_kinetic.in does at 0.77.
 #
 # Residual floor.  The budget does not close exactly.  Part of the mismatch is
 # first order in delt by construction: RH_fluxes_collisional is evaluated as
@@ -70,14 +77,31 @@ def stella_version(pytestconfig):
 #                              SHARED CHECK                                    #
 #-------------------------------------------------------------------------------
 def check_rh_budget(input_filename, tmp_path, stella_version, tolerance,
-                    time_min=None, time_max=None, require_decay=False, error=False):
-    '''Run <input_filename> and assert that dE_RH/dt matches sum_kx P_RH.'''
+                    time_min=None, time_max=None, require_decay=False,
+                    channel='total', error=False):
+    '''Run <input_filename> and assert that the RH energy budget closes.
+
+    channel='total'      compares dE_RH/dt with the whole of P_RH.  Right for the
+                         linear case, where the collisional channel is the only
+                         source.
+    channel='nonlinear'  subtracts the collisional channel from dE_RH/dt and
+                         compares the remainder with the nonlinear channel.  Right
+                         for the nonlinear cases: the collisional channel is
+                         already verified on its own by the linear benchmark, so
+                         what is under test here is the nonlinear one.
+    '''
 
     run_local_stella_simulation(input_filename, tmp_path, stella_version)
     local_netcdf_file = tmp_path / input_filename.replace('.in', '.out.nc')
 
-    time, E_RH, dE_RH_dt, P_RH = get_rh_budget(local_netcdf_file, time_min, time_max)
-    residual = np.linalg.norm(dE_RH_dt - P_RH) / np.linalg.norm(P_RH)
+    time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional = get_rh_budget(
+        local_netcdf_file, time_min, time_max)
+
+    if channel == 'nonlinear':
+        measured, expected, what = dE_RH_dt - P_collisional, P_nonlinear, 'nonlinear channel'
+    else:
+        measured, expected, what = dE_RH_dt, P_RH, 'total budget'
+    residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)
 
     # Guard against a vacuous pass: if the zonal flow never does anything, both
     # sides are zero and the budget is satisfied without testing anything.
@@ -91,14 +115,16 @@ def check_rh_budget(input_filename, tmp_path, stella_version, tolerance,
 
     if not (residual < tolerance):
         print(f'\nERROR: The Rosenbluth-Hinton energy budget does not close for {input_filename}.'); error = True
-        print(f'    relative L2 residual = {residual:14.6e}   (tolerance {tolerance:.1e})')
-        print(f'    {"time":>10} {"dE_RH/dt":>16} {"sum P_RH":>16} {"ratio":>10}')
+        print(f'    {what}, relative L2 residual = {residual:14.6e}   (tolerance {tolerance:.1e})')
+        print(f'    nonlinear channel peaks at {np.abs(P_nonlinear).max():.6e}, '
+              f'collisional at {np.abs(P_collisional).max():.6e}')
+        print(f'    {"time":>10} {"measured":>16} {"expected":>16} {"ratio":>10}')
         for i in range(0, len(time), max(1, len(time) // 12)):
-            ratio = dE_RH_dt[i] / P_RH[i] if P_RH[i] != 0 else np.nan
-            print(f'    {time[i]:10.3f} {dE_RH_dt[i]:16.6e} {P_RH[i]:16.6e} {ratio:10.4f}')
+            ratio = measured[i] / expected[i] if expected[i] != 0 else np.nan
+            print(f'    {time[i]:10.3f} {measured[i]:16.6e} {expected[i]:16.6e} {ratio:10.4f}')
 
     assert (not error), f'The Rosenbluth-Hinton energy budget does not close for {input_filename}.'
-    print(f'  -->  The RH energy budget closes to {residual:.2e} (relative L2) for {input_filename}.')
+    print(f'  -->  {input_filename}: {what} closes to {residual:.2e} (relative L2).')
     return residual
 
 
@@ -110,7 +136,7 @@ def test_whether_rh_budget_closes_for_linear_collisional_zonal_flow(tmp_path, st
     only source in the budget is the collisional flux.  This is the cleanest
     test of the RH diagnostic and the tightest tolerance in this file.'''
     check_rh_budget('rh_linear_collisional.in', tmp_path, stella_version,
-                    tolerance=0.05, require_decay=True)
+                    tolerance=0.05, require_decay=True, channel='total')
     return
 
 
@@ -121,7 +147,7 @@ def test_whether_rh_budget_closes_for_nonlinear_modified_adiabatic_electrons(tmp
     '''Zonal flow driven nonlinearly by an ITG mode, with the flux-surface-average
     term retained in the adiabatic electron response.'''
     check_rh_budget('rh_nl_adiabatic_electrons.in', tmp_path, stella_version,
-                    tolerance=0.15, time_min=15.0, time_max=27.0)
+                    tolerance=0.08, time_min=15.0, time_max=27.0, channel='nonlinear')
     return
 
 
@@ -129,7 +155,7 @@ def test_whether_rh_budget_closes_for_nonlinear_unmodified_adiabatic_electrons(t
     '''As above, but with a plain Boltzmann electron response (no
     flux-surface-average term), which is the opposite adiabatic closure.'''
     check_rh_budget('rh_nl_adiabatic_ions.in', tmp_path, stella_version,
-                    tolerance=0.15, time_min=15.0, time_max=27.0)
+                    tolerance=0.08, time_min=15.0, time_max=27.0, channel='nonlinear')
     return
 
 
@@ -139,13 +165,20 @@ def test_whether_rh_budget_closes_for_nonlinear_unmodified_adiabatic_electrons(t
 # Kept as decks so the work is not lost, but skipped rather than asserted
 # against a tolerance chosen to make them pass.
 
-@pytest.mark.skip(reason='Does not close: residual ~0.6, insensitive to the choice of '
-                         'time window, so not a noise or windowing artefact.  Something '
-                         'about the two-kinetic-species case is genuinely inconsistent.')
+@pytest.mark.skip(reason='The electron species does not satisfy the budget.  Splitting the '
+                         'check per species shows the ions closing at 1.1% (ratio 0.989) while '
+                         'the electron flux is 4-6x larger than d(RH_phi_I)/dt.  A linear '
+                         'collisionless two-species run, where the RH fluxes are identically '
+                         'zero so any drift in RH_phi_I is pure annihilation error, shows the '
+                         'ion error converging with parallel resolution (2.0e-2, 4.1e-3, 3.0e-4 '
+                         'for nzed = 24, 48, 96) while the electron error plateaus (8.3e-3, '
+                         '4.3e-3, 3.3e-3) and is insensitive to nvgrid (24-96) and nmu (12-24). '
+                         'So this is a defect in the electron RH response, not a resolution or '
+                         'setup problem.')
 def test_whether_rh_budget_closes_for_nonlinear_kinetic_electrons(tmp_path, stella_version):
     '''Nonlinear, kinetic ions and kinetic electrons.'''
     check_rh_budget('rh_nl_kinetic.in', tmp_path, stella_version,
-                    tolerance=0.15, time_min=15.0, time_max=27.0)
+                    tolerance=0.08, time_min=15.0, time_max=27.0, channel='nonlinear')
     return
 
 
@@ -156,5 +189,5 @@ def test_whether_rh_budget_closes_for_nonlinear_kinetic_electrons(tmp_path, stel
 def test_whether_rh_budget_closes_for_nonlinear_electromagnetic(tmp_path, stella_version):
     '''Nonlinear electromagnetic, exercising the apar and bpar RH flux channels.'''
     check_rh_budget('rh_nl_electromagnetic.in', tmp_path, stella_version,
-                    tolerance=0.15, time_min=15.0, time_max=27.0)
+                    tolerance=0.08, time_min=15.0, time_max=27.0, channel='nonlinear')
     return

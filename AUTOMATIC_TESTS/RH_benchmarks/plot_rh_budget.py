@@ -4,8 +4,9 @@
 # Produces, for each run given on the command line, a two-panel figure:
 #
 #   top    E_RH(t), the zonal-flow energy carried by the RH response
-#   bottom dE_RH/dt against sum_kx P_RH -- the budget the benchmarks assert,
-#          with the running relative residual on a twin axis
+#   bottom dE_RH/dt against sum_kx P_RH -- the budget the benchmarks assert --
+#          with the nonlinear and collisional channels shown separately and the
+#          running relative residual on a twin axis
 #
 # Usage:
 #     python plot_rh_budget.py <run.out.nc> [<run.out.nc> ...] [--out DIR]
@@ -28,7 +29,8 @@ from rh_budget import get_rh_budget
 
 
 def plot_one(netcdf_file, out_dir, time_min=None, time_max=None):
-    time, E_RH, dE_RH_dt, P_RH = get_rh_budget(netcdf_file, time_min, time_max)
+    time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional = get_rh_budget(
+        netcdf_file, time_min, time_max)
 
     residual = np.linalg.norm(dE_RH_dt - P_RH) / np.linalg.norm(P_RH)
     scale = np.maximum(np.abs(P_RH), np.abs(dE_RH_dt))
@@ -46,15 +48,19 @@ def plot_one(netcdf_file, out_dir, time_min=None, time_max=None):
 
     ax_budget.plot(time, dE_RH_dt, color='#1f4e79', lw=2.2, label=r'$dE_{\rm RH}/dt$')
     ax_budget.plot(time, P_RH, color='#d1495b', lw=1.2, ls='--', label=r'$\sum_{k_x} P_{\rm RH}$')
+    if np.any(P_nonlinear != 0):
+        ax_budget.plot(time, P_nonlinear, color='#d1495b', lw=0.9, alpha=0.55, label=r'$P_{\rm RH}$ nonlinear')
+    if np.any(P_collisional != 0):
+        ax_budget.plot(time, P_collisional, color='#8a6d1f', lw=0.9, alpha=0.75, label=r'$P_{\rm RH}$ collisional')
     # symlog: the linear case oscillates through zero, the nonlinear cases grow
     # exponentially over many decades, and this reads correctly for both.
-    finite = np.abs(np.concatenate([dE_RH_dt, P_RH]))
+    finite = np.abs(np.concatenate([dE_RH_dt, P_RH, P_nonlinear, P_collisional]))
     finite = finite[finite > 0]
     if finite.size:
         ax_budget.set_yscale('symlog', linthresh=max(finite.min(), finite.max() * 1e-6))
     ax_budget.set_xlabel(r'$t \, v_{\rm th}/a$')
     ax_budget.set_ylabel('power into the zonal flow')
-    ax_budget.legend(loc='upper left', frameon=False)
+    ax_budget.legend(loc='upper left', frameon=False, fontsize=8)
     ax_budget.grid(alpha=0.3)
 
     ax_residual = ax_budget.twinx()
