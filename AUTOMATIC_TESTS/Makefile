@@ -80,6 +80,11 @@ benchmarks: check-tests-dependencies $(PROJECT_DIR)/stella
 	@echo "Running: automated stella benchmarks"
 	@python3 -m pytest -v -rF -W ignore::DeprecationWarning $(TEST_DIR)/quick_benchmarks
 	
+# Run the Rosenbluth-Hinton energy-budget benchmarks
+rh-benchmarks: check-tests-dependencies $(PROJECT_DIR)/stella
+	@echo "Running: Rosenbluth-Hinton budget benchmarks"
+	@python3 -m pytest -v -rA -W ignore::DeprecationWarning $(TEST_DIR)/RH_benchmarks
+
 # Run the automated stella tests (the -r flag shows the full stella output and -rf shows extra info about the failed outputs)
 benchmarks-slow: check-tests-dependencies $(PROJECT_DIR)/stella
 	@echo "Running: automated stella benchmarks"

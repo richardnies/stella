@@ -1,0 +1,91 @@
+! Rosenbluth-Hinton energy budget: minimal nonlinear electromagnetic run with
+! kinetic ions and electrons (ny = 4, nx = 4), exercising the apar and bpar RH
+! flux channels alongside the electrostatic one.
+&parameters_physics
+  nonlinear = .true.
+  vnew_ref = 0.0
+  include_apar = .true.
+  include_bpar = .true.
+  beta = 0.004
+/
+&kt_grids_knobs
+  grid_option = 'box'
+/
+&kt_grids_box_parameters
+  ny = 4
+  nx = 4
+  y0 = 2.0
+  jtwist = 1
+/
+&init_g_knobs
+  ginit_option = 'noise'
+  phiinit = 0.05
+  width0 = 1.0
+/
+&species_knobs
+  nspec = 2
+/
+&species_parameters_1
+  dens = 1.0
+  fprim = 1.0
+  mass = 1.0
+  temp = 1.0
+  tprim = 3.0
+  type = 'ion'
+  z = 1.0
+/
+&species_parameters_2
+  dens = 1.0
+  fprim = 1.0
+  mass = 2.7e-4
+  temp = 1.0
+  tprim = 3.0
+  type = 'electron'
+  z = -1.0
+/
+&zgrid_parameters
+  boundary_option = 'linked'
+  nperiod = 1
+  nzed = 48
+/
+&vpamu_grids_parameters
+  nmu = 8
+  nvgrid = 24
+/
+&knobs
+  delt = 0.02
+  nstep = 250
+  print_extra_info_to_terminal = .false.
+  drifts_implicit = .true.
+/
+&stella_diagnostics_knobs
+  nsave = -1
+  nwrite = 1
+  save_for_restart = .false.
+  write_RH_inertia_fluxes = .true.
+/
+&geo_knobs
+  geo_option = 'miller'
+/
+&millergeo_parameters
+  nzed_local = 128
+  rhoc = 0.5
+  shat = 0.796
+  qinp = 1.4
+  rmaj = 2.77778
+  rgeo = 2.77778
+  shift = 0.0
+  kappa = 1.0
+  kapprim = 0.0
+  tri = 0.0
+  triprim = 0.0
+  betaprim = 0.0
+  d2qdr2 = 0.0
+  d2psidr2 = 0.0
+  betadbprim = 0.0
+/
+&dissipation
+  include_collisions = .false.
+  collision_model = 'dougherty'
+  hyper_dissipation = .false.
+/
