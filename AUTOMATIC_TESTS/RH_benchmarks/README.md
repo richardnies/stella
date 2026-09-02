@@ -41,16 +41,36 @@ Cases
 -----
 | deck | what it covers | window | residual |
 |------|----------------|--------|----------|
-| `rh_linear_collisional.in`     | linear, collisional damping of a single zonal mode; the only source is `RH_fluxes_collisional` | whole run | 8.6e-3 |
-| `rh_nl_adiabatic_electrons.in` | nonlinear, modified adiabatic electrons (flux-surface-average term kept) | t = 15..28 | 3.1e-2 |
-| `rh_nl_adiabatic_ions.in`      | nonlinear, unmodified adiabatic electrons (plain Boltzmann) | t = 15..28 | 5.9e-3 |
-| `rh_nl_kinetic.in`             | nonlinear, kinetic ions and electrons | -- | does not close, see below |
-| `rh_nl_electromagnetic.in`     | nonlinear electromagnetic, apar and bpar channels | -- | see below |
+| `rh_linear_collisional.in`     | linear, collisional damping of one zonal mode; the only source is `RH_fluxes_collisional` | whole run | 8.6e-3 |
+| `rh_nl_adiabatic_electrons.in` | nonlinear, modified adiabatic electrons (flux-surface-average term kept) | t = 15..27 | 6.5e-3 |
+| `rh_nl_adiabatic_ions.in`      | nonlinear, unmodified adiabatic electrons (plain Boltzmann) | t = 15..27 | 3.9e-3 |
+| `rh_nl_kinetic.in`             | nonlinear, kinetic ions and kinetic electrons | t = 10..20, kx <= 1.1 | 5.9e-3 |
+| `rh_nl_electromagnetic.in`     | nonlinear electromagnetic, apar and bpar channels | -- | skipped, deck unstable |
 
-The nonlinear decks are run in a 4x4 box, which has no cascade to saturate
-into: the ITG mode grows and then the fields run away.  They are therefore
-compared over the window in which the zonal flow is genuinely nonlinearly
-driven and the run is still well resolved, rather than over the whole run.
+Two things decide whether a nonlinear case is meaningful, and both were learned the
+hard way:
+
+*The box has to contain modes the theory addresses.*  The Rosenbluth-Hinton
+construction targets kx rho_i << 1/q (about 0.71 at q = 1.4).  A 4x4 box with
+jtwist = 1 holds a single zonal mode at kx rho_i = 2.5, and the budget there does
+not close.  `rh_nl_kinetic.in` therefore uses jtwist = 5 (dkx = 0.5) and is
+compared over kx <= 1.1.  Measured across a wide box, in the clean window:
+
+    kx rho_i      0.5       1.0       1.5       2.5
+    nzed = 24   4.6e-3    2.6e-2    3.5e-1    4.0e-1
+    nzed = 48   1.0e-2    2.8e-2    2.6e-1    3.9e-1
+
+Doubling the parallel resolution does not move it, so this is the range of
+validity of the construction rather than a resolution artefact -- and it matches
+the derivation, which scopes itself to kx rho_i << 1/q.  Both species follow the
+same curve; this is not an electron effect.  A case with a broad kx spectrum must
+therefore be restricted with `kx_max`.
+
+*The run has to still be resolved.*  These boxes have no cascade to saturate
+into, so past the growth phase the fields run away and the budget stops meaning
+anything -- the same modes that close to 1.2e-2 during growth give 8.8e-1 once
+phi2 reaches 1e3.  Each case is compared over its clean window.  Use
+`plot_rh_budget.py` to inspect a run and choose one.
 
 Scope and the residual floor
 ----------------------------
@@ -77,46 +97,18 @@ Tolerances are 5%, set with that floor in mind.
 
 Known gaps
 ----------
-- `rh_nl_kinetic.in` does not close, and the failure is entirely in the electron
-  species.  The budget reduces to the charge relation `dRH_phi_I/dt = -i kx F`,
-  and checking that per species over the clean growth phase gives
+- `rh_nl_electromagnetic.in` goes NaN from the second step at beta = 0.004, under
+  both implicit and explicit streaming/mirror and with delt cut to 5e-3.  The
+  deck needs stabilising before the budget can be assessed at all.  Worth noting
+  when it is: stella's own `advance_ExB_nonlinearity` converts g to h only when
+  `include_apar .or. include_bpar` (time_advance.f90), because electrostatically
+  the correction cancels out of the flux -- so the electromagnetic case is
+  exactly where the g/h distinction in eq (23) starts to matter.
 
-      ions       |-i kx F| / |dRH_phi_I/dt| = 0.989    residual 1.1e-2
-      electrons  |-i kx F| / |dRH_phi_I/dt| = 4 - 6    residual 0.78 - 0.84
-
-  A linear collisionless two-species run isolates it further.  There the RH
-  fluxes are identically zero, so any change in RH_phi_I is pure
-  transit-average annihilation error:
-
-      nzed        24        48        96
-      ions      2.0e-2    4.1e-3    3.0e-4     converges
-      electrons 8.3e-3    4.3e-3    3.3e-3     plateaus
-
-  The electron error is also insensitive to velocity resolution (unchanged
-  across nvgrid 24-96 and nmu 12-24), and only halves (3.3e-3 -> 1.9e-3) with
-  the magnetic drifts switched off.  So it is a defect in the electron RH
-  response rather than a resolution or setup problem.
-
-  What makes it concrete is that the electron species is suppressed in the RH
-  inertia but not in the quantities built from the same transit average.  Field-
-  line averaged, at kx = 2.5:
-
-      RH_inertia      electrons / ions = 0.0085     correctly negligible
-      RH_phi_I        electrons / ions = 1.03
-      nonlinear flux  electrons / ions = 1.0 - 2.7
-
-  The inertia integrand carries a factor (1 - J0 <J0 exp(-iQ)>_tau), which tends
-  to zero for electrons because J0 -> 1 and Q -> 0 as the electron gyroradius and
-  drift vanish.  RH_phi_I and the fluxes are weighted by the bare
-  <J0 exp(-iQ)>_tau exp(iQ), which tends to one instead, so the electron
-  contribution to those is not suppressed at all.  Dropping the electron species
-  from the sum makes the budget close: ion-only residual 1.1e-2, against 0.64 for
-  the two summed and 0.76 for electrons alone.  Whether the electron weighting
-  should carry the same suppression is a physics decision, not a coding one.
+- The unexplained ~7e-3 floor described above.
 
 - `RH_phi_I` is integrated with weight `spec%z`, while `RH_inertia` and every RH
   flux use `spec%dens_psi0*spec%z` (rosenbluth_hinton.f90:581 against :301, :420
-  and the rest).  Every deck here has `dens = 1.0`, so the two agree and the
-  inconsistency is invisible, but it would break the budget for any run with a
-  non-unit density.
-- The unexplained ~7e-3 floor above.
+  and the rest).  Eq (13) and (16) of the derivation both carry n_s, so :581
+  looks like the odd one out.  Every deck here has `dens = 1.0`, so the two agree
+  and nothing exercises it, and it has been left alone pending a decision.

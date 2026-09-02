@@ -10,7 +10,7 @@
 #
 # Usage:
 #     python plot_rh_budget.py <run.out.nc> [<run.out.nc> ...] [--out DIR]
-#                              [--time-min T] [--time-max T]
+#                              [--time-min T] [--time-max T] [--kx-max K]
 #
 # This is a diagnostic aid for the benchmarks, not part of the pytest run.
 ################################################################################
@@ -28,9 +28,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from rh_budget import get_rh_budget
 
 
-def plot_one(netcdf_file, out_dir, time_min=None, time_max=None):
+def plot_one(netcdf_file, out_dir, time_min=None, time_max=None, kx_max=None):
     time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional = get_rh_budget(
-        netcdf_file, time_min, time_max)
+        netcdf_file, time_min, time_max, kx_max)
 
     residual = np.linalg.norm(dE_RH_dt - P_RH) / np.linalg.norm(P_RH)
     scale = np.maximum(np.abs(P_RH), np.abs(dE_RH_dt))
@@ -83,8 +83,9 @@ if __name__ == '__main__':
     parser.add_argument('--out', default='.')
     parser.add_argument('--time-min', type=float, default=None)
     parser.add_argument('--time-max', type=float, default=None)
+    parser.add_argument('--kx-max', type=float, default=None)
     args = parser.parse_args()
 
     pathlib.Path(args.out).mkdir(parents=True, exist_ok=True)
     for netcdf_file in args.netcdf_files:
-        plot_one(netcdf_file, args.out, args.time_min, args.time_max)
+        plot_one(netcdf_file, args.out, args.time_min, args.time_max, args.kx_max)

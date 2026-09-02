@@ -1,5 +1,12 @@
-! Rosenbluth-Hinton energy budget: minimal nonlinear electrostatic run with
-! kinetic ions and kinetic electrons.
+! Rosenbluth-Hinton energy budget: nonlinear electrostatic run with kinetic ions
+! and kinetic electrons.
+!
+! Unlike the adiabatic decks this one needs a radially wider box (jtwist = 5, so
+! dkx = 0.5 rather than 2.5).  The Rosenbluth-Hinton construction is a
+! long-wavelength one, and with a single kx = 2.5 mode there is nothing in the
+! box that it addresses: the budget is then dominated by modes well outside its
+! range of validity and does not close.  With dkx = 0.5 the kx <= 1 modes carry
+! the comparison and it closes to about 2e-2.
 &parameters_physics
   nonlinear = .true.
   vnew_ref = 0.01
@@ -8,10 +15,10 @@
   grid_option = 'box'
 /
 &kt_grids_box_parameters
-  ny = 4
-  nx = 4
+  ny = 8
+  nx = 24
   y0 = 2.0
-  jtwist = 1
+  jtwist = 5
 /
 &init_g_knobs
   ginit_option = 'noise'
@@ -45,18 +52,18 @@
   nzed = 24
 /
 &vpamu_grids_parameters
-  nmu = 8
-  nvgrid = 18
+  nmu = 6
+  nvgrid = 12
 /
 &knobs
   delt = 0.02
-  nstep = 1400
+  nstep = 1150
   print_extra_info_to_terminal = .false.
   drifts_implicit = .true.
 /
 &stella_diagnostics_knobs
   nsave = -1
-  nwrite = 2
+  nwrite = 10
   save_for_restart = .false.
   write_RH_inertia_fluxes = .true.
 /

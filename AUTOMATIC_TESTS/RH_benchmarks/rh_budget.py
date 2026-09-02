@@ -71,7 +71,7 @@ def _field_line_average(ncdata, name, weight):
     return array
 
 
-def get_rh_budget(netcdf_file, time_min=None, time_max=None):
+def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     '''Return (time, E_RH, dE_RH/dt, P_RH, P_RH_nonlinear, P_RH_collisional), all
     summed over kx.
 
@@ -111,18 +111,36 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None):
     # kx = 0 carries no zonal-flow energy: 1-Gamma0 and the RH inertia both
     # vanish there, so the energy is 0/0.  Drop it.
     finite_kx = np.abs(kx) > 1e-12
+    if kx_max is not None:
+        finite_kx &= np.abs(kx) <= kx_max
     kx = kx[finite_kx]
     RH_phi_I = RH_phi_I[:, finite_kx]
     RH_inertia = RH_inertia[finite_kx]
     RH_fluxes_nonlinear = RH_fluxes_nonlinear[:, finite_kx]
     RH_fluxes_collisional = RH_fluxes_collisional[:, finite_kx]
 
-    # Gamma0 = <I0(b) exp(-b)>, with b = kperp^2 rho^2 evaluated along the field line
-    b = (kx[:, None] / bmag[None, :])**2 * gds22[None, :]
-    Gamma0 = (weight[None, :] * np.i0(b / 2) * np.exp(-b / 2)).sum(axis=1)
+    #> The prefactor of eq (19), sum_s Z_s^2 e^2 n_s / T_s * <1 - Gamma_0s>_psi,
+    #> summed over species.  Gamma_0s = I0(b_s) exp(-b_s) with b_s = kperp^2
+    #> rho_s^2, and rho_s / rho_ref = sqrt(m_s T_s) / Z_s in stella's
+    #> normalisation, so b_s is the reference b scaled by m_s T_s / Z_s^2.
+    #>
+    #> This cancels between E_RH and P_RH and so does not affect the residual
+    #> the benchmarks assert, but it sets the absolute value of E_RH, which is
+    #> what gets compared against the zonal-flow energy.
+    charge = np.array(ncdata.variables['charge'][:])
+    mass = np.array(ncdata.variables['mass'][:])
+    temperature = np.array(ncdata.variables['temp'][:])
+    density = np.array(ncdata.variables['dens'][:])
 
-    prefactor = (1 - Gamma0)[None, :] / np.abs(RH_inertia)[None, :]**2
-    E_RH = np.abs(RH_phi_I)**2 / (2 * np.abs(RH_inertia)[None, :]**2) * (1 - Gamma0)[None, :]
+    b_reference = (kx[:, None] / bmag[None, :])**2 * gds22[None, :]
+    polarisation = np.zeros_like(kx)
+    for z_s, m_s, T_s, n_s in zip(charge, mass, temperature, density):
+        b_s = b_reference * (m_s * T_s / z_s**2)
+        Gamma0_s = (weight[None, :] * np.i0(b_s / 2) * np.exp(-b_s / 2)).sum(axis=1)
+        polarisation += z_s**2 * n_s / T_s * (1 - Gamma0_s)
+
+    prefactor = polarisation[None, :] / np.abs(RH_inertia)[None, :]**2
+    E_RH = np.abs(RH_phi_I)**2 / (2 * np.abs(RH_inertia)[None, :]**2) * polarisation[None, :]
 
     def power(fluxes):
         return -np.real(1j * kx[None, :] * fluxes * np.conj(RH_phi_I)) * prefactor
@@ -150,14 +168,14 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None):
             P_nonlinear[window], P_collisional[window])
 
 
-def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total'):
+def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total', kx_max=None):
     '''Relative L2 mismatch for the whole budget or for one channel.
 
     channel='total'      dE_RH/dt                    against P_RH
     channel='nonlinear'  dE_RH/dt - P_collisional    against P_nonlinear
     '''
     _, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional = get_rh_budget(
-        netcdf_file, time_min, time_max)
+        netcdf_file, time_min, time_max, kx_max)
 
     if channel == 'nonlinear':
         measured, expected = dE_RH_dt - P_collisional, P_nonlinear
