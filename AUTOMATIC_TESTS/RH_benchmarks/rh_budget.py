@@ -65,7 +65,7 @@ def _field_line_average(ncdata, name, weight):
     return array
 
 
-def get_rh_budget(netcdf_file):
+def get_rh_budget(netcdf_file, time_min=None, time_max=None):
     '''Return (time, E_RH, dE_RH/dt, sum P_RH) summed over kx.
 
     dE_RH/dt is a centred difference, so it is defined on the interior points;
@@ -112,15 +112,25 @@ def get_rh_budget(netcdf_file):
     E_RH = np.abs(RH_phi_I)**2 / (2 * np.abs(RH_inertia)[None, :]**2) * (1 - Gamma0)[None, :]
     P_RH = -np.real(1j * kx[None, :] * RH_fluxes * np.conj(RH_phi_I)) * prefactor
 
-    dt = time[1] - time[0]
-    dE_RH_dt = (E_RH[2:] - E_RH[:-2]) / (2 * dt)
+    # np.gradient rather than a fixed-step difference: a nonlinear run may adapt
+    # delt, so the time axis is not guaranteed to be uniformly spaced.  Drop the
+    # end points, where np.gradient falls back to a one-sided difference.
+    E_RH_total = E_RH.sum(axis=1)
+    dE_RH_dt = np.gradient(E_RH_total, time)
 
-    return time[1:-1], E_RH.sum(axis=1), dE_RH_dt.sum(axis=1), P_RH[1:-1].sum(axis=1)
+    time, E_RH_total = time[1:-1], E_RH_total[1:-1]
+    dE_RH_dt, P_RH_total = dE_RH_dt[1:-1], P_RH[1:-1].sum(axis=1)
+
+    window = np.ones_like(time, dtype=bool)
+    if time_min is not None: window &= time >= time_min
+    if time_max is not None: window &= time <= time_max
+
+    return time[window], E_RH_total[window], dE_RH_dt[window], P_RH_total[window]
 
 
-def budget_residual(netcdf_file):
+def budget_residual(netcdf_file, time_min=None, time_max=None):
     '''Relative L2 mismatch between dE_RH/dt and sum P_RH.'''
-    _, _, dE_RH_dt, P_RH = get_rh_budget(netcdf_file)
+    _, _, dE_RH_dt, P_RH = get_rh_budget(netcdf_file, time_min, time_max)
     norm = np.linalg.norm(P_RH)
     if norm == 0.0:
         return np.inf

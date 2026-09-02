@@ -1,8 +1,8 @@
 ! Rosenbluth-Hinton energy budget: minimal nonlinear electrostatic run with
-! kinetic ions and kinetic electrons (ny = 4, nx = 4).
+! kinetic ions and kinetic electrons.
 &parameters_physics
   nonlinear = .true.
-  vnew_ref = 0.0
+  vnew_ref = 0.01
 /
 &kt_grids_knobs
   grid_option = 'box'
@@ -15,7 +15,7 @@
 /
 &init_g_knobs
   ginit_option = 'noise'
-  phiinit = 0.05
+  phiinit = 0.01
   width0 = 1.0
 /
 &species_knobs
@@ -23,40 +23,40 @@
 /
 &species_parameters_1
   dens = 1.0
-  fprim = 1.0
+  fprim = 2.2
   mass = 1.0
   temp = 1.0
-  tprim = 3.0
+  tprim = 8.0
   type = 'ion'
   z = 1.0
 /
 &species_parameters_2
   dens = 1.0
-  fprim = 1.0
+  fprim = 2.2
   mass = 2.7e-4
   temp = 1.0
-  tprim = 3.0
+  tprim = 8.0
   type = 'electron'
   z = -1.0
 /
 &zgrid_parameters
   boundary_option = 'linked'
   nperiod = 1
-  nzed = 48
+  nzed = 24
 /
 &vpamu_grids_parameters
   nmu = 8
-  nvgrid = 24
+  nvgrid = 18
 /
 &knobs
   delt = 0.02
-  nstep = 250
+  nstep = 1400
   print_extra_info_to_terminal = .false.
   drifts_implicit = .true.
 /
 &stella_diagnostics_knobs
   nsave = -1
-  nwrite = 1
+  nwrite = 2
   save_for_restart = .false.
   write_RH_inertia_fluxes = .true.
 /
@@ -81,7 +81,7 @@
   betadbprim = 0.0
 /
 &dissipation
-  include_collisions = .false.
+  include_collisions = .true.
   collision_model = 'dougherty'
   hyper_dissipation = .false.
 /

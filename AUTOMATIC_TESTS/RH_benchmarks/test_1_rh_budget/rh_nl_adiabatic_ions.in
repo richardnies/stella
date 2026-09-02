@@ -1,10 +1,9 @@
 ! Rosenbluth-Hinton energy budget: minimal nonlinear electrostatic run with
-! MODIFIED adiabatic electrons (the flux-surface-average term is retained).
-! CBC-like gradients make the non-zonal ky ITG unstable, so the mode grows and
-! saturates and a genuine nonlinearly driven zonal flow appears -- without that
-! the budget just measures numerical noise.
+! kinetic ions and UNMODIFIED adiabatic electrons (no flux-surface-average
+! term), i.e. a plain Boltzmann response.  Exercises the opposite adiabatic
+! closure from rh_nl_adiabatic_electrons.in.
 &parameters_physics
-  adiabatic_option = 'field-line-average-term'
+  adiabatic_option = 'no-field-line-average-term'
   nonlinear = .true.
   vnew_ref = 0.01
 /
