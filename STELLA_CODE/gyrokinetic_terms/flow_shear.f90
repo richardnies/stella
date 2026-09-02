@@ -43,7 +43,7 @@ contains
       use job_manage, only: njobs
       use mp, only: job, send, receive, crossdomprocs, subprocs, scope
       use parameters_numerical, only: maxwellian_normalization
-      use diagnostics_RH_inertia_fluxes, only: RH_U_parallel_fac
+      use rosenbluth_hinton, only: RH_U_parallel_fac
 
       implicit none
 

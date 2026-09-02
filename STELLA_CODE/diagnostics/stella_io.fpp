@@ -778,12 +778,11 @@ contains
    end subroutine write_moments_nc
 
    !----------------------- RH phi fluxes -----------------------
-   subroutine write_RH_fluxes_phi_nc(nout, RH_fluxes_phi_even_passing, RH_fluxes_phi_odd_passing, RH_fluxes_phi_even_trapped, RH_fluxes_phi_odd_trapped)
+   subroutine write_RH_fluxes_phi_nc(nout, RH_fluxes_phi_even, RH_fluxes_phi_odd)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_phi_even_passing, RH_fluxes_phi_odd_passing
-      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_phi_even_trapped, RH_fluxes_phi_odd_trapped
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_phi_even, RH_fluxes_phi_odd
 
 #ifdef NETCDF
 
@@ -793,21 +792,13 @@ contains
       start = [1, 1, 1, 1, 1, 1, nout]
 
       ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_even_passing",  RH_fluxes_phi_even_passing, &
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_even",  RH_fluxes_phi_even, &
                dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, even in vparallel, passing particles")
+               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, even in vparallel")
 
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_passing",  RH_fluxes_phi_odd_passing, &
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd",  RH_fluxes_phi_odd, &
                dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, odd in vparallel, passing particles") 
-
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_even_trapped",  RH_fluxes_phi_even_trapped, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, even in vparallel, trapped particles")
-
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_trapped",  RH_fluxes_phi_odd_trapped, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, odd in vparallel, trapped particles") 
+               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, odd in vparallel")
 
 
 #endif
@@ -816,12 +807,11 @@ contains
 
 
    !----------------------- RH apar fluxes -----------------------
-   subroutine write_RH_fluxes_apar_nc(nout, RH_fluxes_apar_even_passing, RH_fluxes_apar_odd_passing, RH_fluxes_apar_even_trapped, RH_fluxes_apar_odd_trapped)
+   subroutine write_RH_fluxes_apar_nc(nout, RH_fluxes_apar_even, RH_fluxes_apar_odd)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_apar_even_passing, RH_fluxes_apar_odd_passing
-      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_apar_even_trapped, RH_fluxes_apar_odd_trapped
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_apar_even, RH_fluxes_apar_odd
 
 #ifdef NETCDF
 
@@ -831,21 +821,13 @@ contains
       start = [1, 1, 1, 1, 1, 1, nout]
 
       ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_apar_even_passing",  RH_fluxes_apar_even_passing, &
+      call netcdf_write_complex(ncid, "RH_fluxes_apar_even",  RH_fluxes_apar_even, &
                dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, even in vparallel, passing particles")
+               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, even in vparallel")
 
-      call netcdf_write_complex(ncid, "RH_fluxes_apar_odd_passing",  RH_fluxes_apar_odd_passing, &
+      call netcdf_write_complex(ncid, "RH_fluxes_apar_odd",  RH_fluxes_apar_odd, &
                dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel, passing particles") 
-
-      call netcdf_write_complex(ncid, "RH_fluxes_apar_even_trapped",  RH_fluxes_apar_even_trapped, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, even in vparallel, trapped particles")
-
-      call netcdf_write_complex(ncid, "RH_fluxes_apar_odd_trapped",  RH_fluxes_apar_odd_trapped, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel, trapped particles") 
+               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel")
 
 
 #endif
@@ -854,12 +836,11 @@ contains
 
 
    !----------------------- RH bpar fluxes -----------------------
-   subroutine write_RH_fluxes_bpar_nc(nout, RH_fluxes_bpar_even_passing, RH_fluxes_bpar_odd_passing, RH_fluxes_bpar_even_trapped, RH_fluxes_bpar_odd_trapped)
+   subroutine write_RH_fluxes_bpar_nc(nout, RH_fluxes_bpar_even, RH_fluxes_bpar_odd)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_bpar_even_passing, RH_fluxes_bpar_odd_passing
-      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_bpar_even_trapped, RH_fluxes_bpar_odd_trapped
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_bpar_even, RH_fluxes_bpar_odd
 
 #ifdef NETCDF
 
@@ -869,21 +850,13 @@ contains
       start = [1, 1, 1, 1, 1, 1, nout]
 
       ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_bpar_even_passing",  RH_fluxes_bpar_even_passing, &
+      call netcdf_write_complex(ncid, "RH_fluxes_bpar_even",  RH_fluxes_bpar_even, &
                dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, even in vparallel, passing particles")
+               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, even in vparallel")
 
-      call netcdf_write_complex(ncid, "RH_fluxes_bpar_odd_passing",  RH_fluxes_bpar_odd_passing, &
+      call netcdf_write_complex(ncid, "RH_fluxes_bpar_odd",  RH_fluxes_bpar_odd, &
                dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel, passing particles") 
-
-      call netcdf_write_complex(ncid, "RH_fluxes_bpar_even_trapped",  RH_fluxes_bpar_even_trapped, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, even in vparallel, trapped particles")
-
-      call netcdf_write_complex(ncid, "RH_fluxes_bpar_odd_trapped",  RH_fluxes_bpar_odd_trapped, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel, trapped particles") 
+               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel")
 
 
 #endif

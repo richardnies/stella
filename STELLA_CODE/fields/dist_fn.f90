@@ -40,8 +40,7 @@ contains
       use geometry, only: dBdrho, gfac, geo_surf
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
-      use volume_averages, only: eval_Q_fac, fieldline_average
-      use diagnostics_RH_inertia_fluxes, only: RH_integrand_even, RH_integrand_odd, RH_inertia
+      use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
       use parameters_physics, only: triangular_ZF, triangular_ZF_g_exb, triangular_ZF_RH, triangular_ZF_PS
       use parameters_physics, only: triangular_ZF_upar, triangular_ZF_upar_fac, cos_ZF
       use grids_kxky, only: akx
@@ -53,10 +52,8 @@ contains
       integer :: ivmu, is, imu, iv, it, iz, ia, ikx
       real, dimension(:, :), allocatable :: energy
       complex, dimension(:, :), allocatable :: g0k
-      complex, dimension(nakx, -nzgrid:nzgrid) :: phi
+      complex, dimension(nakx, -nzgrid:nzgrid) :: phi_ZF
       logical, intent(in) :: restarted
-      real :: RH_inertia_summed
-!      complex :: Q_fac
 
       if (gxyz_initialized) return
       gxyz_initialized = .false.
@@ -106,80 +103,56 @@ contains
             iv = iv_idx(vmu_lo, ivmu)
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
-                  !gnew(1, :, iz, it, ivmu) = gnew(1, :, iz, it, ivmu) &
-                  !   * (-aj0x(1,:,iz,ivmu) + (RH_integrand_even(:,iz,it,ivmu)+RH_integrand_odd(:,iz,it,ivmu)))
-
                   !Setup lowest kx of zonal flow profile
-                  phi(:, :) = 0
-                  phi(2, :) = zi*triangular_ZF_g_exb / akx(2)**2
+                  phi_ZF(:, :) = 0
+                  phi_ZF(2, :) = zi*triangular_ZF_g_exb / akx(2)**2
 
                   if (triangular_ZF) then
                      do ikx = 3, nakx / 2 + 1
                      ! Triangular v_ZF, adjust k > kmin modes accordingly
-                        phi(ikx, :) = phi(2, :) / (akx(ikx)/akx(2))**3 * (1 - (-1)**(ikx-1))/2.0
-                        !phi(1, ikx, :) = phi(1, 2, :) / (akx(ikx)/akx(2))**2 * (1 - (-1)**(ikx-1))/2.0
+                        phi_ZF(ikx, :) = phi_ZF(2, :) / (akx(ikx)/akx(2))**3 * (1 - (-1)**(ikx-1))/2.0
                      end do
                   end if
 
                   do ikx = 1, nakx - ikx_max
-                     phi(nakx - ikx + 1, :) = conjg(phi(ikx + 1, :))
+                     phi_ZF(nakx - ikx + 1, :) = conjg(phi_ZF(ikx + 1, :))
                   end do
 
                   do ikx = 2, nakx
-
-!                     call fieldline_average( real(RH_inertia(ikx,:,:,is)), RH_inertia_summed)
-                     !call fieldline_average( sum(real(RH_inertia(ikx,:,:,:)), dim=3), RH_inertia_summed)
-!                     RH_inertia_summed = RH_inertia_summed
-!                     write(*, *) RH_inertia_summed
-
-!                     call eval_Q_fac(vpa(iv), akx(ikx), iz, is, Q_fac)
                      ! Modified adiabatic electron response => g = 0
                      ! TODO: implement properly to handle general case...
                      if (spec(is)%type == electron_species) then
-                        !gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
                         gnew(1, ikx, iz, it, ivmu) = 0.
 
                      else
 
                         if (triangular_ZF_RH) then
                            ! Rosenbluth-Hinton profile, with <H> = F_M * I_RH to satisfy quasineutrality
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) &
+                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) &
                               * (2*(1-aj0x(1,ikx,iz,ivmu)) + triangular_ZF_upar_fac*(aj0x(1,ikx,iz,ivmu)-2 &
                                    + conjg(RH_integrand_even(ikx,iz,it,ivmu)+RH_integrand_odd(ikx,iz,it,ivmu)) &
                                    + real(RH_inertia(ikx,iz,it,is))) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
-!                              * (-aj0x(1,ikx,iz,ivmu) + (conjg(RH_integrand_even(ikx,iz,it,ivmu)+RH_integrand_odd(ikx,iz,it,ivmu)) &
-!                                   + real(RH_inertia(ikx,iz,it,is))) ) &
-!                              * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
-
                         else if (triangular_ZF_PS) then
                            ! Pfirsch-Schlueter (upar ~ 2*q*cos(theta)*vE)
-                           !gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) * ( 0.5*kperp2(1, ikx, ia, iz) &
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
+                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
                                - aj0x(1,ikx,iz,ivmu)*2*geo_surf%qinp_psi0*zi*akx(ikx)*vpa(iv)*cos(zed(iz))*triangular_ZF_upar_fac ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else if (triangular_ZF_upar) then
                            ! Constant uparallel (e.g. to make toroidal rotation)
-                           !gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) * ( 0.5*kperp2(1, ikx, ia, iz) &
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
+                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
                                - aj0x(1,ikx,iz,ivmu)*2*geo_surf%qinp_psi0*zi*akx(ikx)*vpa(iv)*triangular_ZF_upar_fac ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else
                            ! Choose g ~ phi*(1-J0) to satisfy quasineutrality
-!                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) * 0.5*kperp2(1, ikx, ia, iz) &
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi(ikx, iz) * 2*(1-aj0x(1,ikx,iz,ivmu) ) &
+                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * 2*(1-aj0x(1,ikx,iz,ivmu) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
                         end if
 
                      end if
-!-(1-gamtot(1,ikx,iz))
-
-!                             + real(RH_inertia(ikx,iz,it,is)) ) &
-!                        * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
-
                   end do
 
 

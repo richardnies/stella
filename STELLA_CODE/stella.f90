@@ -117,6 +117,7 @@ contains
       use fields, only: rescale_fields
       use stella_time, only: init_tstart, init_delt
       use diagnostics, only: init_diagnostics
+      use rosenbluth_hinton, only: init_rosenbluth_hinton
       use parameters_diagnostics, only: read_diagnostics_knobs
       use arrays_fields, only: phi, apar, bpar
       use arrays_dist_fn, only: gnew
@@ -298,11 +299,13 @@ contains
       if (debug) write (6, *) 'stella::init_stella::init_fields'
       call init_fields
 
-      !> read diagnostics_knob namelist from the input file,
-      !> open ascii output files and initialise the neetcdf file with extension .out.nc
-      !> RN: Calling this early to have access to Rosenbluth-Hinton (RH) quantities
-      if (debug) write (6, *) 'stella::init_stella::init_diagnostics'
-      call init_diagnostics(restarted, tstart, git_commit, git_date)
+      !> allocate and calculate the Rosenbluth-Hinton response functions.
+      !> These are physics, not diagnostics: dist_fn::init_gxyz reads
+      !> RH_integrand_even/odd and RH_inertia when building a prescribed zonal
+      !> profile, and flow_shear reads RH_U_parallel_fac.  They must therefore
+      !> exist before ginit, independently of any diagnostic request.
+      if (debug) write (6, *) 'stella::init_stella::init_rosenbluth_hinton'
+      call init_rosenbluth_hinton
 
       !> initialise the distribution function in the kxkyz_lo and store in gvmu
       if (debug) write (6, *) "stella::init_stella::ginit"
@@ -322,6 +325,12 @@ contains
       !> set the internal time step size variable code_dt from the input variable delt
       if (debug) write (6, *) "stella::init_stella::init_delt"
       call init_delt(delt, delt_max, delt_min)
+
+      !> read diagnostics_knob namelist from the input file, open ascii output
+      !> files and initialise the netcdf file with extension .out.nc.  This must
+      !> come after <ginit>, which is what determines <restarted>.
+      if (debug) write (6, *) 'stella::init_stella::init_diagnostics'
+      call init_diagnostics(restarted, tstart, git_commit, git_date)
 
       !> allocate and calculate arrays needed for the mirror, parallel streaming,
       !> magnetic drifts, gradient drive, etc. terms during time advance
@@ -596,6 +605,7 @@ contains
       use fields, only: finish_fields
       use arrays_fields, only: time_field_solve
       use diagnostics, only: finish_diagnostics, time_diagnostics
+      use rosenbluth_hinton, only: finish_rosenbluth_hinton
       use response_matrix, only: finish_response_matrix
       use geometry, only: finish_geometry
       use extended_zgrid, only: finish_extended_zgrid
@@ -615,6 +625,8 @@ contains
 
       if (debug) write (*, *) 'stella::finish_stella::finish_diagnostics'
       call finish_diagnostics(istep)
+      if (debug) write (*, *) 'stella::finish_stella::finish_rosenbluth_hinton'
+      call finish_rosenbluth_hinton
       if (debug) write (*, *) 'stella::finish_stella::finish_response_matrix'
       call finish_response_matrix
       if (debug) write (*, *) 'stella::finish_stella::finish_fields'

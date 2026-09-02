@@ -140,10 +140,11 @@ contains
       use dist_fn, only: init_dist_fn
       use init_g, only: init_init_g
       use stella_io, only: init_stella_io, get_nout
+      use diagnostics_RH_inertia_fluxes, only: write_RH_inertia_to_netcdf_file
+      use diagnostics_RH_inertia_fluxes, only: write_RH_integrands_to_netcdf_file
       use diagnostics_omega, only: init_diagnostics_omega
       use diagnostics_fluxes, only: init_diagnostics_fluxes 
       use diagnostics_potential, only: init_diagnostics_potential 
-      use diagnostics_RH_inertia_fluxes, only: init_diagnostics_RH_inertia_fluxes
       use parameters_diagnostics, only: write_RH_inertia_fluxes
       use parameters_physics, only: omprimfac_RH
       use mp, only: broadcast, proc0
@@ -186,8 +187,14 @@ contains
       if (proc0) call get_nout(tstart, nout)
       call broadcast(nout)
 
+      !> First write of the time-independent Rosenbluth-Hinton quantities.  These
+      !> are computed by <init_rosenbluth_hinton>, which runs before <ginit>; the
+      !> write has to happen here instead, because this is where the netcdf file
+      !> is opened.
+      call write_RH_inertia_to_netcdf_file()
+      call write_RH_integrands_to_netcdf_file()
+
       ! Initialise RH inertia_fluxes diagnostics (including first write to netcdf)
-      if (write_RH_inertia_fluxes .or. abs(omprimfac_RH) > epsilon(0.)) call init_diagnostics_RH_inertia_fluxes()
 
    end subroutine init_diagnostics
 
@@ -205,7 +212,6 @@ contains
       use diagnostics_omega, only: finish_diagnostics_omega
       use diagnostics_fluxes, only: finish_diagnostics_fluxes 
       use diagnostics_potential, only: finish_diagnostics_potential
-      use diagnostics_RH_inertia_fluxes, only: finish_diagnostics_RH_inertia_fluxes
       use parameters_diagnostics, only: write_RH_inertia_fluxes
       use parameters_physics, only: omprimfac_RH
       use parameters_diagnostics, only: save_for_restart 
@@ -228,7 +234,6 @@ contains
       call finish_diagnostics_omega    
       call finish_diagnostics_fluxes    
       call finish_diagnostics_potential   
-      if (write_RH_inertia_fluxes .or. abs(omprimfac_RH) > epsilon(0.)) call finish_diagnostics_RH_inertia_fluxes
 
       nout = 1
       diagnostics_initialized = .false.

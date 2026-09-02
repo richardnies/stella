@@ -2,9 +2,6 @@ module volume_averages
 
    public :: init_volume_averages, finish_volume_averages
    public :: fieldline_average
-   public :: eval_transit_ints
-   public :: eval_transit_int_integrand_RH
-   public :: eval_Q_fac
    public :: volume_average
    public :: flux_surface_average_ffs
 
@@ -223,122 +220,6 @@ contains
       end where
 
    end subroutine init_flux_surface_average_ffs
-
-   !==============================================
-   !============== BOUNCE AVERAGES ===============
-   !==============================================
-
-   ! Evaluate RH transit averages
-   subroutine eval_transit_ints(energy, mu, sigma, akx, is, transit_int_eiQJ0, bounce_time)
-
-      use geometry, only: bmag, dl_over_b
-      use zgrid, only: nzgrid
-      use constants, only: zi
-
-      implicit none
-
-      real,    intent(in)  :: energy, mu, sigma, akx
-      integer, intent(in)  :: is
-      complex, intent(out) :: transit_int_eiQJ0
-      real,    intent(out) :: bounce_time
-
-      complex, dimension(-nzgrid:nzgrid) :: integrand_eiQJ0
-      complex, dimension(-nzgrid:nzgrid) :: integrand_tau_b
-      real    :: vpa2, vpa
-      complex :: Q_fac
-      integer :: ia, iz
-      ia = 1
-
-      ! Evaluate integrands on z-grid
-      do iz = -nzgrid, nzgrid
-
-         call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .false., integrand_eiQJ0(iz))
-         call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .true.,  integrand_tau_b(iz))
-
-      end do
-
-      ! Evaluate integrals (integrand has 1/vpa factor, need to integrate dl/vpa (...) = dl/B * B (...) )
-      transit_int_eiQJ0 = sum(integrand_eiQJ0 * bmag(ia,:) * dl_over_b(ia, :))
-      bounce_time       = sum(integrand_tau_b * bmag(ia,:) * dl_over_b(ia, :))
-
-   end subroutine eval_transit_ints
-
-
-   ! Evaluate integrand in RH transit average
-   subroutine eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, bounce_time_bool, transit_avg_integrand)
-
-      use geometry, only: bmag
-      use species, only: spec
-      use spfunc, only: j0
-      use geometry, only: gds22, geo_surf, q_as_x
-
-      implicit none
-
-      real,    intent(in)  :: energy, mu, sigma, akx ! energy=vpa^2+vperp^2, mu=vperp^2/(2B)
-      integer, intent(in)  :: iz, is
-      logical, intent(in)  :: bounce_time_bool ! if true, evaluate integrand for bounce time
-      complex, intent(out) :: transit_avg_integrand
-
-      real    :: vpa2, vpa, vperp2, kperp2
-      complex :: Q_fac, aj0x
-      integer :: ia
-      ia = 1
-
-      ! Evaluate integrand (=0 if in forbidden region)
-      ! TODO-RN: implement for multiple wells
-      vpa2 = energy-2.*mu*bmag(ia,iz)
-      if (vpa2 <= epsilon(0.)) then
-         transit_avg_integrand = 0
-      else
-         ! Parallel velocity
-         vpa = sigma*sqrt(vpa2)
-
-         if (bounce_time_bool) then
-            transit_avg_integrand = 1./abs(vpa)
-
-         else
-            ! Evaluate Bessel function
-            vperp2 = 2*mu*bmag(ia,iz)
-            if (q_as_x) then
-               kperp2 = akx**2 * gds22(ia,iz)
-            else
-               kperp2 = akx**2 * gds22(ia,iz) / (geo_surf%shat**2)
-            end if
-            aj0x = j0( sqrt(kperp2*vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia,iz) )
-
-            ! Evaluate Q factor
-            call eval_Q_fac(vpa, akx, iz, is, Q_fac)
-
-            ! Integrand
-            transit_avg_integrand = exp(-Q_fac) * aj0x / abs(vpa)
-
-         end if
-      end if
-
-   end subroutine eval_transit_int_integrand_RH
-
-   ! Evaluate Q factor (i*kx*vmx = vpa*nabla_par(Q))
-   subroutine eval_Q_fac(vpa, akx, iz, is, Q_fac)
-      ! TODO-RN : implement correctly for general geometry
-
-      use geometry, only: bmag, geo_surf, btor, Rmajor
-      use species, only: spec
-      use constants, only: zi
-
-      implicit none
-
-      real,    intent(in)  :: vpa, akx
-      integer, intent(in)  :: iz, is
-      complex, intent(out) :: Q_fac
-
-      integer :: ia
-      ia = 1
-
-      ! TODO-RN : Normalisation OK?
-      Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 &
-              * geo_surf%qinp_psi0*btor(iz)*Rmajor(iz)/geo_surf%rhoc ! Note Btor*Rmajor should be constant along field-line
-
-   end subroutine eval_Q_fac
 
 
    subroutine flux_surface_average_ffs(no_fsa, fsa)
