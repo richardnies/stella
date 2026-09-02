@@ -22,7 +22,9 @@ $(GIT_VERSION_DIR)/git_version.f90:
 	@echo "  "
 
 # Now that we made sure that the submodule exists, include its makefile
-GIR_PROJECT := $(shell if [ -d $(PROJECT_DIR)/.git ]; then echo "ok"; fi)
+# Use -e rather than -d: in a git worktree, .git is a regular file that
+# points at the shared git directory, not a directory itself.
+GIR_PROJECT := $(shell if [ -e $(PROJECT_DIR)/.git ]; then echo "ok"; fi)
 ifeq ($(GIR_PROJECT),)
 $(info   )
 $(info WARNING: The .git folder does not exist.)
