@@ -73,6 +73,7 @@ module stella_io
    public :: write_RH_phi_I_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
+   public :: write_RH_bounce_drift_nc
    public :: write_radial_fluxes_nc
    public :: write_radial_moments_nc
    public :: write_fluxes_kxkyzs_nc
@@ -932,6 +933,28 @@ contains
 
 
    !----------------------- RH integrands -------------------
+   !----------------------- RH bounce-averaged drift -----------------------
+   subroutine write_RH_bounce_drift_nc(RH_drift_bounce_avg)
+
+      use neasyf, only: neasyf_write
+
+      implicit none
+
+      real, dimension(:, :, :, :), intent(in) :: RH_drift_bounce_avg
+
+#ifdef NETCDF
+
+      character(*), dimension(*), parameter :: dims = [character(7)::"zed", "species", "vpa", "mu"]
+      integer, dimension(4) :: start
+      start = [1, 1, 1, 1]
+
+      call neasyf_write(ncid, "RH_drift_bounce_avg", RH_drift_bounce_avg, dim_names=dims, start=start, &
+      long_name="Bounce-averaged radial magnetic drift over the well containing each z; zero for passing particles")
+
+#endif
+
+   end subroutine write_RH_bounce_drift_nc
+
    subroutine write_RH_integrands_nc(RH_integrand_even, RH_integrand_odd)
       implicit none
 

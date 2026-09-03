@@ -25,6 +25,7 @@ module diagnostics_RH_inertia_fluxes
    implicit none
  
    public :: write_RH_integrands_to_netcdf_file
+   public :: write_RH_bounce_drift_to_netcdf_file
    public :: write_RH_fluxes_to_netcdf_file
    public :: write_RH_inertia_to_netcdf_file
    public :: write_RH_phi_I_to_netcdf_file
@@ -43,6 +44,46 @@ contains
    !============================================================================
    !========== CALCULATE AND WRITE RH_INTEGRANDS TO NETCDF FILE ================
    !============================================================================
+   !============================================================================
+   !=========== WRITE THE BOUNCE-AVERAGED RADIAL DRIFT TO NETCDF ===============
+   !============================================================================
+   !> Gathers RH_drift_bounce_avg from the vmu layout onto proc0 and writes it.
+   !> Time-independent, so written once at initialisation like the integrands.
+   subroutine write_RH_bounce_drift_to_netcdf_file()
+
+      use parameters_diagnostics, only: write_RH_bounce_drift
+      use rosenbluth_hinton, only: RH_drift_bounce_avg
+      use vpamu_grids, only: nvpa, nmu
+      use zgrid, only: nztot
+      use species, only: nspec
+      use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
+      use stella_io, only: write_RH_bounce_drift_nc
+      use mp, only: sum_reduce, proc0
+
+      implicit none
+
+      integer :: ivmu, iv, imu, is
+      real, dimension(:, :, :, :), allocatable :: drift_vs_ztsvpamu
+
+      if (.not. write_RH_bounce_drift) return
+
+      allocate (drift_vs_ztsvpamu(nztot, nspec, nvpa, nmu)); drift_vs_ztsvpamu = 0.
+
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
+         drift_vs_ztsvpamu(:, is, iv, imu) = RH_drift_bounce_avg(:, ivmu)
+      end do
+
+      call sum_reduce(drift_vs_ztsvpamu, 0)
+
+      if (proc0) call write_RH_bounce_drift_nc(drift_vs_ztsvpamu)
+
+      deallocate (drift_vs_ztsvpamu)
+
+   end subroutine write_RH_bounce_drift_to_netcdf_file
+
    subroutine write_RH_integrands_to_netcdf_file()
 
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd

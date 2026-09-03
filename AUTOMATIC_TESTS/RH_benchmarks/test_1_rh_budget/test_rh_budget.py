@@ -15,6 +15,12 @@
 # The budget is expected to close in tokamak geometry with hyperdissipation and
 # the tertiary sponge switched off.
 #
+# Wavelength.  Every nonlinear deck now puts its zonal modes at kx rho_i <= 1,
+# where the Rosenbluth-Hinton construction applies -- it targets kx rho_i << 1/q,
+# about 0.71 at q = 1.4.  The adiabatic decks use jtwist = 5 so their single
+# zonal mode sits at kx = 0.5 rather than 2.5; the two-species decks span
+# kx = 0.5 upwards and are restricted with kx_max.
+#
 # Time windows.  The nonlinear cases start from noise, so before the ITG mode
 # has grown E_RH sits at the level of numerical round-off and the budget there
 # is meaningless.  They are also run in a 4x4 box, which has no cascade to
@@ -163,7 +169,7 @@ def test_whether_rh_budget_closes_for_nonlinear_modified_adiabatic_electrons(tmp
     '''Zonal flow driven nonlinearly by an ITG mode, with the flux-surface-average
     term retained in the adiabatic electron response.'''
     check_rh_budget('rh_nl_adiabatic_electrons.in', tmp_path, stella_version,
-                    tolerance=0.08, time_min=15.0, time_max=27.0, channel='nonlinear')
+                    tolerance=0.08, time_min=20.0, time_max=28.0, channel='nonlinear')
     return
 
 
@@ -171,7 +177,7 @@ def test_whether_rh_budget_closes_for_nonlinear_unmodified_adiabatic_electrons(t
     '''As above, but with a plain Boltzmann electron response (no
     flux-surface-average term), which is the opposite adiabatic closure.'''
     check_rh_budget('rh_nl_adiabatic_ions.in', tmp_path, stella_version,
-                    tolerance=0.08, time_min=15.0, time_max=27.0, channel='nonlinear')
+                    tolerance=0.08, time_min=20.0, time_max=28.0, channel='nonlinear')
     return
 
 

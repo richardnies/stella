@@ -12,10 +12,14 @@
   grid_option = 'box'
 /
 &kt_grids_box_parameters
+  ! jtwist = 5 puts the zonal mode at kx rho_i = 0.5 rather than 2.5.  The
+  ! Rosenbluth-Hinton construction is a long-wavelength one -- it targets
+  ! kx rho_i << 1/q, about 0.71 here -- so a box whose only zonal mode sits at
+  ! 2.5 tests it outside its range of validity.
   ny = 4
   nx = 4
   y0 = 2.0
-  jtwist = 1
+  jtwist = 5
 /
 &init_g_knobs
   ginit_option = 'noise'

@@ -142,6 +142,7 @@ contains
       use stella_io, only: init_stella_io, get_nout
       use diagnostics_RH_inertia_fluxes, only: write_RH_inertia_to_netcdf_file
       use diagnostics_RH_inertia_fluxes, only: write_RH_integrands_to_netcdf_file
+      use diagnostics_RH_inertia_fluxes, only: write_RH_bounce_drift_to_netcdf_file
       use diagnostics_omega, only: init_diagnostics_omega
       use diagnostics_fluxes, only: init_diagnostics_fluxes 
       use diagnostics_potential, only: init_diagnostics_potential 
@@ -193,6 +194,7 @@ contains
       !> is opened.
       call write_RH_inertia_to_netcdf_file()
       call write_RH_integrands_to_netcdf_file()
+      call write_RH_bounce_drift_to_netcdf_file()
 
       ! Initialise RH inertia_fluxes diagnostics (including first write to netcdf)
 
