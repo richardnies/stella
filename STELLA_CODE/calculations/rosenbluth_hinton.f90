@@ -1128,8 +1128,20 @@ contains
       end do
       call geo_spline(z_well, num_well, z_theta, num_theta)
       call geo_spline(z_well, den_well, z_theta, den_theta)
+      !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
+      !> construction, but its cubic spline is not.  Where the well contains
+      !> interior maxima of B lying just below B_c -- the ordinary situation on a
+      !> stellarator field line, and where g varies over orders of magnitude --
+      !> the spline overshoots and returns negative values; clamping those at
+      !> tiny(0.) then gives that node a weight of 1/sqrt(tiny), some 1e153,
+      !> which swamps the numerator and the bounce time alike and collapses the
+      !> transit average onto a single point.  Confining the interpolant to the
+      !> range of the data it was built from keeps it positive and shape
+      !> preserving.  Interpolating log g instead also enforces positivity, but
+      !> is unstable here: g approaches zero at those interior barriers, so its
+      !> logarithm spikes and the overshoot merely moves into the exponent.
       call geo_spline(z_well, g_well, z_theta, g_theta)
-      g_theta = max(g_theta, tiny(0.))
+      g_theta = min(max(g_theta, minval(g_well)), maxval(g_well))
       num_theta = num_theta / sqrt(g_theta)
       den_theta = den_theta / sqrt(g_theta)
 
@@ -1351,7 +1363,19 @@ contains
       call geo_spline(z_well, weight_well, z_node, weight_node)
       call geo_spline(z_well, g_well, z_node, g_node)
 
-      g_node = max(g_node, tiny(0.))
+      !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
+      !> construction, but its cubic spline is not.  Where the well contains
+      !> interior maxima of B lying just below B_c -- the ordinary situation on a
+      !> stellarator field line, and where g varies over orders of magnitude --
+      !> the spline overshoots and returns negative values; clamping those at
+      !> tiny(0.) then gives that node a weight of 1/sqrt(tiny), some 1e153,
+      !> which swamps the numerator and the bounce time alike and collapses the
+      !> transit average onto a single point.  Confining the interpolant to the
+      !> range of the data it was built from keeps it positive and shape
+      !> preserving.  Interpolating log g instead also enforces positivity, but
+      !> is unstable here: g approaches zero at those interior barriers, so its
+      !> logarithm spikes and the overshoot merely moves into the exponent.
+      g_node = min(max(g_node, minval(g_well)), maxval(g_well))
       weight_node = weight_node / sqrt(g_node)
 
       drift_average = sum(drift_node * weight_node) / sum(weight_node)
@@ -1700,7 +1724,19 @@ contains
       call geo_spline(z_well, g_well, z_node, g_node)
       deallocate (tmp_real, tmp_imag)
 
-      g_node = max(g_node, tiny(0.))
+      !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
+      !> construction, but its cubic spline is not.  Where the well contains
+      !> interior maxima of B lying just below B_c -- the ordinary situation on a
+      !> stellarator field line, and where g varies over orders of magnitude --
+      !> the spline overshoots and returns negative values; clamping those at
+      !> tiny(0.) then gives that node a weight of 1/sqrt(tiny), some 1e153,
+      !> which swamps the numerator and the bounce time alike and collapses the
+      !> transit average onto a single point.  Confining the interpolant to the
+      !> range of the data it was built from keeps it positive and shape
+      !> preserving.  Interpolating log g instead also enforces positivity, but
+      !> is unstable here: g approaches zero at those interior barriers, so its
+      !> logarithm spikes and the overshoot merely moves into the exponent.
+      g_node = min(max(g_node, minval(g_well)), maxval(g_well))
       node_weight = 1.0 / sqrt(g_node)
 
       !> The Chebyshev rule carries a common factor pi/n_nodes and a common
