@@ -34,6 +34,7 @@ module rosenbluth_hinton
    public :: eval_transit_ints
    public :: eval_transit_int_integrand_RH
    public :: eval_Q_fac
+   public :: eval_Q_profile_hat
    public :: RH_U_parallel_fac
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
@@ -72,6 +73,11 @@ module rosenbluth_hinton
    ! Has this module been initialised?
    logical :: rosenbluth_hinton_initialized = .false.
 
+   !> Whether Q comes from the closed form or from integration along the field
+   !> line.  Resolved once in init_rosenbluth_hinton, because the default depends
+   !> on what the active geometry can supply.
+   logical :: use_analytic_drift_phase = .true.
+
 contains
 
 
@@ -86,6 +92,7 @@ contains
 
       use mp, only: proc0, mp_abort
       use geometry, only: RH_drift_phase_defined
+      use parameters_physics, only: RH_analytic_drift_phase, RH_analytic_drift_phase_specified
       use parameters_physics, only: full_flux_surface, radial_variation
 
       ! Dimensions
@@ -103,6 +110,7 @@ contains
       implicit none
 
       real :: energyval, muval, bmag_max, drift_average
+      real, dimension(:), allocatable :: Q_hat_z
       complex :: integrand_tmp_pls, integrand_tmp_min
       logical :: trapped, well_found
 
@@ -132,21 +140,22 @@ contains
          end do
       end do
 
-      !> The transit average needs the drift-orbit phase factor, which only the
-      !> geometry module can build.  A geometry that does not provide it (VMEC,
-      !> where btor and Rmajor are undefined, or the z-pinch) would otherwise
-      !> silently produce nonsense, so refuse instead.  This lifts by itself once
-      !> a geometry fills RH_drift_phase_fac.
-      !> Everything past this point is built on the drift-orbit phase.  If the
-      !> geometry cannot supply it there is nothing more to do -- but that is only
-      !> a failure if something actually wanted those quantities, which
-      !> write_RH_bounce_drift on its own does not.
-      if (.not. RH_drift_phase_defined) then
-         if (drift_phase_dependent_quantities_needed()) call mp_abort &
-            ('Rosenbluth-Hinton diagnostics need the drift-orbit phase factor, which &
-             &the active geometry does not provide.  Aborting.')
-         return
+      !> Choose how Q is obtained.  Unless the input file asked for one, follow the
+      !> geometry: the closed form where the geometry supplies it, which is
+      !> Miller, and integration along the field line where it does not, which is
+      !> VMEC.  Asking for the closed form where it does not exist is an error
+      !> rather than something to silently substitute.
+      if (RH_analytic_drift_phase_specified) then
+         use_analytic_drift_phase = RH_analytic_drift_phase
+      else
+         use_analytic_drift_phase = RH_drift_phase_defined
       end if
+      if (use_analytic_drift_phase .and. .not. RH_drift_phase_defined) call mp_abort &
+         ('RH_analytic_drift_phase = .true. was requested, but the active geometry does &
+          &not provide the closed-form drift-orbit phase.  Set it to .false. to integrate &
+          &Q along the field line instead.  Aborting.')
+      if (proc0 .and. debug) write (*, *) 'rosenbluth_hinton: analytic drift phase = ', use_analytic_drift_phase
+
       if (full_flux_surface) call mp_abort &
          ('Rosenbluth-Hinton diagnostics are not implemented for full_flux_surface.  Aborting.')
       if (radial_variation) call mp_abort &
@@ -175,6 +184,8 @@ contains
       !> for the multiple-well (stellarator) generalisation.
       bmag_max = maxval(bmag(ia,:))
 
+      allocate (Q_hat_z(-nzgrid:nzgrid)); Q_hat_z = 0.
+
       ! Evaluate the transit averages
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
          iv = iv_idx(vmu_lo, ivmu)
@@ -190,12 +201,25 @@ contains
             ! Is this particle trapped in the well?
             trapped = energyval <= 2*muval*bmag_max
 
+            !> The drift-orbit phase is linear in kx and, at fixed pitch angle,
+            !> scales as sqrt(energy); the species enters only as a scalar and
+            !> the sign of v_par only as an overall sign.  What is left depends
+            !> on the field line and on lambda = mu / energy alone, so it is
+            !> built once here rather than nakx + 1 times inside the loops below.
+            if (.not. use_analytic_drift_phase) then
+               if (energyval > epsilon(0.)) then
+                  call eval_Q_profile_hat(muval / energyval, iz, Q_hat_z)
+               else
+                  Q_hat_z = 0.
+               end if
+            end if
+
             do it = 1, ntubes
 
                do ikx = 1, nakx
 
                   call get_RH_transit_integrands(energyval, muval, vpa(iv), akx(ikx), iz, is, trapped, &
-                                                 integrand_tmp_pls, integrand_tmp_min)
+                                                 integrand_tmp_pls, integrand_tmp_min, Q_hat_z)
 
                   ! Split into contributions that are even and odd in vpa
                   RH_integrand_even(ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls+integrand_tmp_min)
@@ -207,7 +231,7 @@ contains
                !> kx, so it does not depend on <ikx> and is evaluated once per
                !> (iz, it, ivmu) rather than nakx times.
                call get_RH_transit_integrands(energyval, muval, vpa(iv), kxsmall, iz, is, trapped, &
-                                              integrand_tmp_pls, integrand_tmp_min)
+                                              integrand_tmp_pls, integrand_tmp_min, Q_hat_z)
 
                RH_U_parallel_fac(iz,ivmu) = real( (1 - 0.5*(integrand_tmp_pls-integrand_tmp_min))/(zi*kxsmall) &
                                                * spec(is)%z/spec(is)%mass )
@@ -215,6 +239,8 @@ contains
             end do !it
          end do !iz
       end do !ivmu
+
+      deallocate (Q_hat_z)
 
       ! TODO-RN : implement for radial variation and full flux surface
       ! Calculate the RH_inertia for a flux tube simulation
@@ -246,20 +272,6 @@ contains
    !> Whether anything has asked for a quantity built on the drift-orbit phase.
    !> The bounce-averaged radial drift is not one of them: it needs only the
    !> geometry, which is what lets it be diagnosed in a stellarator where the
-   !> phase is not yet available.
-   logical function drift_phase_dependent_quantities_needed()
-
-      use parameters_diagnostics, only: write_RH_inertia_fluxes
-      use parameters_physics, only: omprimfac_RH
-      use parameters_physics, only: triangular_ZF, cos_ZF, triangular_ZF_RH
-
-      implicit none
-
-      drift_phase_dependent_quantities_needed = write_RH_inertia_fluxes &
-           .or. abs(omprimfac_RH) > epsilon(0.) &
-           .or. ((triangular_ZF .or. cos_ZF) .and. triangular_ZF_RH)
-
-   end function drift_phase_dependent_quantities_needed
 
    !============================================================================
    !=========== IS THE ROSENBLUTH-HINTON MACHINERY NEEDED AT ALL? ==============
@@ -708,6 +720,32 @@ contains
 
    end subroutine find_well
 
+   !============================================================================
+   !> dB/dz at <z>, from the quadratic through B at the three grid points <i0>,
+   !> <i1>, <i2>.  Used at a turning point, where the three points bracketing it
+   !> are the only ones the well is guaranteed to own.
+   !============================================================================
+   real function dbdz_local(z, i0, i1, i2)
+
+      use geometry, only: bmag
+      use zgrid, only: zed
+
+      implicit none
+
+      real,    intent(in) :: z
+      integer, intent(in) :: i0, i1, i2
+
+      real    :: x0, x1, x2
+      integer :: ia
+      ia = 1
+
+      x0 = zed(i0); x1 = zed(i1); x2 = zed(i2)
+      dbdz_local = bmag(ia, i0) * (2.*z - x1 - x2) / ((x0 - x1) * (x0 - x2)) &
+                 + bmag(ia, i1) * (2.*z - x0 - x2) / ((x1 - x0) * (x1 - x2)) &
+                 + bmag(ia, i2) * (2.*z - x0 - x1) / ((x2 - x0) * (x2 - x1))
+
+   end function dbdz_local
+
    !> Turning point between <iz_out> (where B >= B_c) and <iz_in> (where B < B_c),
    !> found on the interpolated B rather than by joining the two grid values with
    !> a straight line.
@@ -782,6 +820,316 @@ contains
    end function turning_point
 
    !============================================================================
+   !============ DRIFT-ORBIT PHASE BY INTEGRATION ALONG THE FIELD LINE =========
+   !============================================================================
+   !> Q(z) for a general field, from its defining relation
+   !>
+   !>     v_par b.grad Q = i kx (vMx - <vMx>_tau)
+   !>
+   !> i.e.  Q(z) = i kx int [vMx - <vMx>_tau] / (v_par b.grad z) dz.
+   !>
+   !> Subtracting the transit average is what makes Q single valued: it removes
+   !> the secular part of the radial drift, which is exactly the part that does
+   !> not average away over an orbit.  In a quasisymmetric field that average is
+   !> zero and the integral has the closed form eval_Q_fac uses; in general it
+   !> does not, and the leftover is what drives the zonal flow through
+   !> F_RH_drift.
+   !>
+   !> The integration constant is irrelevant: Q enters only as
+   !> <J0 exp(-Q)>_tau exp(+Q), so a shift Q -> Q + c cancels between the two
+   !> factors.  The integral is therefore started wherever is convenient.
+   !> The geometric part of the drift-orbit phase Q.
+   !>
+   !> Q is linear in kx, and at fixed pitch angle lambda = mu / energy it scales
+   !> as sqrt(energy): the drift goes as energy and v_par as sqrt(energy), so the
+   !> radial excursion per unit parallel length goes as their ratio.  The species
+   !> enters only through the scalar smz, and the sign of v_par only as an
+   !> overall sign.  Factoring all four out leaves a profile that depends on the
+   !> field line and on lambda alone, which is why this is built once per pitch
+   !> angle rather than once per (energy, mu, sigma, kx, species).
+   subroutine eval_Q_profile_hat(lambda, iz_ref, Q_hat)
+
+      use geometry, only: bmag, gradpar, cvdrift0, gbdrift0, geo_surf, q_as_x, dbdzed
+      use zgrid, only: nzgrid, zed
+      use constants, only: pi
+      use splines, only: geo_spline
+
+      implicit none
+
+      real,    intent(in)  :: lambda
+      integer, intent(in)  :: iz_ref
+      real, dimension(-nzgrid:), intent(out) :: Q_hat
+
+      !> Nodes in the angle variable.  What is integrated there is smooth, so the
+      !> uniform trapezoidal rule on it is second order and this is well past
+      !> converged for any well a stella grid resolves.
+      integer, parameter :: n_theta = 512
+
+      real, dimension(-nzgrid:nzgrid) :: integrand
+      real    :: drift_average, vpa2, vperp2, drift, dz, drift_norm, B_c
+      real    :: z_l, z_r, mid, half, dtheta, arg
+      integer :: ia, iz, iz_lo, iz_hi, n_well, i, k, n_target
+      logical :: well_found, trapped
+      real, dimension(:), allocatable :: z_well, g_well, num_well, den_well
+      real, dimension(:), allocatable :: theta_target, Q_target
+      real, dimension(n_theta) :: theta, z_theta, g_theta, num_theta, den_theta, Psi
+      real :: sum_num, sum_den
+
+      ia = 1
+
+      !> cvdrift0 and gbdrift0 carry the geometry of the radial drift but not its
+      !> normalisation.  time_advance builds the drift coefficient as
+      !> fac * (cvdrift0 vpa^2 + gbdrift0 vperp^2 / 2), with
+      !> fac = -xdriftknob * 0.5 * code_dt * tz_psi0, divided by shat unless
+      !> q_as_x.  The time step and the knob belong to the time advance, not to
+      !> the orbit.  Nor does tz belong here: the phase needs v_drift / v_par,
+      !> and tz / stm is precisely smz, which the caller applies -- carrying tz
+      !> here as well would count the same factor twice.
+      drift_norm = 0.5
+      if (.not. q_as_x) drift_norm = drift_norm / geo_surf%shat
+
+      Q_hat = 0.
+
+      !> Is this particle trapped, and if so, in which well?
+      trapped = .false.
+      if (lambda > epsilon(0.)) then
+         B_c = 1. / (2.*lambda)
+         if (B_c < maxval(bmag(ia, :))) then
+            call find_well(B_c, iz_ref, iz_lo, iz_hi, trapped)
+         end if
+      end if
+
+      !> A trapped particle whose well could not be resolved on the z grid.  It
+      !> must not fall through to the passing branch below: that anchors Q at the
+      !> end of the field line rather than at a turning point, and for a trapped
+      !> particle the caller averages the two signs of v_par, an operation that
+      !> is not invariant under adding a constant to Q.  Such a well spans barely
+      !> a grid cell, so |v_par| and with it Q are small throughout it; zero is
+      !> both the right limit and the safe answer.
+      if (lambda > epsilon(0.)) then
+         if (1. / (2.*lambda) < maxval(bmag(ia, :)) .and. .not. trapped) then
+            return
+         end if
+      end if
+
+      !> A passing particle keeps |v_par| away from zero, so the integrand is
+      !> bounded and a plain cumulative trapezoid on the z grid is second order.
+      if (.not. trapped) then
+         !> The secular part of the radial drift, here over the whole field line,
+         !> at unit energy so that it is the same pure function of lambda as the
+         !> rest of the integrand.  A trapped particle instead needs the average
+         !> over its own well, and the trapped branch builds that on its own
+         !> quadrature nodes, so this is deliberately not done for both.
+         call eval_drift_transit_average(1., lambda, iz_ref, drift_average, well_found)
+         do iz = -nzgrid, nzgrid
+            vperp2 = 2.*lambda*bmag(ia, iz)
+            vpa2 = 1. - vperp2
+            if (vpa2 <= epsilon(0.)) then
+               integrand(iz) = 0.                ! forbidden region
+            else
+               drift = cvdrift0(ia, iz) * vpa2 + gbdrift0(ia, iz) * 0.5 * vperp2
+               integrand(iz) = drift_norm * (drift - drift_average) / (sqrt(vpa2) * gradpar(iz))
+            end if
+         end do
+         !> Only differences of Q along an orbit are physical -- the transit
+         !> average multiplies exp(-Q) by exp(+Q) at the same pitch angle -- so
+         !> the constant of integration is free, and is fixed here by starting
+         !> from zero at the left end of the field line.
+         do iz = -nzgrid + 1, nzgrid
+            dz = zed(iz) - zed(iz - 1)
+            Q_hat(iz) = Q_hat(iz - 1) + 0.5 * (integrand(iz) + integrand(iz - 1)) * dz
+         end do
+         return
+      end if
+
+      !> Trapped.  Now 1/|v_par| has an inverse-square-root singularity at each
+      !> turning point: Q stays finite, but a trapezoid on the z grid converges
+      !> only as sqrt(dz), which at usable resolution is a several-per-cent error
+      !> in Q and so in everything built from it.  Writing B_c - B as
+      !> (z - z_l)(z_r - z) g(z) with g smooth and substituting
+      !> z = mid + half cos(theta) gives
+      !>
+      !>    sqrt(v_par^2) = sqrt(2 lambda) half sin(theta) sqrt(g),
+      !>    dz            = -half sin(theta) dtheta,
+      !>
+      !> so the sin(theta) cancels identically and what is left to integrate,
+      !> num / (sqrt(2 lambda) sqrt(g)), is smooth in theta.  This is the same
+      !> decomposition the bounce integrals use, applied cumulatively.
+      z_l = turning_point(B_c, iz_lo - 1, iz_lo)
+      z_r = turning_point(B_c, iz_hi + 1, iz_hi)
+      mid = 0.5 * (z_l + z_r)
+      half = 0.5 * (z_r - z_l)
+
+      n_well = (iz_hi - iz_lo + 1) + 2
+      allocate (z_well(n_well), g_well(n_well), num_well(n_well), den_well(n_well))
+
+      z_well(1) = z_l
+      z_well(n_well) = z_r
+      do iz = iz_lo, iz_hi
+         i = iz - iz_lo + 2
+         z_well(i) = zed(iz)
+         g_well(i) = (B_c - bmag(ia, iz)) / ((z_well(i) - z_l) * (z_r - z_well(i)))
+         vperp2 = 2.*lambda*bmag(ia, iz)
+         vpa2 = 1. - vperp2
+         drift = cvdrift0(ia, iz) * vpa2 + gbdrift0(ia, iz) * 0.5 * vperp2
+         !> Numerator and the plain bounce-time weight kept apart, so that the
+         !> drift average subtracted below can be formed on these same nodes.
+         num_well(i) = drift_norm * drift / gradpar(iz)
+         den_well(i) = drift_norm / gradpar(iz)
+      end do
+
+      !> g at the turning points is the limit |dB/dz| / (z_r - z_l); the numerator
+      !> is smooth there and is extrapolated from the two nearest interior points,
+      !> since copying the neighbour would be a first-order error sitting exactly
+      !> where the weight is largest.
+      !> g at the turning points, where its own definition is 0/0 and its limit
+      !> is |dB/dz| / (z_r - z_l).  The difference quotient across the bracketing
+      !> cell returns dB/dz at that cell's midpoint rather than at the turning
+      !> point, which is first order and sits exactly where 1/sqrt(g) weights the
+      !> integrand most heavily -- it was the leading error of the whole scheme.
+      !> A quadratic through B on the bracket is second order and, just as
+      !> importantly, stays local: it never reads a value from outside the well,
+      !> so it returns the same number however many poloidal turns the flux tube
+      !> spans.  Neither splining g nor reading the grid's own dbdzed can promise
+      !> that, since the turning points of the barely trapped sit at the maximum
+      !> of B, which for a single-turn tube is the end of the domain.
+      g_well(1) = abs(dbdz_local(z_l, iz_lo - 1, iz_lo, iz_lo + 1)) / (z_r - z_l)
+      g_well(n_well) = abs(dbdz_local(z_r, iz_hi - 1, iz_hi, iz_hi + 1)) / (z_r - z_l)
+      num_well(1) = extrapolate(z_well(1), z_well(2), z_well(3), num_well(2), num_well(3))
+      num_well(n_well) = extrapolate(z_well(n_well), z_well(n_well - 1), z_well(n_well - 2), &
+                                     num_well(n_well - 1), num_well(n_well - 2))
+      den_well(1) = extrapolate(z_well(1), z_well(2), z_well(3), den_well(2), den_well(3))
+      den_well(n_well) = extrapolate(z_well(n_well), z_well(n_well - 1), z_well(n_well - 2), &
+                                     den_well(n_well - 1), den_well(n_well - 2))
+
+      !> theta runs from 0 at the right turning point to pi at the left one.
+      dtheta = pi / (n_theta - 1)
+      do k = 1, n_theta
+         theta(k) = (k - 1) * dtheta
+         z_theta(k) = mid + half * cos(theta(k))
+      end do
+      call geo_spline(z_well, num_well, z_theta, num_theta)
+      call geo_spline(z_well, den_well, z_theta, den_theta)
+      call geo_spline(z_well, g_well, z_theta, g_theta)
+      g_theta = max(g_theta, tiny(0.))
+      num_theta = num_theta / sqrt(g_theta)
+      den_theta = den_theta / sqrt(g_theta)
+
+      !> The bounce-averaged drift, formed on these very nodes.  It has to be
+      !> this quadrature and no other: the trapped orbit visits both signs of
+      !> v_par, so the caller averages the two branches, and that average is not
+      !> invariant under adding a constant to Q.  Q must therefore genuinely
+      !> vanish at both turning points, as the closed form v_par / B does, and it
+      !> does so only if the drift average subtracted here is exactly the one
+      !> this rule integrates to zero.  Taking it from a separately quadratured
+      !> bounce average leaves a residue that shifts Q bodily along the orbit.
+      sum_num = 0.; sum_den = 0.
+      do k = 1, n_theta - 1
+         sum_num = sum_num + 0.5 * dtheta * (num_theta(k) + num_theta(k + 1))
+         sum_den = sum_den + 0.5 * dtheta * (den_theta(k) + den_theta(k + 1))
+      end do
+      if (abs(sum_den) > tiny(0.)) then
+         drift_average = sum_num / sum_den
+      else
+         drift_average = 0.
+      end if
+      num_theta = num_theta - drift_average * den_theta
+
+      !> Psi(theta) = integral of the smooth integrand from theta out to pi,
+      !> which is Q measured from the left turning point.  By the choice of
+      !> drift average above, Psi(1) -- the right turning point -- is zero to
+      !> roundoff.
+      Psi(n_theta) = 0.
+      do k = n_theta - 1, 1, -1
+         Psi(k) = Psi(k + 1) + 0.5 * dtheta * (num_theta(k) + num_theta(k + 1))
+      end do
+      Psi = Psi / sqrt(2.*lambda)
+
+      !> Back onto the z grid.  Points outside the well are in the forbidden
+      !> region, where the transit integrand vanishes and Q is never used; they
+      !> are held at the nearest turning-point value so nothing downstream sees a
+      !> discontinuity.
+      n_target = iz_hi - iz_lo + 1
+      allocate (theta_target(n_target), Q_target(n_target))
+      do iz = iz_lo, iz_hi
+         arg = (zed(iz) - mid) / half
+         theta_target(iz - iz_lo + 1) = acos(max(-1., min(1., arg)))
+      end do
+      call geo_spline(theta, Psi, theta_target, Q_target)
+
+      do iz = iz_lo, iz_hi
+         Q_hat(iz) = Q_target(iz - iz_lo + 1)
+      end do
+      if (iz_lo > -nzgrid) Q_hat(-nzgrid:iz_lo - 1) = 0.
+      if (iz_hi < nzgrid) Q_hat(iz_hi + 1:nzgrid) = Psi(1)
+
+      deallocate (z_well, g_well, num_well, den_well, theta_target, Q_target)
+
+   end subroutine eval_Q_profile_hat
+
+   !> Transit average of the radial magnetic drift over the orbit: the bounce
+   !> average within the particle's own well when it is trapped, and the average
+   !> along the whole field line when it is passing.
+   subroutine eval_drift_transit_average(energy, mu, iz_ref, drift_average, well_found)
+
+      use geometry, only: bmag, gradpar, cvdrift0, gbdrift0
+      use zgrid, only: nzgrid, zed
+
+      implicit none
+
+      real,    intent(in)  :: energy, mu
+      integer, intent(in)  :: iz_ref
+      real,    intent(out) :: drift_average
+      logical, intent(out) :: well_found
+
+      real    :: B_c, vpa2, vperp2, drift, weight, total_weight, dz
+      integer :: ia, iz
+      ia = 1
+
+      drift_average = 0.
+      well_found = .false.
+
+      !> Trapped: the bounce average over its own well, with the turning-point
+      !> singularity resolved.
+      if (mu > epsilon(0.)) then
+         B_c = energy / (2.*mu)
+         if (B_c < maxval(bmag(ia, :))) then
+            call eval_bounce_averaged_drift(energy, mu, iz_ref, drift_average, well_found)
+            return
+         end if
+      end if
+
+      !> Passing: |v_par| never vanishes, so a plain weighted sum along the field
+      !> line is enough and there is no singularity to resolve.
+      total_weight = 0.
+      do iz = -nzgrid, nzgrid
+         vperp2 = 2.*mu*bmag(ia, iz)
+         vpa2 = energy - vperp2
+         if (vpa2 <= epsilon(0.)) cycle
+         !> Trapezoidal weight: half a cell at each end of the line, a full cell
+         !> in between.  A one-sided difference here is only first order, and
+         !> since the resulting drift average is subtracted from the integrand of
+         !> Q it sets the order of Q itself.
+         if (iz == -nzgrid) then
+            dz = 0.5 * (zed(iz + 1) - zed(iz))
+         else if (iz == nzgrid) then
+            dz = 0.5 * (zed(iz) - zed(iz - 1))
+         else
+            dz = 0.5 * (zed(iz + 1) - zed(iz - 1))
+         end if
+         weight = dz / (abs(gradpar(iz)) * sqrt(vpa2))
+         drift = cvdrift0(ia, iz) * vpa2 + gbdrift0(ia, iz) * 0.5 * vperp2
+         drift_average = drift_average + drift * weight
+         total_weight = total_weight + weight
+      end do
+      if (total_weight > 0.) then
+         drift_average = drift_average / total_weight
+         well_found = .true.
+      end if
+
+   end subroutine eval_drift_transit_average
+
+   !============================================================================
    !=============== BOUNCE-AVERAGED RADIAL MAGNETIC DRIFT ======================
    !============================================================================
    !> <vMx>_b for a trapped particle, over the well it actually occupies.
@@ -798,7 +1146,7 @@ contains
    !> the quantity Q has to be generalised with.
    subroutine eval_bounce_averaged_drift(energy, mu, iz_ref, drift_average, well_found)
 
-      use geometry, only: bmag, gradpar, cvdrift0, gbdrift0
+      use geometry, only: bmag, gradpar, cvdrift0, gbdrift0, dbdzed
       use zgrid, only: nzgrid, zed
       use constants, only: pi
       use splines, only: geo_spline
@@ -812,7 +1160,7 @@ contains
 
       integer, parameter :: n_nodes = 64
 
-      real    :: B_c, z_l, z_r, mid, half, dB_dz, vpa2, vperp2
+      real    :: B_c, z_l, z_r, mid, half, vpa2, vperp2
       integer :: ia, iz, iz_lo, iz_hi, n_well, i
       real, dimension(:), allocatable :: z_well, g_well, drift_well, weight_well
       real, dimension(n_nodes) :: t_node, z_node, g_node, drift_node, weight_node
@@ -851,13 +1199,19 @@ contains
          weight_well(i) = 1.0 / abs(gradpar(iz))
       end do
 
-      !> g tends to |dB/dz| / (z_r - z_l) at the turning points, where the
-      !> definition above is 0/0.  The drift and the metric weight are
-      !> extrapolated there from the two nearest interior points.
-      dB_dz = (bmag(ia, iz_lo) - bmag(ia, iz_lo - 1)) / (zed(iz_lo) - zed(iz_lo - 1))
-      g_well(1) = abs(dB_dz) / (z_r - z_l)
-      dB_dz = (bmag(ia, iz_hi + 1) - bmag(ia, iz_hi)) / (zed(iz_hi + 1) - zed(iz_hi))
-      g_well(n_well) = abs(dB_dz) / (z_r - z_l)
+      !> g at the turning points, where its own definition is 0/0 and its limit
+      !> is |dB/dz| / (z_r - z_l).  The difference quotient across the bracketing
+      !> cell returns dB/dz at that cell's midpoint rather than at the turning
+      !> point, which is first order and sits exactly where 1/sqrt(g) weights the
+      !> integrand most heavily -- it was the leading error of the whole scheme.
+      !> A quadratic through B on the bracket is second order and, just as
+      !> importantly, stays local: it never reads a value from outside the well,
+      !> so it returns the same number however many poloidal turns the flux tube
+      !> spans.  Neither splining g nor reading the grid's own dbdzed can promise
+      !> that, since the turning points of the barely trapped sit at the maximum
+      !> of B, which for a single-turn tube is the end of the domain.
+      g_well(1) = abs(dbdz_local(z_l, iz_lo - 1, iz_lo, iz_lo + 1)) / (z_r - z_l)
+      g_well(n_well) = abs(dbdz_local(z_r, iz_hi - 1, iz_hi, iz_hi + 1)) / (z_r - z_l)
 
       weight_well(1) = extrapolate(z_well(1), z_well(2), z_well(3), weight_well(2), weight_well(3))
       weight_well(n_well) = extrapolate(z_well(n_well), z_well(n_well - 1), z_well(n_well - 2), &
@@ -896,9 +1250,11 @@ contains
    !> vpa, so the two calls to eval_transit_ints return the same bounce time and
    !> only one is kept.
    subroutine get_RH_transit_integrands(energyval, muval, vpaval, akxval, iz, is, trapped, &
-                                        integrand_pls, integrand_min)
+                                        integrand_pls, integrand_min, Q_hat_in)
 
       use species, only: spec
+      use zgrid, only: nzgrid
+      use constants, only: zi
 
       implicit none
 
@@ -906,14 +1262,42 @@ contains
       integer, intent(in)  :: iz, is
       logical, intent(in)  :: trapped
       complex, intent(out) :: integrand_pls, integrand_min
+      real, dimension(-nzgrid:), intent(in), optional :: Q_hat_in
 
       real    :: transit_int_tau_b
       complex :: transit_int_eiQJ0_pls, transit_int_eiQJ0_min
       complex :: Q_fac, tmp
 
-      ! Evaluate transit averages for vpa and -vpa
-      call eval_transit_ints(energyval, muval, sign(1., vpaval), akxval, iz, is, transit_int_eiQJ0_pls, transit_int_tau_b)
-      call eval_transit_ints(energyval, muval, sign(1.,-vpaval), akxval, iz, is, transit_int_eiQJ0_min, transit_int_tau_b)
+      real,    dimension(-nzgrid:nzgrid) :: Q_hat
+      complex, dimension(-nzgrid:nzgrid) :: Q_profile
+
+      !> The drift-orbit phase, either from the axisymmetric closed form or
+      !> integrated along the field line.  It has to be the same Q in the transit
+      !> average and in the exp(+/-Q) that multiplies it below: mixing the two
+      !> forms leaves a spurious net phase and changes the answer outright.
+      if (use_analytic_drift_phase) then
+         call eval_Q_fac(vpaval, akxval, iz, is, Q_fac)
+         call eval_transit_ints(energyval, muval, sign(1., vpaval), akxval, iz, is, transit_int_eiQJ0_pls, transit_int_tau_b)
+         call eval_transit_ints(energyval, muval, sign(1.,-vpaval), akxval, iz, is, transit_int_eiQJ0_min, transit_int_tau_b)
+      else
+         if (present(Q_hat_in)) then
+            Q_hat = Q_hat_in
+         else if (energyval > epsilon(0.)) then
+            call eval_Q_profile_hat(muval/energyval, iz, Q_hat)
+         else
+            Q_hat = 0.
+         end if
+         !> Restore the kx, energy, species and sign-of-v_par dependence that
+         !> eval_Q_profile_hat factors out.
+         Q_profile = zi * akxval * sqrt(max(energyval, 0.)) * spec(is)%smz_psi0 * sign(1., vpaval) * Q_hat
+         Q_fac = Q_profile(iz)
+         call eval_transit_ints(energyval, muval, sign(1., vpaval), akxval, iz, is, transit_int_eiQJ0_pls, transit_int_tau_b, &
+                                Q_profile)
+         !> Q is odd in the sign of v_par, so the reversed branch reuses the same
+         !> profile negated rather than integrating it again.
+         call eval_transit_ints(energyval, muval, sign(1.,-vpaval), akxval, iz, is, transit_int_eiQJ0_min, transit_int_tau_b, &
+                                -Q_profile)
+      end if
 
       !> A particle whose integrand vanishes at every z on the grid (it is in the
       !> forbidden region everywhere) has zero bounce time and contributes
@@ -933,9 +1317,6 @@ contains
          transit_int_eiQJ0_pls = tmp
          transit_int_eiQJ0_min = tmp
       end if
-
-      ! Get Q factor
-      call eval_Q_fac(vpaval, akxval, iz, is, Q_fac)
 
       ! Evaluate integrands in the vpa-mu integral
       integrand_pls = transit_int_eiQJ0_pls/transit_int_tau_b * exp( Q_fac)
@@ -958,7 +1339,7 @@ contains
    !> hands off to the well-resolved quadrature below, falling back to the plain
    !> sum only if no complete well can be found -- which happens when the well
    !> runs off the end of the simulated field line.
-   subroutine eval_transit_ints(energy, mu, sigma, akx, iz_ref, is, transit_int_eiQJ0, bounce_time)
+   subroutine eval_transit_ints(energy, mu, sigma, akx, iz_ref, is, transit_int_eiQJ0, bounce_time, Q_profile)
 
       use geometry, only: bmag, dl_over_b
       use zgrid, only: nzgrid
@@ -969,6 +1350,8 @@ contains
       integer, intent(in)  :: iz_ref, is
       complex, intent(out) :: transit_int_eiQJ0
       real,    intent(out) :: bounce_time
+
+      complex, dimension(-nzgrid:), intent(in), optional :: Q_profile
 
       complex, dimension(-nzgrid:nzgrid) :: integrand_eiQJ0
       complex, dimension(-nzgrid:nzgrid) :: integrand_tau_b
@@ -988,8 +1371,13 @@ contains
       if (trapped) then
          call find_well(B_c, iz_ref, iz_lo, iz_hi, well_found)
          if (well_found) then
-            call bounce_ints_in_well(energy, mu, sigma, akx, B_c, iz_lo, iz_hi, is, &
-                                     transit_int_eiQJ0, bounce_time)
+            if (present(Q_profile)) then
+               call bounce_ints_in_well(energy, mu, sigma, akx, B_c, iz_lo, iz_hi, is, &
+                                        transit_int_eiQJ0, bounce_time, Q_profile)
+            else
+               call bounce_ints_in_well(energy, mu, sigma, akx, B_c, iz_lo, iz_hi, is, &
+                                        transit_int_eiQJ0, bounce_time)
+            end if
             return
          end if
       end if
@@ -997,8 +1385,13 @@ contains
       ! Evaluate integrands on z-grid
       do iz = -nzgrid, nzgrid
 
-         call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .false., integrand_eiQJ0(iz))
-         call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .true.,  integrand_tau_b(iz))
+         if (present(Q_profile)) then
+            call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .false., integrand_eiQJ0(iz), Q_profile(iz))
+            call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .true.,  integrand_tau_b(iz), Q_profile(iz))
+         else
+            call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .false., integrand_eiQJ0(iz))
+            call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .true.,  integrand_tau_b(iz))
+         end if
 
       end do
 
@@ -1012,7 +1405,7 @@ contains
    !> 1/|vpa| that carries the turning-point singularity.  bounce_ints_in_well
    !> needs the two separated, because the singular factor is absorbed into the
    !> quadrature weight rather than evaluated.
-   subroutine eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator)
+   subroutine eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator, Q_at_z)
 
       use geometry, only: bmag
       use species, only: spec
@@ -1024,6 +1417,7 @@ contains
       real,    intent(in)  :: energy, mu, sigma, akx
       integer, intent(in)  :: iz, is
       complex, intent(out) :: numerator
+      complex, intent(in), optional :: Q_at_z
 
       real    :: vpa2, vpa, vperp2, kperp2, aj0x_local
       complex :: Q_fac
@@ -1046,7 +1440,11 @@ contains
       kperp2 = max(kperp2, 0.)
       aj0x_local = j0(sqrt(kperp2 * vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia, iz))
 
-      call eval_Q_fac(vpa, akx, iz, is, Q_fac)
+      if (present(Q_at_z)) then
+         Q_fac = Q_at_z
+      else
+         call eval_Q_fac(vpa, akx, iz, is, Q_fac)
+      end if
 
       numerator = exp(-Q_fac) * aj0x_local
 
@@ -1078,9 +1476,9 @@ contains
    !> grid values; g is taken to its analytic limit at the two turning points,
    !> where the definition above is 0/0.
    subroutine bounce_ints_in_well(energy, mu, sigma, akx, B_c, iz_lo, iz_hi, is, &
-                                  transit_int_eiQJ0, bounce_time)
+                                  transit_int_eiQJ0, bounce_time, Q_profile)
 
-      use geometry, only: bmag, gradpar
+      use geometry, only: bmag, gradpar, dbdzed
       use zgrid, only: nzgrid, zed
       use constants, only: pi
       use splines, only: geo_spline
@@ -1091,13 +1489,14 @@ contains
       integer, intent(in)  :: iz_lo, iz_hi, is
       complex, intent(out) :: transit_int_eiQJ0
       real,    intent(out) :: bounce_time
+      complex, dimension(-nzgrid:), intent(in), optional :: Q_profile
 
       !> Nodes in the Chebyshev sum.  The integrand left after the substitution is
       !> smooth, so this converges quickly; 64 is far into the converged regime
       !> for the wells a stella grid resolves.
       integer, parameter :: n_nodes = 64
 
-      real    :: z_l, z_r, mid, half, dB_dz
+      real    :: z_l, z_r, mid, half
       integer :: ia, iz, n_well, i
       real,    dimension(:), allocatable :: z_well, g_well, weight_well
       complex, dimension(:), allocatable :: numerator_well
@@ -1127,13 +1526,26 @@ contains
          i = iz - iz_lo + 2
          g_well(i) = (B_c - bmag(ia, iz)) / ((z_well(i) - z_l) * (z_r - z_well(i)))
          weight_well(i) = 1.0 / abs(gradpar(iz))
-         call eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator_well(i))
+         if (present(Q_profile)) then
+            call eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator_well(i), Q_profile(iz))
+         else
+            call eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator_well(i))
+         end if
       end do
 
-      dB_dz = (bmag(ia, iz_lo) - bmag(ia, iz_lo - 1)) / (zed(iz_lo) - zed(iz_lo - 1))
-      g_well(1) = abs(dB_dz) / (z_r - z_l)
-      dB_dz = (bmag(ia, iz_hi + 1) - bmag(ia, iz_hi)) / (zed(iz_hi + 1) - zed(iz_hi))
-      g_well(n_well) = abs(dB_dz) / (z_r - z_l)
+      !> g at the turning points, where its own definition is 0/0 and its limit
+      !> is |dB/dz| / (z_r - z_l).  The difference quotient across the bracketing
+      !> cell returns dB/dz at that cell's midpoint rather than at the turning
+      !> point, which is first order and sits exactly where 1/sqrt(g) weights the
+      !> integrand most heavily -- it was the leading error of the whole scheme.
+      !> A quadratic through B on the bracket is second order and, just as
+      !> importantly, stays local: it never reads a value from outside the well,
+      !> so it returns the same number however many poloidal turns the flux tube
+      !> spans.  Neither splining g nor reading the grid's own dbdzed can promise
+      !> that, since the turning points of the barely trapped sit at the maximum
+      !> of B, which for a single-turn tube is the end of the domain.
+      g_well(1) = abs(dbdz_local(z_l, iz_lo - 1, iz_lo, iz_lo + 1)) / (z_r - z_l)
+      g_well(n_well) = abs(dbdz_local(z_r, iz_hi - 1, iz_hi, iz_hi + 1)) / (z_r - z_l)
 
       !> The smooth quantities at the turning points, by linear extrapolation from
       !> the two nearest interior points.  Copying the neighbour instead is an
@@ -1189,7 +1601,7 @@ contains
 
 
    ! Evaluate integrand in RH transit average
-   subroutine eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, bounce_time_bool, transit_avg_integrand)
+   subroutine eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, bounce_time_bool, transit_avg_integrand, Q_at_z)
 
       use geometry, only: bmag
       use species, only: spec
@@ -1202,6 +1614,7 @@ contains
       integer, intent(in)  :: iz, is
       logical, intent(in)  :: bounce_time_bool ! if true, evaluate integrand for bounce time
       complex, intent(out) :: transit_avg_integrand
+      complex, intent(in), optional :: Q_at_z
 
       real    :: vpa2, vpa, vperp2, kperp2
       complex :: Q_fac, aj0x
@@ -1235,7 +1648,11 @@ contains
             aj0x = j0( sqrt(kperp2*vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia,iz) )
 
             ! Evaluate Q factor
-            call eval_Q_fac(vpa, akx, iz, is, Q_fac)
+            if (present(Q_at_z)) then
+               Q_fac = Q_at_z
+            else
+               call eval_Q_fac(vpa, akx, iz, is, Q_fac)
+            end if
 
             ! Integrand
             transit_avg_integrand = exp(-Q_fac) * aj0x / abs(vpa)

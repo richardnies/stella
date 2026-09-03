@@ -46,6 +46,7 @@ module parameters_physics
    public :: triangular_ZF
    public :: cos_ZF 
    public :: triangular_ZF_RH
+   public :: RH_analytic_drift_phase, RH_analytic_drift_phase_specified
    public :: triangular_ZF_PS
    public :: triangular_ZF_upar
    public :: triangular_ZF_upar_fac
@@ -86,6 +87,19 @@ module parameters_physics
    logical :: triangular_ZF
    logical :: cos_ZF
    logical :: triangular_ZF_RH
+
+   !> How the Rosenbluth-Hinton drift-orbit phase Q is obtained.  True takes the
+   !> closed form the theory gives for a quasisymmetric field; false integrates
+   !> Q along the field line from the magnetic drifts.  The two agree in a
+   !> tokamak, where the closed form applies.
+   !>
+   !> Left unset it follows the geometry: analytic where the geometry supplies
+   !> the closed form, which is Miller, and numerical where it does not, which is
+   !> VMEC.  <RH_analytic_drift_phase_specified> records whether the input file
+   !> asked for a particular one, so that default can be applied without
+   !> overriding the user.
+   logical :: RH_analytic_drift_phase
+   logical :: RH_analytic_drift_phase_specified
    logical :: triangular_ZF_PS
    logical :: triangular_ZF_upar
    
@@ -166,6 +180,7 @@ contains
       triangular_ZF = .false.
       cos_ZF = .false.
       triangular_ZF_RH   = .true.
+      RH_analytic_drift_phase = .true.
       triangular_ZF_PS   = .false.
       triangular_ZF_upar = .false.
       triangular_ZF_g_exb    = 0.0
@@ -216,6 +231,7 @@ contains
 
       integer :: ierr, in_file
       logical :: nml_exist
+      logical :: probe_analytic_drift_phase
 
       namelist /parameters_physics/ include_parallel_streaming, include_mirror, nonlinear, &
         xdriftknob, ydriftknob, wstarknob, adiabatic_option, prp_shear_enabled, &
@@ -223,6 +239,7 @@ contains
         include_parallel_nonlinearity, suppress_zonal_interaction, only_zonal_interaction, freeze_nonzonal, freeze_zonal, &
         freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
         triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_PS, triangular_ZF_g_exb, &
+        RH_analytic_drift_phase, &
         triangular_ZF_upar, triangular_ZF_upar_fac, &
         full_flux_surface, include_apar, include_bpar, radial_variation, &
         beta, zeff, tite, nine, rhostar, vnew_ref, &
@@ -232,6 +249,21 @@ contains
      !> under the heading '&parameters_physics'
      in_file = input_unit_exist("parameters_physics", nml_exist)
      if (nml_exist) read (unit=in_file, nml=parameters_physics)
+
+     !> Read the namelist a second time with the opposite default, to find out
+     !> whether the input file mentioned RH_analytic_drift_phase at all.  If it
+     !> did, both reads return the file's value; if it did not, they return the
+     !> two different defaults.  Everything else keeps the value it already has,
+     !> so the second read changes nothing but this.
+     RH_analytic_drift_phase_specified = .false.
+     if (nml_exist) then
+        probe_analytic_drift_phase = RH_analytic_drift_phase
+        RH_analytic_drift_phase = .not. probe_analytic_drift_phase
+        rewind (in_file)
+        read (unit=in_file, nml=parameters_physics)
+        RH_analytic_drift_phase_specified = (RH_analytic_drift_phase .eqv. probe_analytic_drift_phase)
+        RH_analytic_drift_phase = probe_analytic_drift_phase
+     end if
 
      call check_backwards_compatability
 

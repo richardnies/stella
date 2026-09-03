@@ -49,7 +49,7 @@
 &zgrid_parameters
   boundary_option = 'unconnected'
   nperiod = 3
-  nzed = 48
+  nzed = 96
 /
 &vpamu_grids_parameters
   nmu = 12

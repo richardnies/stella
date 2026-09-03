@@ -230,6 +230,16 @@ def test_whether_rh_diagnostics_are_independent_of_parallel_length(tmp_path, ste
     integration weight or its normalisation were changed, and it is the
     precondition for the stellarator work, where the domain is genuinely longer
     than one turn.
+
+    The agreement is not exact at finite resolution, and cannot be.  For a
+    single-turn tube the maximum of B sits at the very end of the domain, which
+    is where the turning points of the barely trapped particles are; there
+    stella has no grid points beyond the boundary, so the spline that locates a
+    turning point works from a one-sided window, while for three turns the same
+    physical point is interior and gets a symmetric one.  That difference falls
+    away with resolution -- 1.0e-4, 2.2e-5, 1.2e-5 at nzed = 48, 96, 192 -- so
+    the decks here run at nzed = 96, resolved enough for the tolerance below to
+    be testing the physics rather than the boundary.
     '''
 
     budgets = {}
