@@ -414,12 +414,12 @@ contains
       use calculations_kxky, only: multiply_by_rho
       use stella_layouts, only: vmu_lo
       use stella_layouts, only: iv_idx, imu_idx, is_idx
-      use gyro_averages, only: gyro_average, gyro_average_j1
+      use gyro_averages, only: gyro_average, gyro_average_j1, aj0x
       use arrays_fields, only: phi, apar, bpar
       use parameters_numerical, only: maxwellian_normalization
       use stella_transforms, only: transform_kx2x_xfirst, transform_x2kx_xfirst
       use constants, only: zi
-      use parameters_physics, only: nonlinear
+      use parameters_physics, only: nonlinear, xdriftknob
       use geometry, only: exb_nonlin_fac, geo_surf, q_as_x
       use parameters_numerical, only: fphi
       use parameters_physics, only: include_apar, include_bpar
@@ -678,14 +678,29 @@ contains
       !> the stored array, which stays the pure geometric quantity the
       !> write_RH_bounce_drift diagnostic reports.
       allocate (drift_weight(nspec))
-      drift_weight = 0.5 * spec%dens_psi0 * spec%z * spec%tz_psi0
+      drift_weight = 0.5 * xdriftknob * spec%dens_psi0 * spec%z * spec%tz_psi0
       if (.not. q_as_x) drift_weight = drift_weight / geo_surf%shat
 
+      !> The drift acts on the full perturbed distribution, not on g alone.
+      !> time_advance applies it twice: wdriftx_g against g, and wdriftx_phi
+      !> against the gyroaveraged potential, the latter carrying an extra
+      !> zt F_M.  Both are the same geometric drift, so what the projection
+      !> leaves behind is i kx <v_Mx>_tau acting on
+      !>
+      !>    h = g + (Z/T) J_0 phi F_M,
+      !>
+      !> and keeping only the g piece of it accounts for a fraction of the drive.
       integrand_even = 0.
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         iv = iv_idx(vmu_lo, ivmu)
+         imu = imu_idx(vmu_lo, ivmu)
+         is = is_idx(vmu_lo, ivmu)
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
-               integrand_even(1, :, iz, it, ivmu) = g(1, :, iz, it, ivmu) &
+               integrand_even(1, :, iz, it, ivmu) = &
+                  (g(1, :, iz, it, ivmu) &
+                   + fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt &
+                     * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)) &
                   * (RH_integrand_even(:, iz, it, ivmu) + RH_integrand_odd(:, iz, it, ivmu)) &
                   * RH_drift_bounce_avg(iz, ivmu)
             end do
@@ -941,6 +956,7 @@ contains
       use zgrid, only: nzgrid, zed
       use constants, only: pi
       use splines, only: geo_spline
+      use parameters_physics, only: xdriftknob
 
       implicit none
 
@@ -977,11 +993,14 @@ contains
       !> normalisation.  time_advance builds the drift coefficient as
       !> fac * (cvdrift0 vpa^2 + gbdrift0 vperp^2 / 2), with
       !> fac = -xdriftknob * 0.5 * code_dt * tz_psi0, divided by shat unless
-      !> q_as_x.  The time step and the knob belong to the time advance, not to
-      !> the orbit.  Nor does tz belong here: the phase needs v_drift / v_par,
+      !> q_as_x.  The time step belongs to the time advance, not to the orbit,
+      !> but the knob does: it scales the drift the equations are actually
+      !> solving, so a run with xdriftknob = 0 has no drift and hence no
+      !> drift-orbit phase.  tz does not belong here -- the phase needs
+      !> v_drift / v_par,
       !> and tz / stm is precisely smz, which the caller applies -- carrying tz
       !> here as well would count the same factor twice.
-      drift_norm = 0.5
+      drift_norm = 0.5 * xdriftknob
       if (.not. q_as_x) drift_norm = drift_norm / geo_surf%shat
 
       Q_hat = 0.
@@ -1781,6 +1800,7 @@ contains
       use geometry, only: bmag, RH_drift_phase_fac
       use species, only: spec
       use constants, only: zi
+      use parameters_physics, only: xdriftknob
 
       implicit none
 
@@ -1792,7 +1812,7 @@ contains
       ia = 1
 
       ! TODO-RN : Normalisation OK?
-      Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 * RH_drift_phase_fac(iz)
+      Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 * RH_drift_phase_fac(iz) * xdriftknob
 
    end subroutine eval_Q_fac
 
