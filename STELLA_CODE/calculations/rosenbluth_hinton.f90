@@ -76,7 +76,7 @@ contains
    subroutine init_rosenbluth_hinton()
 
       use mp, only: proc0, mp_abort
-      use geometry, only: geo_option_switch, geo_option_vmec
+      use geometry, only: RH_drift_phase_defined
       use parameters_physics, only: full_flux_surface, radial_variation
 
       ! Dimensions
@@ -107,14 +107,14 @@ contains
       !> O(nvmu * nz^2 * nakx) transit-average loop, so skip it otherwise.
       if (.not. rosenbluth_hinton_needed()) return
 
-      !> eval_Q_fac uses the axisymmetric closed form of the drift-orbit phase,
-      !> which is built from <btor> and <Rmajor>.  Those are not defined under
-      !> VMEC (geometry.f90 sets them to -1000.), so an RH run in stellarator
-      !> geometry would silently produce nonsense.  Refuse instead.  The same
-      !> applies to the configurations the transit average has never handled.
-      if (geo_option_switch == geo_option_vmec) call mp_abort &
-         ('Rosenbluth-Hinton diagnostics are not implemented for VMEC geometry &
-          &(btor and Rmajor are undefined there).  Aborting.')
+      !> The transit average needs the drift-orbit phase factor, which only the
+      !> geometry module can build.  A geometry that does not provide it (VMEC,
+      !> where btor and Rmajor are undefined, or the z-pinch) would otherwise
+      !> silently produce nonsense, so refuse instead.  This lifts by itself once
+      !> a geometry fills RH_drift_phase_fac.
+      if (.not. RH_drift_phase_defined) call mp_abort &
+         ('Rosenbluth-Hinton diagnostics need the drift-orbit phase factor, which &
+          &the active geometry does not provide.  Aborting.')
       if (full_flux_surface) call mp_abort &
          ('Rosenbluth-Hinton diagnostics are not implemented for full_flux_surface.  Aborting.')
       if (radial_variation) call mp_abort &
@@ -760,10 +760,21 @@ contains
    end subroutine eval_transit_int_integrand_RH
 
    ! Evaluate Q factor (i*kx*vmx = vpa*nabla_par(Q))
+   !> Drift-orbit phase Q_s, defined so that transit-averaging annihilates the
+   !> radial magnetic drift:
+   !>
+   !>     Q_s = i kx (v_par / Omega_s) * RH_drift_phase_fac
+   !>
+   !> The geometry-dependent half is <RH_drift_phase_fac>, which the geometry
+   !> module builds -- in a quasisymmetric field it is (MG+NI)/(N-iota*M), and in
+   !> a tokamak that reduces to the q R Btor form.  Keeping it there rather than
+   !> here means this routine does not care which equilibrium it is looking at,
+   !> and a geometry that learns to provide the factor needs no change to the
+   !> Rosenbluth-Hinton code.  Compare diagnostics_fluxes_fluxtube, which consumes
+   !> b_dot_grad_zeta_RR the same way.
    subroutine eval_Q_fac(vpa, akx, iz, is, Q_fac)
-      ! TODO-RN : implement correctly for general geometry
 
-      use geometry, only: bmag, geo_surf, btor, Rmajor
+      use geometry, only: bmag, RH_drift_phase_fac
       use species, only: spec
       use constants, only: zi
 
@@ -777,8 +788,7 @@ contains
       ia = 1
 
       ! TODO-RN : Normalisation OK?
-      Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 &
-              * geo_surf%qinp_psi0*btor(iz)*Rmajor(iz)/geo_surf%rhoc ! Note Btor*Rmajor should be constant along field-line
+      Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 * RH_drift_phase_fac(iz)
 
    end subroutine eval_Q_fac
 

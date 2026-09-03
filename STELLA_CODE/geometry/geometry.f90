@@ -25,6 +25,7 @@ module geometry
    
    ! Geometric quantities for the gyrokinetic equations 
    public :: bmag, dbdzed, btor, bmag_psi0, grho, grho_norm, grad_x
+   public :: RH_drift_phase_fac, RH_drift_phase_defined
    public :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
    public :: gds2, gds21, gds22, gds23, gds24, gds25, gds26, gradpar
    public :: cvdrift, cvdrift0, gbdrift, gbdrift0
@@ -73,6 +74,23 @@ module geometry
    real, dimension(:), allocatable :: zed_eqarc, alpha
    real, dimension(:), allocatable :: gradpar, b_dot_grad_z_averaged
    real, dimension(:), allocatable :: dBdrho, d2Bdrdth, dgradpardrho, btor, Rmajor 
+
+   !> Geometry factor in the Rosenbluth-Hinton drift-orbit phase
+   !>     Q_s = i kx (v_par / Omega_s) * RH_drift_phase_fac
+   !> which is the quantity that makes the transit average annihilate the
+   !> radial magnetic drift.  In a quasisymmetric field it is (MG+NI)/(N-iota*M)
+   !> with M, N the helicities and G, I the enclosed currents; in a tokamak that
+   !> reduces to -q R Btor.  Only the geometry module knows how to build it, so
+   !> it is filled here rather than in the diagnostics, exactly as
+   !> b_dot_grad_zeta_RR is for the momentum flux.
+   !>
+   !> <RH_drift_phase_defined> says whether the active geometry knows how: it is
+   !> false until some path fills the array, and the Rosenbluth-Hinton
+   !> initialisation refuses to run without it.  That way the guard lifts by
+   !> itself when a geometry learns to provide it, rather than by editing a list
+   !> of geometry options somewhere else.
+   real, dimension(:), allocatable :: RH_drift_phase_fac
+   logical :: RH_drift_phase_defined = .false.
    real, dimension(:, :), allocatable :: bmag, bmag_psi0, dbdzed 
    real, dimension(:, :), allocatable :: cvdrift, cvdrift0, gbdrift, gbdrift0
    real, dimension(:, :), allocatable :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
@@ -765,6 +783,14 @@ contains
       !		R^2 * b . ∇ζ = R^2 * (1/B) (∇ζ x ∇ψ + I ∇ζ) . ∇ζ =  R^2/B * I * ∇ζ . ∇ζ
       !                  = R^2/B * I * (1/R^2) = I/B = (R/B) (I/R) = (R/B) * Btor
       b_dot_grad_zeta_RR = geo_surf%rmaj * spread(btor, 1, nalpha) / bmag 
+
+      !> Rosenbluth-Hinton drift-orbit phase factor.  An axisymmetric field is
+      !> quasisymmetric with M = 0, N = 1, so (MG+NI)/(N-iota*M) = I = R Btor,
+      !> and the factor below is that scaled by q/rhoc to match the normalisation
+      !> the transit average is written in.
+      RH_drift_phase_fac = geo_surf%qinp_psi0 * btor * Rmajor / geo_surf%rhoc
+      RH_drift_phase_defined = .true.
+
       if (debug) write (*, *) 'geometry::Miller::get_geometry_arrays_from_Miller_finished'
 
    end subroutine get_geometry_arrays_from_Miller
@@ -963,6 +989,7 @@ contains
       if (.not. allocated(b_dot_grad_z_averaged)) allocate (b_dot_grad_z_averaged(-nzgrid:nzgrid)); b_dot_grad_z_averaged = 0.0
       if (.not. allocated(btor)) allocate (btor(-nzgrid:nzgrid)); btor = 0.0
       if (.not. allocated(rmajor)) allocate (rmajor(-nzgrid:nzgrid)); rmajor = 0.0
+      if (.not. allocated(RH_drift_phase_fac)) allocate (RH_drift_phase_fac(-nzgrid:nzgrid)); RH_drift_phase_fac = 0.0
       if (.not. allocated(dBdrho)) allocate (dBdrho(-nzgrid:nzgrid)); dBdrho = 0.0
       if (.not. allocated(d2Bdrdth)) allocate (d2Bdrdth(-nzgrid:nzgrid)); d2Bdrdth = 0.0
       if (.not. allocated(dgradpardrho)) allocate (dgradpardrho(-nzgrid:nzgrid)); dgradpardrho = 0.0
@@ -1099,6 +1126,8 @@ contains
       call broadcast(bmag)
       call broadcast(bmag_psi0)
       call broadcast(btor)
+      call broadcast(RH_drift_phase_fac)
+      call broadcast(RH_drift_phase_defined)
       call broadcast(gradpar)
       call broadcast(b_dot_grad_z)
       call broadcast(b_dot_grad_z_averaged) 
@@ -1395,6 +1424,8 @@ contains
       if (allocated(bmag_psi0)) deallocate (bmag_psi0)
       if (allocated(btor)) deallocate (btor)
       if (allocated(rmajor)) deallocate (rmajor)
+      if (allocated(RH_drift_phase_fac)) deallocate (RH_drift_phase_fac)
+      RH_drift_phase_defined = .false.
       if (allocated(dbdzed)) deallocate (dbdzed)
       if (allocated(jacob)) deallocate (jacob)
       if (allocated(djacdrho)) deallocate (djacdrho)

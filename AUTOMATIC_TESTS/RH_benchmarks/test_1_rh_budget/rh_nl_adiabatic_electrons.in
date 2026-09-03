@@ -44,6 +44,10 @@
   nvgrid = 18
 /
 &knobs
+  ! Fix the seed: ginit_option='noise' otherwise draws a different initial
+  ! condition each run, and these runs grow exponentially, so the residual would not
+  ! be reproducible between invocations of the same deck.
+  rng_seed = 1
   delt = 0.02
   nstep = 1400
   print_extra_info_to_terminal = .false.

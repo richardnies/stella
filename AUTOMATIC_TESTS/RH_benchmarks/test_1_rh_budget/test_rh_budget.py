@@ -34,12 +34,14 @@
 # channel is about a quarter of the nonlinear one here, and carrying it along
 # imported its own error.
 #
-# Tolerances.  The nonlinear cases grow exponentially, so round-off differences
-# (a different MPI decomposition, say) are amplified over the comparison window
-# and the residual is not bit-reproducible between runs of the same deck.  On the
-# nonlinear channel, repeated runs gave 1.9e-3, 2.5e-3, 7.8e-3, 9.0e-3, 1.1e-2
-# and 3.2e-2, so 8% leaves a factor of a few in margin while still discriminating
-# sharply: a broken budget gives O(1), as rh_nl_kinetic.in does at 0.77.
+# Tolerances.  The nonlinear decks set rng_seed, so repeating one reproduces its
+# residual exactly; without that the noise initial condition differs every run
+# and, since these runs grow exponentially, the residual varied by an order of
+# magnitude between invocations of the same deck.  What a fixed seed does not fix
+# is a change of MPI decomposition, which reorders the reductions, so the
+# tolerance still has to carry a factor of a few.  Observed values on the
+# nonlinear channel run from 1.9e-3 to 3.2e-2, and 8% discriminates sharply
+# against a real break, which gives O(1).
 #
 # Residual floor.  The budget does not close exactly.  Part of the mismatch is
 # first order in delt by construction: RH_fluxes_collisional is evaluated as
@@ -192,11 +194,71 @@ def test_whether_rh_budget_closes_for_nonlinear_kinetic_electrons(tmp_path, stel
 def test_whether_rh_budget_closes_for_nonlinear_electromagnetic(tmp_path, stella_version):
     '''Nonlinear electromagnetic, exercising the apar and bpar RH flux channels
     alongside the electrostatic one.'''
-    #> Its tolerance is looser than the electrostatic cases.  Three field
-    #> channels contribute and the observed spread over repeated runs of this
-    #> deck is 2.6e-2 .. 5.9e-2, so 15% keeps a factor of a few in hand while
-    #> still discriminating against a real break, which gives O(1).
+    #> The window matters more here than for the electrostatic decks.  Earlier
+    #> than about t = 8 the zonal flow has barely moved -- the energy turnover
+    #> over the window is only about 2 -- and the budget is then dominated by
+    #> round-off rather than by the physics, giving a residual of order one.  By
+    #> t = 10 the flow is genuinely driven, turnover is around 7, and it closes
+    #> to about 2e-2.
     check_rh_budget('rh_nl_electromagnetic.in', tmp_path, stella_version,
-                    tolerance=0.15, time_min=6.0, time_max=16.0,
+                    tolerance=0.08, time_min=10.0, time_max=18.0,
                     channel='nonlinear', kx_max=1.1)
+    return
+
+
+#-------------------------------------------------------------------------------
+#                    INDEPENDENCE OF THE PARALLEL DOMAIN LENGTH                 #
+#-------------------------------------------------------------------------------
+def test_whether_rh_diagnostics_are_independent_of_parallel_length(tmp_path, stella_version, error=False):
+    '''The same physics over one poloidal turn and over three must give the same
+    Rosenbluth-Hinton quantities.
+
+    An axisymmetric equilibrium simply repeats, so extending the flux tube from
+    z in [-pi, pi] to [-5pi, 5pi] changes nothing physical.  The diagnostic gets
+    this right because dl_over_b is normalised to unit sum and therefore cancels
+    in the transit-average ratio, and because both B and the drift phase Q are
+    2pi-periodic in an axisymmetric field.  Nothing in the transit average
+    assumes a single turn.
+
+    This is the guard on that: it is what would break first if the parallel
+    integration weight or its normalisation were changed, and it is the
+    precondition for the stellarator work, where the domain is genuinely longer
+    than one turn.
+    '''
+
+    budgets = {}
+    inertias = {}
+    for input_filename in ('rh_linear_collisional.in', 'rh_linear_collisional_nperiod3.in'):
+        run_directory = tmp_path / input_filename.replace('.in', '')
+        run_directory.mkdir()
+        run_local_stella_simulation(input_filename, run_directory, stella_version)
+        local_netcdf_file = run_directory / input_filename.replace('.in', '.out.nc')
+        budgets[input_filename] = get_rh_budget(local_netcdf_file)
+        inertias[input_filename] = field_line_averaged_rh_inertia(local_netcdf_file)
+
+    one_turn, three_turns = 'rh_linear_collisional.in', 'rh_linear_collisional_nperiod3.in'
+
+    # The RH inertia is time-independent and sets the scale of everything else
+    inertia_difference = np.max(np.abs(inertias[one_turn] - inertias[three_turns])) \
+                       / np.max(np.abs(inertias[one_turn]))
+    if not (inertia_difference < 1e-4):
+        print('\nERROR: The RH inertia depends on the length of the parallel domain.'); error = True
+        print(f'    nperiod = 1: {inertias[one_turn]}')
+        print(f'    nperiod = 3: {inertias[three_turns]}')
+        print(f'    relative difference = {inertia_difference:.6e}   (tolerance 1.0e-04)')
+
+    # And the whole E_RH trajectory must follow
+    E_one, E_three = budgets[one_turn][1], budgets[three_turns][1]
+    energy_difference = np.max(np.abs(E_one - E_three)) / np.max(np.abs(E_one))
+    if not (energy_difference < 1e-4):
+        print('\nERROR: E_RH(t) depends on the length of the parallel domain.'); error = True
+        print(f'    relative difference = {energy_difference:.6e}   (tolerance 1.0e-04)')
+        print(f'    {"time":>10} {"nperiod=1":>16} {"nperiod=3":>16}')
+        time = budgets[one_turn][0]
+        for i in range(0, len(time), max(1, len(time) // 10)):
+            print(f'    {time[i]:10.3f} {E_one[i]:16.6e} {E_three[i]:16.6e}')
+
+    assert (not error), 'The Rosenbluth-Hinton diagnostics depend on the parallel domain length.'
+    print(f'  -->  RH diagnostics are independent of parallel length: inertia agrees to '
+          f'{inertia_difference:.1e}, E_RH(t) to {energy_difference:.1e}.')
     return

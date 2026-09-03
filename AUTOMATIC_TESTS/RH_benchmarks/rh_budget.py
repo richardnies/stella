@@ -186,3 +186,18 @@ def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total', 
     if norm == 0.0:
         return np.inf
     return np.linalg.norm(measured - expected) / norm
+
+
+def field_line_averaged_rh_inertia(netcdf_file):
+    '''The dl/B-averaged RH inertia, summed over species, against kx.
+
+    Time-independent, and the quantity every other RH result is scaled by, so it
+    is the sharpest thing to compare between two runs of the same physics.
+    '''
+    ncdata = Dataset(netcdf_file)
+    zed = np.array(ncdata.variables['zed'][:])
+    jacobian = np.array(ncdata.variables['jacob'][:])[:, 0]
+    weight = (zed[1] - zed[0]) * jacobian.copy()
+    weight[-1] = 0.0
+    weight = weight / weight.sum()
+    return _field_line_average(ncdata, 'RH_inertia', weight)
