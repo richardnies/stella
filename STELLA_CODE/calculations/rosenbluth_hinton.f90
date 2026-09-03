@@ -709,24 +709,75 @@ contains
    end subroutine find_well
 
    !> Turning point between <iz_out> (where B >= B_c) and <iz_in> (where B < B_c),
-   !> by linear interpolation of B.
-   pure real function turning_point(B_c, iz_out, iz_in)
+   !> found on the interpolated B rather than by joining the two grid values with
+   !> a straight line.
+   !>
+   !> The turning points are where the quadrature weight is largest, so their
+   !> position is what limits the bounce average.  Linear interpolation places
+   !> them to O(dz^2), which is coarse enough to dominate the answer for a well
+   !> spanning only a few grid points.  Here B is splined over a window around the
+   !> bracket, sampled on a fine sub-grid in a single call, and the crossing taken
+   !> from the sub-interval that contains it -- accurate to O((dz/n_refine)^2),
+   !> which is far below every other error in the scheme.
+   real function turning_point(B_c, iz_out, iz_in)
 
       use geometry, only: bmag
-      use zgrid, only: zed
+      use zgrid, only: nzgrid, zed
+      use splines, only: geo_spline
 
       implicit none
 
       real,    intent(in) :: B_c
       integer, intent(in) :: iz_out, iz_in
 
-      real :: B_out, B_in
-      integer :: ia
+      !> Points either side of the bracket used to build the spline, and the
+      !> number of samples across the bracketing interval.
+      integer, parameter :: n_halo = 3, n_refine = 256
+
+      real, dimension(:), allocatable :: z_window, B_window
+      real, dimension(n_refine) :: z_fine, B_fine
+      real    :: z_out, z_in, B_out, B_in
+      integer :: ia, iz, iz_first, iz_last, n_window, i
       ia = 1
 
-      B_out = bmag(ia, iz_out)
-      B_in = bmag(ia, iz_in)
-      turning_point = zed(iz_in) + (zed(iz_out) - zed(iz_in)) * (B_c - B_in) / (B_out - B_in)
+      z_out = zed(iz_out)
+      z_in = zed(iz_in)
+
+      ! Fall back on the straight line if the window would run off the domain
+      iz_first = max(-nzgrid, min(iz_out, iz_in) - n_halo)
+      iz_last = min(nzgrid, max(iz_out, iz_in) + n_halo)
+      n_window = iz_last - iz_first + 1
+      if (n_window < 4) then
+         B_out = bmag(ia, iz_out); B_in = bmag(ia, iz_in)
+         turning_point = z_in + (z_out - z_in) * (B_c - B_in) / (B_out - B_in)
+         return
+      end if
+
+      allocate (z_window(n_window), B_window(n_window))
+      do iz = iz_first, iz_last
+         i = iz - iz_first + 1
+         z_window(i) = zed(iz)
+         B_window(i) = bmag(ia, iz)
+      end do
+
+      do i = 1, n_refine
+         z_fine(i) = z_in + (z_out - z_in) * real(i - 1) / real(n_refine - 1)
+      end do
+      call geo_spline(z_window, B_window, z_fine, B_fine)
+      deallocate (z_window, B_window)
+
+      !> Walk out from the interior point to the first crossing of B_c, then place
+      !> it within that sub-interval.  Starting from the inside matters: if the
+      !> spline wobbles near the outer point, the crossing nearest the well is the
+      !> physical one.
+      turning_point = z_out
+      do i = 1, n_refine - 1
+         if ((B_fine(i) - B_c) * (B_fine(i + 1) - B_c) <= 0.) then
+            turning_point = z_fine(i) + (z_fine(i + 1) - z_fine(i)) &
+                            * (B_c - B_fine(i)) / (B_fine(i + 1) - B_fine(i))
+            return
+         end if
+      end do
 
    end function turning_point
 
