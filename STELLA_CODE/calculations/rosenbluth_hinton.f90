@@ -51,9 +51,11 @@ module rosenbluth_hinton
    complex, dimension(:,:,:,:), allocatable :: RH_integrand_even, RH_integrand_odd
    ! (nakx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
 
-   !> Bounce-averaged radial magnetic drift, zero for a passing particle and for
-   !> any particle in a well that runs off the end of the field line.  Needs no
-   !> drift-orbit phase, so it is available in geometries where the rest of the
+   !> Transit-averaged radial magnetic drift: the bounce average over its own
+   !> well for a trapped particle, the average along the whole field line for a
+   !> passing one.  Zero only where no complete orbit could be identified, which
+   !> is a well running off the end of the field line.  Needs no drift-orbit
+   !> phase, so it is available in geometries where the rest of the
    !> Rosenbluth-Hinton machinery is not.
    real, dimension(:,:), allocatable :: RH_drift_bounce_avg
    ! (-nzgrid:nzgrid, -vmu-layout-)
@@ -94,6 +96,7 @@ contains
       use geometry, only: RH_drift_phase_defined
       use parameters_physics, only: RH_analytic_drift_phase, RH_analytic_drift_phase_specified
       use parameters_physics, only: full_flux_surface, radial_variation
+      use parameters_diagnostics, only: write_RH_bounce_drift
 
       ! Dimensions
       use parameters_kxky_grids, only: nakx
@@ -130,15 +133,32 @@ contains
       !> it is computed even where the rest of the machinery cannot run.
       allocate (RH_drift_bounce_avg(-nzgrid:nzgrid, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
       RH_drift_bounce_avg = 0.
+
+      !> Filled here only to be reported.  Where Q is integrated along the field
+      !> line the main loop below overwrites this with the average that build
+      !> actually subtracted, which is the one the drift flux has to use; and
+      !> where Q is the closed form the drift flux is zero by construction, so
+      !> nothing but the diagnostic wants these numbers.  The loop costs
+      !> O(nvmu nz^2), so it is skipped when nobody asked for them.
+      if (write_RH_bounce_drift) then
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
          iv = iv_idx(vmu_lo, ivmu)
          imu = imu_idx(vmu_lo, ivmu)
          do iz = -nzgrid, nzgrid
-            call eval_bounce_averaged_drift(vpa(iv)**2 + vperp2(ia, iz, imu), mu(imu), iz, &
+            !> The transit average, not the bounce average: what survives the
+            !> Rosenbluth-Hinton projection is i kx <v_Mx> averaged over the orbit
+            !> the particle actually executes, which is its own well if it is
+            !> trapped and the whole field line if it is passing.  Passing
+            !> particles are most of velocity space and their transit-averaged
+            !> radial drift does not vanish in a stellarator, so leaving them at
+            !> zero -- as taking only the bounce average over a well does -- drops
+            !> the bulk of the drive.
+            call eval_drift_transit_average(vpa(iv)**2 + vperp2(ia, iz, imu), mu(imu), iz, &
                                             drift_average, well_found)
             if (well_found) RH_drift_bounce_avg(iz, ivmu) = drift_average
          end do
       end do
+      end if
 
       !> Choose how Q is obtained.  Unless the input file asked for one, follow the
       !> geometry: the closed form where the geometry supplies it, which is
@@ -208,9 +228,16 @@ contains
             !> built once here rather than nakx + 1 times inside the loops below.
             if (.not. use_analytic_drift_phase) then
                if (energyval > epsilon(0.)) then
-                  call eval_Q_profile_hat(muval / energyval, iz, Q_hat_z)
+                  call eval_Q_profile_hat(muval / energyval, iz, Q_hat_z, drift_average)
+                  !> eval_Q_profile_hat works at unit energy and the drift is
+                  !> linear in energy, so restore it here.  Taking the average
+                  !> from the Q build rather than recomputing it is what keeps the
+                  !> drift flux consistent with the phase, and so what lets the
+                  !> budget close.
+                  RH_drift_bounce_avg(iz, ivmu) = energyval * drift_average
                else
                   Q_hat_z = 0.
+                  RH_drift_bounce_avg(iz, ivmu) = 0.
                end if
             end if
 
@@ -376,7 +403,7 @@ contains
    subroutine get_RH_fluxes_fluxtube(g, RH_fluxes_phi_even,  RH_fluxes_phi_odd, &
                                         RH_fluxes_apar_even, RH_fluxes_apar_odd, &
                                         RH_fluxes_bpar_even, RH_fluxes_bpar_odd, &
-                                        RH_fluxes_coll)
+                                        RH_fluxes_coll, RH_fluxes_drift)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -393,7 +420,7 @@ contains
       use stella_transforms, only: transform_kx2x_xfirst, transform_x2kx_xfirst
       use constants, only: zi
       use parameters_physics, only: nonlinear
-      use geometry, only: exb_nonlin_fac
+      use geometry, only: exb_nonlin_fac, geo_surf, q_as_x
       use parameters_numerical, only: fphi
       use parameters_physics, only: include_apar, include_bpar
       use dissipation, only: include_collisions, collisions_implicit
@@ -428,6 +455,12 @@ contains
       complex, dimension(:, :, :, :), allocatable :: phi_copy, apar_copy, bpar_copy
       complex, dimension(:, :, :), allocatable :: gvmu_saved
       complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_coll
+
+      !> Drive from the bounce-averaged radial magnetic drift, with dimensions
+      !> (kx, z, tube, s)
+      complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_drift
+      complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_drift_tmp
+      real, dimension(:), allocatable :: drift_weight
 
       ! Local variables
       integer :: ivmu, iv, imu, is, ia, iz, it
@@ -608,6 +641,61 @@ contains
 
       endif
 
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+      !!! drift contribution !!!
+      !!!!!!!!!!!!!!!!!!!!!!!!!!
+      !> The transit average is built so that parallel streaming together with
+      !> the radial drift annihilates the Rosenbluth-Hinton projection: that is
+      !> what v_par b.grad Q = i kx (v_Mx - <v_Mx>_tau) says.  What survives is
+      !> exactly the bounce-averaged part, i kx <v_Mx>_b, which is why this term
+      !> is absent from a tokamak -- where quasisymmetry makes <v_Mx>_b vanish --
+      !> and present in a general stellarator.  It is not a nonlinear term and
+      !> does not need collisions, so unlike the two above it is evaluated for
+      !> every run.
+      !>
+      !> The other fluxes are defined with a factor -1/(i kx) relative to their
+      !> source term.  Here the source is itself -i kx sum_s Z_s n_s
+      !> integral(W <v_Mx>_b g), so the two factors of kx cancel and what is left
+      !> is a plain velocity integral.
+      !> Only where Q was integrated along the field line.  The closed form is
+      !> derived on the assumption that the transit-averaged drift vanishes, so
+      !> pairing it with a numerically non-zero one would leave the cancellation
+      !> between streaming and the drift incomplete and put a spurious term in
+      !> the budget.  Zero here is the consistent answer, and in the axisymmetric
+      !> geometry the closed form applies to, the true value anyway.
+      if (use_analytic_drift_phase) then
+         RH_fluxes_drift = 0.
+         return
+      end if
+
+      allocate (RH_fluxes_drift_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec))
+      RH_fluxes_drift_tmp = 0.
+
+      !> RH_drift_bounce_avg holds the bounce average of stella's geometric
+      !> drift, cvdrift0 vpa^2 + gbdrift0 vperp^2 / 2.  time_advance turns that
+      !> into a drift frequency with 0.5 * tz_psi0, divided by shat unless
+      !> q_as_x; that normalisation is applied here rather than being folded into
+      !> the stored array, which stays the pure geometric quantity the
+      !> write_RH_bounce_drift diagnostic reports.
+      allocate (drift_weight(nspec))
+      drift_weight = 0.5 * spec%dens_psi0 * spec%z * spec%tz_psi0
+      if (.not. q_as_x) drift_weight = drift_weight / geo_surf%shat
+
+      integrand_even = 0.
+      do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+         do it = 1, ntubes
+            do iz = -nzgrid, nzgrid
+               integrand_even(1, :, iz, it, ivmu) = g(1, :, iz, it, ivmu) &
+                  * (RH_integrand_even(:, iz, it, ivmu) + RH_integrand_odd(:, iz, it, ivmu)) &
+                  * RH_drift_bounce_avg(iz, ivmu)
+            end do
+         end do
+      end do
+
+      call integrate_vmu(integrand_even, drift_weight, RH_fluxes_drift_tmp)
+      RH_fluxes_drift = RH_fluxes_drift_tmp(1, :, :, :, :)
+
+      deallocate (RH_fluxes_drift_tmp, drift_weight)
 
    end subroutine get_RH_fluxes_fluxtube
  
@@ -847,7 +935,7 @@ contains
    !> overall sign.  Factoring all four out leaves a profile that depends on the
    !> field line and on lambda alone, which is why this is built once per pitch
    !> angle rather than once per (energy, mu, sigma, kx, species).
-   subroutine eval_Q_profile_hat(lambda, iz_ref, Q_hat)
+   subroutine eval_Q_profile_hat(lambda, iz_ref, Q_hat, drift_average_out)
 
       use geometry, only: bmag, gradpar, cvdrift0, gbdrift0, geo_surf, q_as_x, dbdzed
       use zgrid, only: nzgrid, zed
@@ -859,6 +947,14 @@ contains
       real,    intent(in)  :: lambda
       integer, intent(in)  :: iz_ref
       real, dimension(-nzgrid:), intent(out) :: Q_hat
+
+      !> The transit-averaged drift this routine subtracted, at unit energy.  The
+      !> Rosenbluth-Hinton drift flux has to use this very number: Q is built so
+      !> that streaming and the radial drift cancel against each other except for
+      !> the part averaged away here, so a flux formed from a drift average
+      !> computed by any other quadrature leaves that cancellation incomplete and
+      !> the budget does not close.
+      real, intent(out), optional :: drift_average_out
 
       !> Nodes in the angle variable.  What is integrated there is smooth, so the
       !> uniform trapezoidal rule on it is second order and this is well past
@@ -889,6 +985,7 @@ contains
       if (.not. q_as_x) drift_norm = drift_norm / geo_surf%shat
 
       Q_hat = 0.
+      drift_average = 0.
 
       !> Is this particle trapped, and if so, in which well?
       trapped = .false.
@@ -908,6 +1005,7 @@ contains
       !> both the right limit and the safe answer.
       if (lambda > epsilon(0.)) then
          if (1. / (2.*lambda) < maxval(bmag(ia, :)) .and. .not. trapped) then
+            if (present(drift_average_out)) drift_average_out = 0.
             return
          end if
       end if
@@ -939,6 +1037,7 @@ contains
             dz = zed(iz) - zed(iz - 1)
             Q_hat(iz) = Q_hat(iz - 1) + 0.5 * (integrand(iz) + integrand(iz - 1)) * dz
          end do
+         if (present(drift_average_out)) drift_average_out = drift_average
          return
       end if
 
@@ -1062,6 +1161,8 @@ contains
       end do
       if (iz_lo > -nzgrid) Q_hat(-nzgrid:iz_lo - 1) = 0.
       if (iz_hi < nzgrid) Q_hat(iz_hi + 1:nzgrid) = Psi(1)
+
+      if (present(drift_average_out)) drift_average_out = drift_average
 
       deallocate (z_well, g_well, num_well, den_well, theta_target, Q_target)
 

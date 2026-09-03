@@ -218,6 +218,7 @@ contains
 
       ! Write to netcdf file 
       use stella_io, only: write_RH_fluxes_phi_nc, write_RH_fluxes_apar_nc, write_RH_fluxes_bpar_nc, write_RH_fluxes_coll_nc
+      use stella_io, only: write_RH_fluxes_drift_nc
       
       ! Routines
       use job_manage, only: time_message
@@ -241,6 +242,7 @@ contains
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_vs_kxzts
+      complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_drift_vs_kxzts
 
       !---------------------------------------------------------------------- 
 
@@ -258,6 +260,7 @@ contains
       allocate (RH_fluxes_bpar_even_vs_kykxzts(naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_bpar_odd_vs_kykxzts( naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_vs_kxzts(                     nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_drift_vs_kxzts(                    nakx, nztot, ntubes, nspec))
 
       ! Calculate the RH inertia (kx,tube,s); RH fluxes(kx,tube,s)
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_fluxes'
@@ -270,7 +273,7 @@ contains
                 RH_fluxes_phi_even_vs_kykxzts,  RH_fluxes_phi_odd_vs_kykxzts, &
                 RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts, &
                 RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts, &
-                RH_fluxes_coll_vs_kxzts)
+                RH_fluxes_coll_vs_kxzts, RH_fluxes_drift_vs_kxzts)
       end if
 
       ! Write the RH_fluxes to the netcdf file
@@ -279,6 +282,7 @@ contains
          if (include_apar) call write_RH_fluxes_apar_nc(nout, RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts)
          if (include_bpar) call write_RH_fluxes_bpar_nc(nout, RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts)
          if (include_collisions) call write_RH_fluxes_coll_nc(nout, RH_fluxes_coll_vs_kxzts)
+         call write_RH_fluxes_drift_nc(nout, RH_fluxes_drift_vs_kxzts)
 
       end if
 
@@ -287,6 +291,7 @@ contains
       deallocate (RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts)
       deallocate (RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts)
       deallocate (RH_fluxes_coll_vs_kxzts)
+      deallocate (RH_fluxes_drift_vs_kxzts)
 
       ! End timer
       if (proc0) call time_message(.false., timer(:), 'Write RH_fluxes')

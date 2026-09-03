@@ -43,6 +43,11 @@ RH_FLUX_VARIABLES_NONLINEAR = [
 ]
 RH_FLUX_VARIABLES_COLLISIONAL = ['RH_fluxes_collisional']
 
+#> The bounce-averaged radial magnetic drift.  Absent from a tokamak, where
+#> quasisymmetry makes <v_Mx>_b vanish, and the leading drive in a general
+#> stellarator.  Older output files predate it, so it is read optionally.
+RH_FLUX_VARIABLES_DRIFT = ['RH_fluxes_drift']
+
 
 def _complex(ncdata, name):
     '''Read a stella complex variable, returning the array and its axis names.'''
@@ -72,8 +77,8 @@ def _field_line_average(ncdata, name, weight):
 
 
 def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
-    '''Return (time, E_RH, dE_RH/dt, P_RH, P_RH_nonlinear, P_RH_collisional), all
-    summed over kx.
+    '''Return (time, E_RH, dE_RH/dt, P_RH, P_RH_nonlinear, P_RH_collisional,
+    P_RH_drift), all summed over kx.
 
     dE_RH/dt is a centred difference, so it is defined on the interior points;
     P_RH is returned on the same points.
@@ -107,6 +112,7 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
 
     RH_fluxes_nonlinear = summed_fluxes(RH_FLUX_VARIABLES_NONLINEAR)
     RH_fluxes_collisional = summed_fluxes(RH_FLUX_VARIABLES_COLLISIONAL)
+    RH_fluxes_drift = summed_fluxes(RH_FLUX_VARIABLES_DRIFT)
 
     # kx = 0 carries no zonal-flow energy: 1-Gamma0 and the RH inertia both
     # vanish there, so the energy is 0/0.  Drop it.
@@ -118,6 +124,7 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     RH_inertia = RH_inertia[finite_kx]
     RH_fluxes_nonlinear = RH_fluxes_nonlinear[:, finite_kx]
     RH_fluxes_collisional = RH_fluxes_collisional[:, finite_kx]
+    RH_fluxes_drift = RH_fluxes_drift[:, finite_kx]
 
     #> The prefactor of eq (19), sum_s Z_s^2 e^2 n_s / T_s * <1 - Gamma_0s>_psi,
     #> summed over species.  Gamma_0s = I0(b_s) exp(-b_s) with b_s = kperp^2
@@ -147,6 +154,7 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
 
     P_RH_nonlinear = power(RH_fluxes_nonlinear)
     P_RH_collisional = power(RH_fluxes_collisional)
+    P_RH_drift = power(RH_fluxes_drift)
 
     # np.gradient rather than a fixed-step difference: a nonlinear run may adapt
     # delt, so the time axis is not guaranteed to be uniformly spaced.  Drop the
@@ -158,27 +166,31 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     time, E_RH_total, dE_RH_dt = time[interior], E_RH_total[interior], dE_RH_dt[interior]
     P_nonlinear = P_RH_nonlinear[interior].sum(axis=1)
     P_collisional = P_RH_collisional[interior].sum(axis=1)
+    P_drift = P_RH_drift[interior].sum(axis=1)
 
     window = np.ones_like(time, dtype=bool)
     if time_min is not None: window &= time >= time_min
     if time_max is not None: window &= time <= time_max
 
     return (time[window], E_RH_total[window], dE_RH_dt[window],
-            (P_nonlinear + P_collisional)[window],
-            P_nonlinear[window], P_collisional[window])
+            (P_nonlinear + P_collisional + P_drift)[window],
+            P_nonlinear[window], P_collisional[window], P_drift[window])
 
 
 def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total', kx_max=None):
     '''Relative L2 mismatch for the whole budget or for one channel.
 
-    channel='total'      dE_RH/dt                    against P_RH
-    channel='nonlinear'  dE_RH/dt - P_collisional    against P_nonlinear
+    channel='total'      dE_RH/dt                                against P_RH
+    channel='nonlinear'  dE_RH/dt - P_collisional - P_drift      against P_nonlinear
+    channel='drift'      dE_RH/dt - P_collisional - P_nonlinear  against P_drift
     '''
-    _, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional = get_rh_budget(
+    _, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift = get_rh_budget(
         netcdf_file, time_min, time_max, kx_max)
 
     if channel == 'nonlinear':
-        measured, expected = dE_RH_dt - P_collisional, P_nonlinear
+        measured, expected = dE_RH_dt - P_collisional - P_drift, P_nonlinear
+    elif channel == 'drift':
+        measured, expected = dE_RH_dt - P_collisional - P_nonlinear, P_drift
     else:
         measured, expected = dE_RH_dt, P_RH
 

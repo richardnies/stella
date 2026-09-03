@@ -70,6 +70,7 @@ module stella_io
    public :: write_RH_fluxes_apar_nc
    public :: write_RH_fluxes_bpar_nc
    public :: write_RH_fluxes_coll_nc
+   public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
@@ -887,6 +888,31 @@ contains
 #endif
 
    end subroutine write_RH_fluxes_coll_nc
+
+   !============================================================================
+   !=================== WRITE RH DRIFT FLUX TO NETCDF FILE =====================
+   !============================================================================
+   subroutine write_RH_fluxes_drift_nc(nout, RH_fluxes_drift)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :), intent(in) :: RH_fluxes_drift
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(6) :: start
+      start = [1, 1, 1, 1, 1, nout]
+
+      ! Write the RH drift flux (kx,z,tube,s,t,ri)
+      call netcdf_write_complex(ncid, "RH_fluxes_drift",  RH_fluxes_drift, &
+               dim_names=dims, start=start, &
+               long_name="Rosenbluth-Hinton bounce-averaged-drift flux to ZF with kx")
+
+#endif
+
+   end subroutine write_RH_fluxes_drift_nc
 
 
    !----------------------- RH phi -----------------------

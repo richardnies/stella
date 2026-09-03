@@ -102,11 +102,11 @@ def check_rh_budget(input_filename, tmp_path, stella_version, tolerance,
     run_local_stella_simulation(input_filename, tmp_path, stella_version)
     local_netcdf_file = tmp_path / input_filename.replace('.in', '.out.nc')
 
-    time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional = get_rh_budget(
+    time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift = get_rh_budget(
         local_netcdf_file, time_min, time_max, kx_max)
 
     if channel == 'nonlinear':
-        measured, expected, what = dE_RH_dt - P_collisional, P_nonlinear, 'nonlinear channel'
+        measured, expected, what = dE_RH_dt - P_collisional - P_drift, P_nonlinear, 'nonlinear channel'
     else:
         measured, expected, what = dE_RH_dt, P_RH, 'total budget'
     residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)
@@ -139,7 +139,8 @@ def check_rh_budget(input_filename, tmp_path, stella_version, tolerance,
         print(f'\nERROR: The Rosenbluth-Hinton energy budget does not close for {input_filename}.'); error = True
         print(f'    {what}, relative L2 residual = {residual:14.6e}   (tolerance {tolerance:.1e})')
         print(f'    nonlinear channel peaks at {np.abs(P_nonlinear).max():.6e}, '
-              f'collisional at {np.abs(P_collisional).max():.6e}')
+              f'collisional at {np.abs(P_collisional).max():.6e}, '
+              f'drift at {np.abs(P_drift).max():.6e}')
         print(f'    {"time":>10} {"measured":>16} {"expected":>16} {"ratio":>10}')
         for i in range(0, len(time), max(1, len(time) // 12)):
             ratio = measured[i] / expected[i] if expected[i] != 0 else np.nan
