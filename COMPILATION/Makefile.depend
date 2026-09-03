@@ -375,7 +375,6 @@ $(OBJ_DIR)/dist_fn.o: \
 	 $(OBJ_DIR)/species.o \
 	 $(OBJ_DIR)/stella_layouts.o \
 	 $(OBJ_DIR)/stella_transforms.o \
-	 $(OBJ_DIR)/volume_averages.o \
 	 $(OBJ_DIR)/vpamu_grids.o \
 	 $(OBJ_DIR)/zgrid.o 
 $(OBJ_DIR)/dist_redistribute.o: \
@@ -876,6 +875,7 @@ $(OBJ_DIR)/rosenbluth_hinton.o: \
 	 $(OBJ_DIR)/parameters_physics.o \
 	 $(OBJ_DIR)/species.o \
 	 $(OBJ_DIR)/spfunc.o \
+	 $(OBJ_DIR)/spl.o \
 	 $(OBJ_DIR)/stella_layouts.o \
 	 $(OBJ_DIR)/stella_time.o \
 	 $(OBJ_DIR)/stella_transforms.o \
@@ -1049,7 +1049,6 @@ $(OBJ_DIR)/volume_averages.o: \
 	 $(OBJ_DIR)/grids_kxky.o \
 	 $(OBJ_DIR)/parameters_kxky_grids.o \
 	 $(OBJ_DIR)/parameters_physics.o \
-	 $(OBJ_DIR)/species.o \
 	 $(OBJ_DIR)/stella_transforms.o \
 	 $(OBJ_DIR)/zgrid.o 
 $(OBJ_DIR)/vpamu_grids.o: \
