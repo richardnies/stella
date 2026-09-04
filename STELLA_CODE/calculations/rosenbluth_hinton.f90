@@ -397,8 +397,14 @@ contains
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
 
-                integrand_vpamu(1, :, iz, it, ivmu) = (1 - aj0x(1,:,iz,ivmu)*(RH_integrand_even(:,iz,it,ivmu)+RH_integrand_odd(:,iz,it,ivmu))) * &
-                                       maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is)*maxwell_fac(is) * spec(is)%zt
+                integrand_vpamu(1, :, iz, it, ivmu) = (1 - aj0x(1,:,iz,ivmu)*(RH_integrand_even(:,iz,it,ivmu)+RH_integrand_odd(:,iz,it,ivmu))) &
+                                       * spec(is)%zt
+                !> integrate_vmu folds the Maxwellian into its own weights when
+                !> the evolved pdf is normalised by one, so applying it here too
+                !> would count it twice.
+                if (.not. maxwellian_normalization) &
+                   integrand_vpamu(1, :, iz, it, ivmu) = integrand_vpamu(1, :, iz, it, ivmu) &
+                      * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
 
             end do
          end do
@@ -480,6 +486,7 @@ contains
       complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_drift_passing
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_drift_tmp
       real, dimension(:), allocatable :: drift_weight
+      complex, dimension(:), allocatable :: boltzmann
 
       ! Local variables
       integer :: ivmu, iv, imu, is, ia, iz, it
@@ -698,6 +705,7 @@ contains
       !> the stored array, which stays the pure geometric quantity the
       !> write_RH_bounce_drift diagnostic reports.
       allocate (drift_weight(nspec))
+      allocate (boltzmann(nakx))
       drift_weight = 0.5 * xdriftknob * spec%dens_psi0 * spec%z * spec%tz_psi0
       if (.not. q_as_x) drift_weight = drift_weight / geo_surf%shat
 
@@ -718,18 +726,21 @@ contains
          is = is_idx(vmu_lo, ivmu)
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
+               !> The Boltzmann part of the response, (Z/T) J_0 phi F_M.  Its
+               !> Maxwellian is dropped when the evolved pdf already carries
+               !> one, for the same reason as above.
+               boltzmann = fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt
+               if (.not. maxwellian_normalization) &
+                  boltzmann = boltzmann * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
+
                if (RH_drift_is_trapped(iz, ivmu)) then
                   integrand_even(1, :, iz, it, ivmu) = &
-                     (g(1, :, iz, it, ivmu) &
-                      + fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt &
-                        * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)) &
+                     (g(1, :, iz, it, ivmu) + boltzmann) &
                      * (RH_integrand_even(:, iz, it, ivmu) + RH_integrand_odd(:, iz, it, ivmu)) &
                      * RH_drift_bounce_avg(iz, ivmu)
                else
                   integrand_odd(1, :, iz, it, ivmu) = &
-                     (g(1, :, iz, it, ivmu) &
-                      + fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt &
-                        * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)) &
+                     (g(1, :, iz, it, ivmu) + boltzmann) &
                      * (RH_integrand_even(:, iz, it, ivmu) + RH_integrand_odd(:, iz, it, ivmu)) &
                      * RH_drift_bounce_avg(iz, ivmu)
                end if
@@ -742,7 +753,7 @@ contains
       call integrate_vmu(integrand_odd, drift_weight, RH_fluxes_drift_tmp)
       RH_fluxes_drift_passing = RH_fluxes_drift_tmp(1, :, :, :, :)
 
-      deallocate (RH_fluxes_drift_tmp, drift_weight)
+      deallocate (RH_fluxes_drift_tmp, drift_weight, boltzmann)
 
    end subroutine get_RH_fluxes_fluxtube
  
@@ -799,7 +810,13 @@ contains
       RH_integrand_tmp = 0.
       RH_integrand_tmp(1,:,:,:,:) = RH_integrand_even+RH_integrand_odd
 
-      call integrate_vmu(g * RH_integrand_tmp, spec%z, RH_phi_I_tmp)
+      !> Weighted by Z_s n_s, as the inertia and every flux are.  This carried
+      !> only Z_s, so RH_phi_I was short a density factor relative to everything
+      !> it is paired with -- invisible wherever dens = 1, wrong otherwise, and
+      !> exactly the kind of mismatch that stops RH_phi_I being the inertia times
+      !> phi.  It cancels from the budget slope, appearing in dE_RH/dt and in
+      !> P_RH alike, which is why the benchmarks never saw it.
+      call integrate_vmu(g * RH_integrand_tmp, spec%dens_psi0 * spec%z, RH_phi_I_tmp)
       RH_phi_I = RH_phi_I_tmp(1,:,:,:,:)
 
       deallocate (RH_phi_I_tmp)
