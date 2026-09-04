@@ -1064,16 +1064,26 @@ contains
          end if
       end if
 
-      !> A trapped particle whose well could not be resolved on the z grid.  It
-      !> must not fall through to the passing branch below: that anchors Q at the
-      !> end of the field line rather than at a turning point, and for a trapped
-      !> particle the caller averages the two signs of v_par, an operation that
-      !> is not invariant under adding a constant to Q.  Such a well spans barely
-      !> a grid cell, so |v_par| and with it Q are small throughout it; zero is
-      !> both the right limit and the safe answer.
+      !> A trapped particle whose well could not be resolved on the z grid.  Q is
+      !> left at zero: such a well spans barely a grid cell, so the phase across
+      !> it is small, and it must not fall through to the passing branch, which
+      !> anchors Q at the end of the field line rather than at a turning point --
+      !> not invariant under the two-sign average the caller applies to trapped
+      !> particles.
+      !>
+      !> The drift average is a different matter.  Zero is not its limit: as the
+      !> well narrows the bounce average tends to the local value of the drift at
+      !> the point the particle sits, not to nothing.  These orbits are counted as
+      !> trapped by the flux split, so returning zero for them dilutes the trapped
+      !> drive by their share of it -- 14% of trapped weight in W7-X, 27% in
+      !> TJ-II -- which is enough to account for the deficit in that channel.
       if (lambda > epsilon(0.)) then
          if (1. / (2.*lambda) < maxval(bmag(ia, :)) .and. .not. trapped) then
-            if (present(drift_average_out)) drift_average_out = 0.
+            if (present(drift_average_out)) then
+               vperp2 = 2.*lambda*bmag(ia, iz_ref)
+               vpa2 = 1. - vperp2
+               drift_average_out = cvdrift0(ia, iz_ref) * vpa2 + gbdrift0(ia, iz_ref) * 0.5 * vperp2
+            end if
             return
          end if
       end if
