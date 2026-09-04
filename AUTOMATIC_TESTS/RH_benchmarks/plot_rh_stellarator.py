@@ -71,7 +71,7 @@ def energy_from_phi(netcdf_file):
 
 
 def figure(netcdf_file, title, outfile, time_min=3.0):
-    time, E, dEdt, P, P_nl, P_coll, P_drift = get_rh_budget(netcdf_file)
+    time, E, dEdt, P, P_nl, P_coll, P_drift, P_drift_tr, P_drift_pa = get_rh_budget(netcdf_file)
     t_phi, E_phi = energy_from_phi(netcdf_file)
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(7.2, 6.4), sharex=True,
@@ -87,7 +87,9 @@ def figure(netcdf_file, title, outfile, time_min=3.0):
 
     ax_p.plot(time, dEdt, color='#1b3a5c', lw=1.9, label=r'$dE_{\rm RH}/dt$  (measured)')
     ax_p.plot(time, P, color='#c2703a', lw=1.3, ls='--', label=r'$\sum P_{\rm RH}$  (predicted)')
-    for series, colour, label in ((P_drift, '#2e7d6b', r'$P_{\rm RH}$ drift'),
+    for series, colour, label in ((P_drift, '#2e7d6b', r'$P_{\rm RH}$ drift (total)'),
+                                  (P_drift_tr, '#4fa58f', r'$P_{\rm RH}$ drift, trapped'),
+                                  (P_drift_pa, '#8ec5b4', r'$P_{\rm RH}$ drift, passing'),
                                   (P_coll, '#8a6d1f', r'$P_{\rm RH}$ collisional'),
                                   (P_nl, '#7d3c6b', r'$P_{\rm RH}$ nonlinear')):
         if np.any(series != 0):

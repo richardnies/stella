@@ -892,11 +892,11 @@ contains
    !============================================================================
    !=================== WRITE RH DRIFT FLUX TO NETCDF FILE =====================
    !============================================================================
-   subroutine write_RH_fluxes_drift_nc(nout, RH_fluxes_drift)
+   subroutine write_RH_fluxes_drift_nc(nout, RH_fluxes_drift_trapped, RH_fluxes_drift_passing)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :), intent(in) :: RH_fluxes_drift
+      complex, dimension(:, :, :, :), intent(in) :: RH_fluxes_drift_trapped, RH_fluxes_drift_passing
 
 #ifdef NETCDF
 
@@ -905,10 +905,16 @@ contains
       integer, dimension(6) :: start
       start = [1, 1, 1, 1, 1, nout]
 
-      ! Write the RH drift flux (kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_drift",  RH_fluxes_drift, &
+      !> The two populations are written apart because they do not stand on the
+      !> same footing: a trapped orbit lies wholly within the tube, while a
+      !> passing one is averaged over a field line that, on an irrational
+      !> surface, never closes.
+      call netcdf_write_complex(ncid, "RH_fluxes_drift_trapped",  RH_fluxes_drift_trapped, &
                dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton bounce-averaged-drift flux to ZF with kx")
+               long_name="Rosenbluth-Hinton drift flux to ZF with kx, trapped particles")
+      call netcdf_write_complex(ncid, "RH_fluxes_drift_passing",  RH_fluxes_drift_passing, &
+               dim_names=dims, start=start, &
+               long_name="Rosenbluth-Hinton drift flux to ZF with kx, passing particles")
 
 #endif
 

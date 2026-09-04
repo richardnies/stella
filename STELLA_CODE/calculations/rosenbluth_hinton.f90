@@ -39,6 +39,7 @@ module rosenbluth_hinton
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
    public :: RH_drift_bounce_avg
+   public :: RH_drift_is_trapped
    public :: eval_bounce_averaged_drift
 
    real, dimension(:,:), allocatable :: RH_U_parallel_fac
@@ -58,6 +59,18 @@ module rosenbluth_hinton
    !> phase, so it is available in geometries where the rest of the
    !> Rosenbluth-Hinton machinery is not.
    real, dimension(:,:), allocatable :: RH_drift_bounce_avg
+   ! (-nzgrid:nzgrid, -vmu-layout-)
+
+   !> Which of those orbits are trapped.  The drift drive is reported separately
+   !> for the two populations because they do not stand on the same footing.  A
+   !> trapped particle's average is over its own well, which is wholly inside the
+   !> simulated tube, so it is the orbit average whatever the tube.  A passing
+   !> particle's is taken over the tube, and on an irrational surface the field
+   !> line never closes: the true average is over the flux surface, and what the
+   !> tube gives instead is an artefact of the flux-tube construction.  On a
+   !> rational surface, with the tube spanning the closed line, the two coincide
+   !> and the passing contribution is physical.
+   logical, dimension(:,:), allocatable :: RH_drift_is_trapped
    ! (-nzgrid:nzgrid, -vmu-layout-)
 
    private
@@ -133,6 +146,8 @@ contains
       !> it is computed even where the rest of the machinery cannot run.
       allocate (RH_drift_bounce_avg(-nzgrid:nzgrid, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
       RH_drift_bounce_avg = 0.
+      allocate (RH_drift_is_trapped(-nzgrid:nzgrid, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      RH_drift_is_trapped = .false.
 
       !> Filled here only to be reported.  Where Q is integrated along the field
       !> line the main loop below overwrites this with the average that build
@@ -235,6 +250,7 @@ contains
                   !> drift flux consistent with the phase, and so what lets the
                   !> budget close.
                   RH_drift_bounce_avg(iz, ivmu) = energyval * drift_average
+                  RH_drift_is_trapped(iz, ivmu) = trapped
                else
                   Q_hat_z = 0.
                   RH_drift_bounce_avg(iz, ivmu) = 0.
@@ -291,6 +307,7 @@ contains
       if (allocated(RH_U_parallel_fac)) deallocate (RH_U_parallel_fac)
       if (allocated(RH_inertia))        deallocate (RH_inertia)
       if (allocated(RH_drift_bounce_avg)) deallocate (RH_drift_bounce_avg)
+      if (allocated(RH_drift_is_trapped)) deallocate (RH_drift_is_trapped)
 
       rosenbluth_hinton_initialized = .false.
 
@@ -403,7 +420,7 @@ contains
    subroutine get_RH_fluxes_fluxtube(g, RH_fluxes_phi_even,  RH_fluxes_phi_odd, &
                                         RH_fluxes_apar_even, RH_fluxes_apar_odd, &
                                         RH_fluxes_bpar_even, RH_fluxes_bpar_odd, &
-                                        RH_fluxes_coll, RH_fluxes_drift)
+                                        RH_fluxes_coll, RH_fluxes_drift_trapped, RH_fluxes_drift_passing)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -456,9 +473,11 @@ contains
       complex, dimension(:, :, :), allocatable :: gvmu_saved
       complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_coll
 
-      !> Drive from the bounce-averaged radial magnetic drift, with dimensions
-      !> (kx, z, tube, s)
-      complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_drift
+      !> Drive from the transit-averaged radial magnetic drift, reported
+      !> separately for the trapped and passing populations; their sum is the
+      !> whole drive.  See RH_drift_is_trapped for why they are kept apart.
+      complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_drift_trapped
+      complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_drift_passing
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_drift_tmp
       real, dimension(:), allocatable :: drift_weight
 
@@ -664,7 +683,8 @@ contains
       !> the budget.  Zero here is the consistent answer, and in the axisymmetric
       !> geometry the closed form applies to, the true value anyway.
       if (use_analytic_drift_phase) then
-         RH_fluxes_drift = 0.
+         RH_fluxes_drift_trapped = 0.
+         RH_fluxes_drift_passing = 0.
          return
       end if
 
@@ -691,24 +711,36 @@ contains
       !>
       !> and keeping only the g piece of it accounts for a fraction of the drive.
       integrand_even = 0.
+      integrand_odd = 0.
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
          iv = iv_idx(vmu_lo, ivmu)
          imu = imu_idx(vmu_lo, ivmu)
          is = is_idx(vmu_lo, ivmu)
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
-               integrand_even(1, :, iz, it, ivmu) = &
-                  (g(1, :, iz, it, ivmu) &
-                   + fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt &
-                     * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)) &
-                  * (RH_integrand_even(:, iz, it, ivmu) + RH_integrand_odd(:, iz, it, ivmu)) &
-                  * RH_drift_bounce_avg(iz, ivmu)
+               if (RH_drift_is_trapped(iz, ivmu)) then
+                  integrand_even(1, :, iz, it, ivmu) = &
+                     (g(1, :, iz, it, ivmu) &
+                      + fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt &
+                        * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)) &
+                     * (RH_integrand_even(:, iz, it, ivmu) + RH_integrand_odd(:, iz, it, ivmu)) &
+                     * RH_drift_bounce_avg(iz, ivmu)
+               else
+                  integrand_odd(1, :, iz, it, ivmu) = &
+                     (g(1, :, iz, it, ivmu) &
+                      + fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt &
+                        * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)) &
+                     * (RH_integrand_even(:, iz, it, ivmu) + RH_integrand_odd(:, iz, it, ivmu)) &
+                     * RH_drift_bounce_avg(iz, ivmu)
+               end if
             end do
          end do
       end do
 
       call integrate_vmu(integrand_even, drift_weight, RH_fluxes_drift_tmp)
-      RH_fluxes_drift = RH_fluxes_drift_tmp(1, :, :, :, :)
+      RH_fluxes_drift_trapped = RH_fluxes_drift_tmp(1, :, :, :, :)
+      call integrate_vmu(integrand_odd, drift_weight, RH_fluxes_drift_tmp)
+      RH_fluxes_drift_passing = RH_fluxes_drift_tmp(1, :, :, :, :)
 
       deallocate (RH_fluxes_drift_tmp, drift_weight)
 

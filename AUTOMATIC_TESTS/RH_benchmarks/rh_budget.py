@@ -46,7 +46,18 @@ RH_FLUX_VARIABLES_COLLISIONAL = ['RH_fluxes_collisional']
 #> The bounce-averaged radial magnetic drift.  Absent from a tokamak, where
 #> quasisymmetry makes <v_Mx>_b vanish, and the leading drive in a general
 #> stellarator.  Older output files predate it, so it is read optionally.
-RH_FLUX_VARIABLES_DRIFT = ['RH_fluxes_drift']
+#> Reported apart because the two populations do not stand on the same footing.
+#> A trapped orbit lies wholly inside the simulated tube, so its average is the
+#> orbit average whatever the tube is.  A passing orbit is averaged along the
+#> tube, and on an irrational surface the field line never closes: the true
+#> average is over the flux surface, and the tube gives an artefact of the
+#> flux-tube construction instead.  On a rational surface, with the tube spanning
+#> the closed line, the two coincide and the passing drive is physical.
+#> 'RH_fluxes_drift' is the name written before the split; it is still read so
+#> that earlier output files load.
+RH_FLUX_VARIABLES_DRIFT = ['RH_fluxes_drift', 'RH_fluxes_drift_trapped', 'RH_fluxes_drift_passing']
+RH_FLUX_VARIABLES_DRIFT_TRAPPED = ['RH_fluxes_drift_trapped']
+RH_FLUX_VARIABLES_DRIFT_PASSING = ['RH_fluxes_drift_passing']
 
 
 def _complex(ncdata, name):
@@ -113,6 +124,8 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     RH_fluxes_nonlinear = summed_fluxes(RH_FLUX_VARIABLES_NONLINEAR)
     RH_fluxes_collisional = summed_fluxes(RH_FLUX_VARIABLES_COLLISIONAL)
     RH_fluxes_drift = summed_fluxes(RH_FLUX_VARIABLES_DRIFT)
+    RH_fluxes_drift_trapped = summed_fluxes(RH_FLUX_VARIABLES_DRIFT_TRAPPED)
+    RH_fluxes_drift_passing = summed_fluxes(RH_FLUX_VARIABLES_DRIFT_PASSING)
 
     # kx = 0 carries no zonal-flow energy: 1-Gamma0 and the RH inertia both
     # vanish there, so the energy is 0/0.  Drop it.
@@ -125,6 +138,8 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     RH_fluxes_nonlinear = RH_fluxes_nonlinear[:, finite_kx]
     RH_fluxes_collisional = RH_fluxes_collisional[:, finite_kx]
     RH_fluxes_drift = RH_fluxes_drift[:, finite_kx]
+    RH_fluxes_drift_trapped = RH_fluxes_drift_trapped[:, finite_kx]
+    RH_fluxes_drift_passing = RH_fluxes_drift_passing[:, finite_kx]
 
     #> The prefactor of eq (19), sum_s Z_s^2 e^2 n_s / T_s * <1 - Gamma_0s>_psi,
     #> summed over species.  Gamma_0s = I0(b_s) exp(-b_s) with b_s = kperp^2
@@ -155,6 +170,8 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     P_RH_nonlinear = power(RH_fluxes_nonlinear)
     P_RH_collisional = power(RH_fluxes_collisional)
     P_RH_drift = power(RH_fluxes_drift)
+    P_RH_drift_trapped = power(RH_fluxes_drift_trapped)
+    P_RH_drift_passing = power(RH_fluxes_drift_passing)
 
     # np.gradient rather than a fixed-step difference: a nonlinear run may adapt
     # delt, so the time axis is not guaranteed to be uniformly spaced.  Drop the
@@ -167,6 +184,8 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     P_nonlinear = P_RH_nonlinear[interior].sum(axis=1)
     P_collisional = P_RH_collisional[interior].sum(axis=1)
     P_drift = P_RH_drift[interior].sum(axis=1)
+    P_drift_trapped = P_RH_drift_trapped[interior].sum(axis=1)
+    P_drift_passing = P_RH_drift_passing[interior].sum(axis=1)
 
     window = np.ones_like(time, dtype=bool)
     if time_min is not None: window &= time >= time_min
@@ -174,7 +193,8 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
 
     return (time[window], E_RH_total[window], dE_RH_dt[window],
             (P_nonlinear + P_collisional + P_drift)[window],
-            P_nonlinear[window], P_collisional[window], P_drift[window])
+            P_nonlinear[window], P_collisional[window], P_drift[window],
+            P_drift_trapped[window], P_drift_passing[window])
 
 
 def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total', kx_max=None):
@@ -184,7 +204,7 @@ def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total', 
     channel='nonlinear'  dE_RH/dt - P_collisional - P_drift      against P_nonlinear
     channel='drift'      dE_RH/dt - P_collisional - P_nonlinear  against P_drift
     '''
-    _, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift = get_rh_budget(
+    _, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift, _, _ = get_rh_budget(
         netcdf_file, time_min, time_max, kx_max)
 
     if channel == 'nonlinear':

@@ -29,7 +29,7 @@ from rh_budget import get_rh_budget
 
 
 def plot_one(netcdf_file, out_dir, time_min=None, time_max=None, kx_max=None):
-    time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift = get_rh_budget(
+    time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift, P_drift_tr, P_drift_pa = get_rh_budget(
         netcdf_file, time_min, time_max, kx_max)
 
     residual = np.linalg.norm(dE_RH_dt - P_RH) / np.linalg.norm(P_RH)
