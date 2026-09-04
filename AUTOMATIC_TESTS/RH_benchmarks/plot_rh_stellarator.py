@@ -8,6 +8,10 @@ Top panel:    E_RH, the zonal-flow energy as reconstructed from the RH
 
 Bottom panel: dE_RH/dt against the summed P_RH and its individual channels.  A
               closed budget puts dE_RH/dt on top of the total.
+
+`grid` draws the same budget check for a whole set of runs at once, one row per
+configuration and one column per field line, which is how the configurations are
+compared against each other.
 """
 import sys
 import numpy as np
@@ -108,6 +112,81 @@ def figure(netcdf_file, title, outfile, time_min=3.0):
                               f'   (for $t>{time_min:g}$)',
                   transform=ax_p.transAxes, ha='right', va='bottom', fontsize=8.5, color='#444')
 
+    fig.savefig(outfile, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    return outfile
+
+
+def budget_slope(netcdf_file, time_min=3.0):
+    """Regression of the measured dE_RH/dt on the predicted sum, over t > time_min.
+
+    A closed budget gives 1.  Returned alongside the correlation, which separates
+    a genuine amplitude error from a mere phase error: a slope away from 1 with a
+    correlation near 1 means every channel is present but one is mis-weighted.
+
+    Also returns the drive strength, rms(P) divided by the zonal-flow energy.
+    Where the bounce-averaged drift very nearly vanishes -- an axisymmetric
+    equilibrium, or a field line sitting close enough to a symmetry -- the
+    residual is undamped, both sides of the budget fall to the level of the
+    time-integration error, and the slope becomes a ratio of noise.  The drive
+    is what says whether the slope means anything.
+    """
+    time, E, dEdt, P = get_rh_budget(netcdf_file)[:4]
+    window = time >= time_min
+    if window.sum() < 3 or not np.any(P[window]):
+        return float('nan'), float('nan'), 0.0
+    slope = (dEdt[window] * P[window]).sum() / (P[window] * P[window]).sum()
+    drive = np.sqrt((P[window]**2).mean()) / abs(E[-1]) if E[-1] else 0.0
+    return slope, np.corrcoef(dEdt[window], P[window])[0, 1], drive
+
+
+def grid(runs, outfile, time_min=3.0):
+    """One budget panel per (configuration, field line).
+
+    `runs` maps a configuration name to a list of (field-line label, netCDF path)
+    in the order the columns should appear.  Rows share a y axis so that the
+    configurations can be compared by eye; columns do not, because the drive
+    changes size from one field line to the next.
+    """
+    configurations = list(runs)
+    n_col = max(len(v) for v in runs.values())
+    fig, axes = plt.subplots(len(configurations), n_col, sharex=True,
+                             figsize=(3.1 * n_col, 1.95 * len(configurations)),
+                             squeeze=False)
+    for row, configuration in enumerate(configurations):
+        for col in range(n_col):
+            ax = axes[row][col]
+            ax.grid(alpha=0.15, lw=0.6)
+            ax.tick_params(labelsize=7.5)
+            if col >= len(runs[configuration]):
+                ax.axis('off')
+                continue
+            label, path = runs[configuration][col]
+            time, _, dEdt, P = get_rh_budget(path)[:4]
+            ax.plot(time, dEdt, color='#1b3a5c', lw=1.5)
+            ax.plot(time, P, color='#c2703a', lw=1.1, ls='--')
+            ax.axhline(0.0, color='k', lw=0.5, alpha=0.3)
+            slope, corr, drive = budget_slope(path, time_min)
+            #> Below roughly a per-mille of drive there is nothing to check: both
+            #> sides sit at the time-integration noise floor, and quoting a slope
+            #> there would invite reading noise as an error.
+            if drive < 1e-3:
+                note, colour = f'no drive\n($|P|/E$ = {drive:.0e})', '#999'
+            else:
+                note, colour = f'slope {slope:.3f}\ncorr {corr:.4f}', '#444'
+            ax.text(0.97, 0.06, note, transform=ax.transAxes,
+                    ha='right', va='bottom', fontsize=7, color=colour, linespacing=1.35)
+            if row == 0:
+                ax.set_title(label, fontsize=9)
+            if col == 0:
+                ax.set_ylabel(configuration, fontsize=9.5)
+            if row == len(configurations) - 1:
+                ax.set_xlabel(r'time  $[a/v_{\rm th}]$', fontsize=8.5)
+    axes[0][0].plot([], [], color='#1b3a5c', lw=1.5, label=r'$dE_{\rm RH}/dt$  (measured)')
+    axes[0][0].plot([], [], color='#c2703a', lw=1.1, ls='--', label=r'$\sum P_{\rm RH}$  (predicted)')
+    fig.legend(*axes[0][0].get_legend_handles_labels(), frameon=False, fontsize=9,
+               loc='lower center', ncol=2, bbox_to_anchor=(0.5, -0.02))
+    fig.tight_layout()
     fig.savefig(outfile, dpi=150, bbox_inches='tight')
     plt.close(fig)
     return outfile

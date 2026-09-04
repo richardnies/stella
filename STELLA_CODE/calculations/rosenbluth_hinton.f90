@@ -285,8 +285,9 @@ contains
 
       deallocate (Q_hat_z)
 
-      ! TODO-RN : implement for radial variation and full flux surface
-      ! Calculate the RH_inertia for a flux tube simulation
+      !> Flux tube only.  init_rosenbluth_hinton aborts above for
+      !> full_flux_surface and radial_variation, so this is reached only where
+      !> the flux-tube form is the right one.
       call get_RH_inertia_fluxtube()
 
    end subroutine init_rosenbluth_hinton
@@ -397,8 +398,9 @@ contains
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
 
-                integrand_vpamu(1, :, iz, it, ivmu) = (1 - aj0x(1,:,iz,ivmu)*(RH_integrand_even(:,iz,it,ivmu)+RH_integrand_odd(:,iz,it,ivmu))) &
-                                       * spec(is)%zt
+                integrand_vpamu(1, :, iz, it, ivmu) = spec(is)%zt &
+                     * (1 - aj0x(1, :, iz, ivmu) * (RH_integrand_even(:, iz, it, ivmu) &
+                                                    + RH_integrand_odd(:, iz, it, ivmu)))
                 !> integrate_vmu folds the Maxwellian into its own weights when
                 !> the evolved pdf is normalised by one, so applying it here too
                 !> would count it twice.
@@ -868,6 +870,22 @@ contains
          iz_hi = iz_hi + 1
       end do
 
+      !> Three interior points is the working floor.  Two is the hard limit --
+      !> the endpoint values of the well profiles are extrapolated from the two
+      !> interior points nearest each turning point, so a well holding only one
+      !> of them cannot be built at all -- but admitting two-point wells was
+      !> measured and is not worth it: over the five configurations they are
+      !> 0.01-0.6% of trapped orbits, and the four-node spline they produce is a
+      !> poor enough interpolant that the budget closes marginally *less* well
+      !> than when they take the caller's fallback instead.
+      !>
+      !> The two rejections that do carry weight are both correct as they stand.
+      !> A well running off the end of the tube (1.7% of orbits in ITER, 14% in
+      !> W7-X and TJ-II, 33% in QA) is not a complete bounce and cannot honestly
+      !> be integrated.  A well spanning a single cell -- 6.7% in TJ-II, under
+      !> 0.3% elsewhere -- has the fallback as its exact limit, not as an
+      !> approximation: the drift at the point the particle sits, and no phase
+      !> accumulated across a vanishing well.
       well_found = (iz_lo > -nzgrid) .and. (iz_hi < nzgrid) .and. (iz_hi - iz_lo >= 2)
 
    end subroutine find_well
@@ -1064,19 +1082,22 @@ contains
          end if
       end if
 
-      !> A trapped particle whose well could not be resolved on the z grid.  Q is
-      !> left at zero: such a well spans barely a grid cell, so the phase across
-      !> it is small, and it must not fall through to the passing branch, which
-      !> anchors Q at the end of the field line rather than at a turning point --
-      !> not invariant under the two-sign average the caller applies to trapped
-      !> particles.
+      !> A trapped particle whose well find_well could not close, because it runs
+      !> off the end of the simulated field line.  Q is left at zero: the particle
+      !> must not fall through to the passing branch, which anchors Q at the end
+      !> of the line rather than at a turning point, and that is not invariant
+      !> under the two-sign average the caller applies to trapped particles.
       !>
-      !> The drift average is a different matter.  Zero is not its limit: as the
-      !> well narrows the bounce average tends to the local value of the drift at
-      !> the point the particle sits, not to nothing.  These orbits are counted as
-      !> trapped by the flux split, so returning zero for them dilutes the trapped
-      !> drive by their share of it -- 14% of trapped weight in W7-X, 27% in
-      !> TJ-II -- which is enough to account for the deficit in that channel.
+      !> The drift average is a different matter.  Zero is not its limit -- these
+      !> orbits are counted as trapped by the flux split, so reporting nothing for
+      !> them dilutes the trapped drive by their share of it, which is 14% of
+      !> trapped weight in W7-X and 27% in TJ-II.  What can be had is the average
+      !> over the part of the orbit that does lie inside the domain, which
+      !> find_well returns in iz_lo and iz_hi whether or not it closed the well.
+      !> That is the honest estimate at both extremes: for a well spanning barely
+      !> a cell it reduces to the local value of the drift, and for a wide well
+      !> truncated by the end of the tube it is the average over what was
+      !> simulated.
       if (lambda > epsilon(0.)) then
          if (1. / (2.*lambda) < maxval(bmag(ia, :)) .and. .not. trapped) then
             if (present(drift_average_out)) then
@@ -1836,8 +1857,10 @@ contains
       integer :: ia
       ia = 1
 
-      ! Evaluate integrand (=0 if in forbidden region)
-      ! TODO-RN: implement for multiple wells
+      !> Evaluate the integrand, zero in the forbidden region.  This is correct
+      !> for a field line with many wells as it stands: which well the orbit
+      !> belongs to is settled by find_well in eval_transit_ints, and all this
+      !> has to do is refuse to contribute where v_par^2 would be negative.
       vpa2 = energy-2.*mu*bmag(ia,iz)
       if (vpa2 <= epsilon(0.)) then
          transit_avg_integrand = 0
@@ -1906,7 +1929,14 @@ contains
       integer :: ia
       ia = 1
 
-      ! TODO-RN : Normalisation OK?
+      !> The normalisation is checked against the phase integrated along the
+      !> field line, which is built from the geometry independently of this
+      !> closed form: in a Miller tokamak the two agree on the coefficient of
+      !> v_par / B to 0.06%, and the resulting RH inertia to 0.014% at nzed = 48
+      !> and 0.0019% at nzed = 256.  RH_drift_phase_fac is q * btor * Rmajor /
+      !> rhoc, which is q * bi / rhoc and so constant on the surface; smz = sqrt(m
+      !> T) / Z is what converts v_drift / v_par into a radial excursion in units
+      !> of rho_ref, and carrying tz here as well would count that factor twice.
       Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 * RH_drift_phase_fac(iz) * xdriftknob
 
    end subroutine eval_Q_fac

@@ -108,6 +108,7 @@ contains
       
       ! Input file
       use parameters_diagnostics, only: write_RH_inertia_fluxes
+      use parameters_diagnostics, only: write_RH_integrands
 
       implicit none 
 
@@ -121,6 +122,7 @@ contains
 
       ! Only continue if the RH_inertia_fluxes have to be written
       if (.not. write_RH_inertia_fluxes) return
+      if (.not. write_RH_integrands) return
 
       ! Allocate the arrays for the RH_integrands
       allocate (RH_integrand_even_vs_kxztsvpamu(nakx, nztot, ntubes, nspec, nvpa, nmu))
@@ -129,7 +131,8 @@ contains
       ! Calculate the RH inertia (kx,tube,s); RH fluxes(kx,tube,s)
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_integrands'
 
-      ! TODO-RN : implement for radial variation and full flux surface
+      !> Flux tube only; init_rosenbluth_hinton aborts for full_flux_surface and
+      !> radial_variation, so this is reached only where that form is right.
 
       ! Put the RH_integrands in form expected in stella_io
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
@@ -141,8 +144,11 @@ contains
          RH_integrand_odd_vs_kxztsvpamu( :,:,:,is,iv,imu) = RH_integrand_odd( :,:,:,ivmu)
       end do
 
-      ! Make sure proc0 has full array 
-      ! TODO-RN: might need too much memory? Average first in zed?
+      !> Make sure proc0 has the full array.  This is the expensive diagnostic in
+      !> the module: the array is (kx, z, tube, species, vpa, mu) and is held
+      !> twice, which is a few megabytes for a single-kx linear run but hundreds
+      !> for a nonlinear one with many kx.  Hence its own switch,
+      !> write_RH_integrands, rather than riding on write_RH_inertia_fluxes.
       call sum_reduce(RH_integrand_even_vs_kxztsvpamu, 0)
       call sum_reduce(RH_integrand_odd_vs_kxztsvpamu,  0)
 
@@ -267,7 +273,7 @@ contains
       ! Calculate the RH inertia (kx,tube,s); RH fluxes(kx,tube,s)
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_fluxes'
 
-      ! TODO-RN : implement for radial variation and full flux surface
+      !> Flux tube only; see the abort in init_rosenbluth_hinton.
 
       ! Calculate the RH_fluxes for a flux tube simulation
       if (write_RH_inertia_fluxes) then
@@ -353,7 +359,7 @@ contains
       ! Calculate the RH phi
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_phi_I'
 
-      ! TODO-RN : implement for radial variation and full flux surface
+      !> Flux tube only; see the abort in init_rosenbluth_hinton.
 
       ! Calculate the RH_phi_I for a flux tube simulation
       if (write_RH_inertia_fluxes) then
