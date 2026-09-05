@@ -38,7 +38,7 @@ contains
       use zgrid, only: nzgrid, ntubes, zed
       use species, only: spec, pfac, electron_species, nspec
       use geometry, only: dBdrho, gfac, geo_surf
-      use geometry, only: zed_is_poloidal_angle
+      use geometry, only: PS_flow_fac
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
@@ -46,7 +46,6 @@ contains
       use parameters_physics, only: triangular_ZF_upar, triangular_ZF_upar_fac, cos_ZF
       use grids_kxky, only: akx
       use constants, only: zi
-      use mp, only: mp_abort
 
       implicit none
 
@@ -56,24 +55,6 @@ contains
       complex, dimension(:, :), allocatable :: g0k
       complex, dimension(nakx, -nzgrid:nzgrid) :: phi_ZF
       logical, intent(in) :: restarted
-
-      !> Both of the flow models below are axisymmetric closed forms: the
-      !> Pfirsch-Schlueter one is u_par = 2 q cos(theta) v_E, and the constant
-      !> parallel-flow one carries the same q.  Each reads the poloidal angle
-      !> off zed and the safety factor off geo_surf%qinp_psi0.  In a stellarator
-      !> zed runs along the field line through many field periods rather than
-      !> around the poloidal angle once, so the profiles would be built from a
-      !> formula that does not apply -- silently wrong rather than inaccurate.
-      if (triangular_ZF .or. cos_ZF) then
-         if (triangular_ZF_PS .and. .not. zed_is_poloidal_angle) call mp_abort &
-            ('triangular_ZF_PS builds a Pfirsch-Schlueter zonal profile, whose closed &
-             &form 2 q cos(theta) v_E assumes zed is the poloidal angle.  The active &
-             &geometry does not provide that.  Aborting.')
-         if (triangular_ZF_upar .and. .not. zed_is_poloidal_angle) call mp_abort &
-            ('triangular_ZF_upar builds a constant-parallel-flow zonal profile from the &
-             &safety factor of an axisymmetric equilibrium.  The active geometry does not &
-             &provide that.  Aborting.')
-      end if
 
       if (gxyz_initialized) return
       gxyz_initialized = .false.
@@ -155,9 +136,15 @@ contains
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else if (triangular_ZF_PS) then
-                           ! Pfirsch-Schlueter (upar ~ 2*q*cos(theta)*vE)
+                           !> Pfirsch-Schlueter return flow.  PS_flow_fac is the
+                           !> parallel flow per unit dphi/dx that makes the ExB
+                           !> flow divergence-free, integrated along the field
+                           !> line from the radial grad-B drift, so this holds at
+                           !> finite aspect ratio and in a stellarator.  It
+                           !> reduces to 2 q cos(theta) at large aspect ratio,
+                           !> which is what stood here before.
                            gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
-                               - aj0x(1,ikx,iz,ivmu)*2*geo_surf%qinp_psi0*zi*akx(ikx)*vpa(iv)*cos(zed(iz))*triangular_ZF_upar_fac ) &
+                               - aj0x(1,ikx,iz,ivmu)*zi*akx(ikx)*vpa(iv)*PS_flow_fac(iz)*triangular_ZF_upar_fac ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else if (triangular_ZF_upar) then

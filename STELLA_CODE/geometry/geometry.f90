@@ -26,7 +26,7 @@ module geometry
    ! Geometric quantities for the gyrokinetic equations 
    public :: bmag, dbdzed, btor, bmag_psi0, grho, grho_norm, grad_x
    public :: RH_drift_phase_fac, RH_drift_phase_defined
-   public :: zed_is_poloidal_angle
+   public :: PS_flow_fac, PS_flow_defined
    public :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
    public :: gds2, gds21, gds22, gds23, gds24, gds25, gds26, gradpar
    public :: cvdrift, cvdrift0, gbdrift, gbdrift0
@@ -93,19 +93,32 @@ module geometry
    real, dimension(:), allocatable :: RH_drift_phase_fac
    logical :: RH_drift_phase_defined = .false.
 
-   !> Whether the parallel coordinate <zed> is the poloidal angle, so that
-   !> cos(zed) is the poloidal angle's cosine and geo_surf%qinp_psi0 is the
-   !> safety factor that goes with it.  That pair is what the Pfirsch-Schlueter
-   !> flow models are written in: u_par = 2 q cos(theta) v_E holds for an
-   !> axisymmetric equilibrium, and in a stellarator neither half of it means
-   !> what it says -- zed runs along the field line through many field periods
-   !> rather than around the poloidal angle once.
+
+   !> Geometry profile of the Pfirsch-Schlueter parallel flow, defined so that
+   !>     u_par(z) = (dphi/dx) * PS_flow_fac(z)
+   !> for a zonal potential phi(x).  This is the parallel return flow that makes
+   !> the ExB flow divergence-free, and it is fixed by
+   !>     b.grad(u_par/B) = -2 (dphi/dx) (b x grad B).grad x / B^3 ,
+   !> the current term having dropped out: for a scalar-pressure equilibrium
+   !> J_perp = (B x grad p)/B^2, so J.grad x vanishes, as does b.grad x.  What
+   !> remains on the right is the radial grad-B drift, which stella already
+   !> carries as gbdrift0, so the profile is a field-line integral of an array
+   !> the code has rather than a new closed form.
    !>
-   !> Same contract as <RH_drift_phase_defined> above: false until a geometry
-   !> path claims it, so the guard lifts by itself when a geometry learns to
-   !> support these models rather than by editing a list of geometry options
-   !> elsewhere.
-   logical :: zed_is_poloidal_angle = .false.
+   !> Integrating once,
+   !>     PS_flow_fac(z) = B(z) [ I(z) - <B^2 I>/<B^2> ] ,
+   !>     I(z) = int^z gbdrift0 / (shat B b.grad z) dz' ,
+   !> where the additive constant -- the homogeneous solution u_par = K B -- is
+   !> fixed by requiring <u_par B> = 0, no net parallel momentum in the flow.
+   !>
+   !> In a large-aspect-ratio circular tokamak gbdrift0 -> -2 shat sin(theta)/R0
+   !> and b.grad z -> 1/(q R0), so I -> (2q/B0) cos(theta) and the whole thing
+   !> collapses to the familiar u_par = 2 q cos(theta) v_E.  That limit is what
+   !> the old hardcoded cos(zed) form was, and it is recovered here rather than
+   !> assumed, so the models built on it now hold at finite aspect ratio and in
+   !> a stellarator.
+   real, dimension(:), allocatable :: PS_flow_fac
+   logical :: PS_flow_defined = .false.
    real, dimension(:, :), allocatable :: bmag, bmag_psi0, dbdzed 
    real, dimension(:, :), allocatable :: cvdrift, cvdrift0, gbdrift, gbdrift0
    real, dimension(:, :), allocatable :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
@@ -268,6 +281,12 @@ contains
 
       ! Normalize dl/B by int dl/B
       dl_over_b = dl_over_b / spread(sum(dl_over_b, dim=2), 2, 2 * nzgrid + 1)
+
+      !> Pfirsch-Schlueter parallel-flow profile.  Built here, in the path
+      !> common to every geometry, because it needs only gbdrift0, bmag,
+      !> b_dot_grad_z and the now-normalised dl_over_b -- all of which any
+      !> geometry provides.  See the declaration for the derivation.
+      call init_PS_flow_fac
 
       ! We normalize the fluxes with sum( dl/J * |nabla rho| )
       grho_norm = sum(dl_over_b(1, :) * grho(1, :))
@@ -806,9 +825,6 @@ contains
       RH_drift_phase_fac = geo_surf%qinp_psi0 * btor * Rmajor / geo_surf%rhoc
       RH_drift_phase_defined = .true.
 
-      !> Miller runs on a single poloidal turn with zed the poloidal angle, so
-      !> the Pfirsch-Schlueter flow models may use cos(zed) and qinp_psi0.
-      zed_is_poloidal_angle = .true.
 
       if (debug) write (*, *) 'geometry::Miller::get_geometry_arrays_from_Miller_finished'
 
@@ -1147,7 +1163,6 @@ contains
       call broadcast(btor)
       call broadcast(RH_drift_phase_fac)
       call broadcast(RH_drift_phase_defined)
-      call broadcast(zed_is_poloidal_angle)
       call broadcast(gradpar)
       call broadcast(b_dot_grad_z)
       call broadcast(b_dot_grad_z_averaged) 
@@ -1433,6 +1448,55 @@ contains
    !============================================================================ 
    !============================ FINISH THE GEOMETRY ===========================
    !============================================================================
+   !> Build the Pfirsch-Schlueter parallel-flow profile PS_flow_fac.  See its
+   !> declaration for the derivation; this is the quadrature.
+   subroutine init_PS_flow_fac
+
+      use zgrid, only: nzgrid, delzed
+
+      implicit none
+
+      integer :: iz, ia
+      real :: mean
+      real, dimension(:), allocatable :: integrand, running
+
+      ia = 1
+
+      if (.not. allocated(PS_flow_fac)) allocate (PS_flow_fac(-nzgrid:nzgrid))
+      allocate (integrand(-nzgrid:nzgrid), running(-nzgrid:nzgrid))
+
+      !> The right-hand side of b.grad(u_par/B) = -2 (b x grad B).grad x / B^3,
+      !> written with the same normalisation stella gives the radial magnetic
+      !> drift: time_advance builds that as 0.5*(cvdrift0 vpa^2 + gbdrift0
+      !> vperp^2/2), divided by shat unless the radial coordinate is q itself.
+      !> Only the grad-B part appears here, since the curvature and grad-B
+      !> drifts have the same radial component -- indeed geometry_miller sets
+      !> gbdrift0 = cvdrift0 exactly.
+      integrand = gbdrift0(ia, :) / (bmag(ia, :) * b_dot_grad_z(ia, :))
+      if (.not. q_as_x) integrand = integrand / geo_surf%shat
+
+      !> Cumulative trapezoid along the field line.  The lower limit is
+      !> arbitrary: it shifts I by a constant, which the flux-surface average
+      !> below removes.
+      running(-nzgrid) = 0.
+      do iz = -nzgrid + 1, nzgrid
+         running(iz) = running(iz - 1) &
+                     + 0.5 * delzed(iz - 1) * (integrand(iz) + integrand(iz - 1))
+      end do
+
+      !> Fix the homogeneous solution u_par = K B by <u_par B> = 0, so the flow
+      !> carries no net parallel momentum.  dl_over_b is already normalised to
+      !> unit sum, so this is a plain weighted mean.
+      mean = sum(dl_over_b(ia, :) * bmag(ia, :)**2 * running) &
+           / sum(dl_over_b(ia, :) * bmag(ia, :)**2)
+
+      PS_flow_fac = bmag(ia, :) * (running - mean)
+      PS_flow_defined = .true.
+
+      deallocate (integrand, running)
+
+   end subroutine init_PS_flow_fac
+
    subroutine finish_geometry
 
       implicit none
@@ -1444,9 +1508,10 @@ contains
       if (allocated(bmag_psi0)) deallocate (bmag_psi0)
       if (allocated(btor)) deallocate (btor)
       if (allocated(rmajor)) deallocate (rmajor)
+      if (allocated(PS_flow_fac)) deallocate (PS_flow_fac)
+      PS_flow_defined = .false.
       if (allocated(RH_drift_phase_fac)) deallocate (RH_drift_phase_fac)
       RH_drift_phase_defined = .false.
-      zed_is_poloidal_angle = .false.
       if (allocated(dbdzed)) deallocate (dbdzed)
       if (allocated(jacob)) deallocate (jacob)
       if (allocated(djacdrho)) deallocate (djacdrho)

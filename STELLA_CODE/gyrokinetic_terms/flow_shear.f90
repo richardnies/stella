@@ -35,7 +35,7 @@ contains
       use arrays_fields, only: shift_state
       use geometry, only: q_as_x, geo_surf, bmag, btor, rmajor, dBdrho, dIdrho
       use geometry, only: dydalpha, drhodpsi
-      use geometry, only: zed_is_poloidal_angle
+      use geometry, only: PS_flow_fac
       use parameters_physics, only: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
       use vpamu_grids, only: vperp2, vpa, mu
       use vpamu_grids, only: maxwell_vpa, maxwell_mu, maxwell_fac
@@ -43,7 +43,6 @@ contains
       use file_utils, only: runtype_option_switch, runtype_multibox
       use job_manage, only: njobs
       use mp, only: job, send, receive, crossdomprocs, subprocs, scope
-      use mp, only: mp_abort
       use parameters_numerical, only: maxwellian_normalization
       use rosenbluth_hinton, only: RH_U_parallel_fac
 
@@ -78,18 +77,6 @@ contains
 
       ia = 1
 
-      !> The Pfirsch-Schlueter term below is the axisymmetric closed form
-      !> u_par = 2 q cos(theta) v_E, which reads the poloidal angle off zed and
-      !> the safety factor off geo_surf%qinp_psi0.  In a stellarator zed runs
-      !> along the field line through many field periods rather than around the
-      !> poloidal angle once, so neither stands for what the formula needs and
-      !> the term would be silently wrong rather than merely inaccurate.
-      if (abs(omprimfac_PS) > epsilon(0.) .and. .not. zed_is_poloidal_angle) call mp_abort &
-         ('omprimfac_PS drives the Pfirsch-Schlueter parallel flow, whose closed form &
-          &2 q cos(theta) v_E assumes zed is the poloidal angle.  The active geometry &
-          &does not provide that, so the term cannot be evaluated.  Set omprimfac_PS = 0. &
-          &Aborting.')
-
       !parallel flow shear
 
       allocate (energy(nalpha, -nzgrid:nzgrid))
@@ -111,13 +98,17 @@ contains
                                       * dydalpha * drhodpsi &
                                       * (geo_surf%qinp_psi0 / geo_surf%rhoc_psi0) &
                                       * (btor(iz) * rmajor(iz) / bmag(ia, iz)) * (spec(is)%mass / spec(is)%temp)
-            ! Include Pfirsch-Schlüter contribution (2*q*cos(theta)*vE)
+            !> Include the Pfirsch-Schlueter contribution.  PS_flow_fac is the
+            !> parallel return flow per unit dphi/dx, built by integrating the
+            !> radial grad-B drift along the field line, so it is valid at finite
+            !> aspect ratio and in a stellarator; at large aspect ratio it
+            !> reduces to the 2 q cos(theta) form that stood here.
             if (abs(omprimfac_PS) > epsilon(0.)) then
 
                prl_shear(ia, iz, ivmu) = prl_shear(ia, iz, ivmu) &
                                        + omprimfac_PS * g_exb * code_dt  * vpa(iv) * spec(is)%stm_psi0 &
                                          * dydalpha * drhodpsi &
-                                         * 2*geo_surf%qinp_psi0 * cos(zed(iz)) &
+                                         * PS_flow_fac(iz) &
                                          * (spec(is)%mass / spec(is)%temp)
             end if
 
