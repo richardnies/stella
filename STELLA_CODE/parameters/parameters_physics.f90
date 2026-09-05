@@ -47,8 +47,8 @@ module parameters_physics
    public :: cos_ZF 
    public :: triangular_ZF_RH
    public :: RH_analytic_drift_phase, RH_analytic_drift_phase_specified
-   public :: triangular_ZF_PS
-   public :: triangular_ZF_upar
+   public :: triangular_ZF_flow
+   public :: triangular_ZF_flow_PS, triangular_ZF_flow_sym
    public :: triangular_ZF_upar_fac
    public :: triangular_ZF_g_exb
    
@@ -100,8 +100,23 @@ module parameters_physics
    !> overriding the user.
    logical :: RH_analytic_drift_phase
    logical :: RH_analytic_drift_phase_specified
-   logical :: triangular_ZF_PS
-   logical :: triangular_ZF_upar
+   !> Initialise the zonal distribution as a Maxwellian carrying a parallel
+   !> flow, u_par = triangular_ZF_flow_PS * PS_flow_fac
+   !>             + triangular_ZF_flow_sym * sym_flow_fac,
+   !> the two profiles being the Pfirsch-Schlueter return flow and the flow
+   !> along the direction of symmetry (see geometry).  Together they span every
+   !> divergence-free parallel flow that can accompany the ExB flow, so the two
+   !> scalars reach any of them:
+   !>
+   !>     (0, 0)  a density perturbation with no flow
+   !>     (1, 0)  pure Pfirsch-Schlueter flow          (the default)
+   !>     (0, 1)  flow along the symmetry direction, toroidal in a tokamak
+   !>
+   !> This replaces the separate triangular_ZF_PS and triangular_ZF_upar flags,
+   !> which were the (1,0) and (0,1) corners evaluated in the large-aspect-ratio
+   !> limit -- 2 q cos(theta) and a constant respectively.
+   logical :: triangular_ZF_flow
+   real :: triangular_ZF_flow_PS, triangular_ZF_flow_sym
    
    logical :: full_flux_surface
    logical :: include_apar
@@ -181,8 +196,9 @@ contains
       cos_ZF = .false.
       triangular_ZF_RH   = .true.
       RH_analytic_drift_phase = .true.
-      triangular_ZF_PS   = .false.
-      triangular_ZF_upar = .false.
+      triangular_ZF_flow = .false.
+      triangular_ZF_flow_PS  = 1.0
+      triangular_ZF_flow_sym = 0.0
       triangular_ZF_g_exb    = 0.0
       triangular_ZF_upar_fac = 1.0
       
@@ -238,9 +254,9 @@ contains
         hammett_flow_shear, include_pressure_variation, include_geometric_variation, &
         include_parallel_nonlinearity, suppress_zonal_interaction, only_zonal_interaction, freeze_nonzonal, freeze_zonal, &
         freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
-        triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_PS, triangular_ZF_g_exb, &
+        triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
         RH_analytic_drift_phase, &
-        triangular_ZF_upar, triangular_ZF_upar_fac, &
+        triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac, &
         full_flux_surface, include_apar, include_bpar, radial_variation, &
         beta, zeff, tite, nine, rhostar, vnew_ref, &
         g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -305,8 +321,8 @@ contains
          include_pressure_variation, include_geometric_variation, &
          adiabatic_option, const_alpha_geo, suppress_zonal_interaction, only_zonal_interaction, &
          freeze_nonzonal, freeze_zonal, freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
-         triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_PS, triangular_ZF_g_exb, &
-         triangular_ZF_upar, triangular_ZF_upar_fac
+         triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
+         triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac
 
       namelist /parameters/ beta, zeff, tite, nine, rhostar, vnew_ref, &
          g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -407,8 +423,9 @@ contains
      call broadcast(triangular_ZF)
      call broadcast(cos_ZF)
      call broadcast(triangular_ZF_RH)
-     call broadcast(triangular_ZF_PS)
-     call broadcast(triangular_ZF_upar)
+     call broadcast(triangular_ZF_flow)
+     call broadcast(triangular_ZF_flow_PS)
+     call broadcast(triangular_ZF_flow_sym)
      call broadcast(triangular_ZF_g_exb)
      call broadcast(triangular_ZF_upar_fac)
      

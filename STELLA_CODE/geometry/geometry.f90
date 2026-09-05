@@ -27,6 +27,7 @@ module geometry
    public :: bmag, dbdzed, btor, bmag_psi0, grho, grho_norm, grad_x
    public :: RH_drift_phase_fac, RH_drift_phase_defined
    public :: PS_flow_fac, PS_flow_defined
+   public :: sym_flow_fac, sym_flow_defined
    public :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
    public :: gds2, gds21, gds22, gds23, gds24, gds25, gds26, gradpar
    public :: cvdrift, cvdrift0, gbdrift, gbdrift0
@@ -119,6 +120,35 @@ module geometry
    !> a stellarator.
    real, dimension(:), allocatable :: PS_flow_fac
    logical :: PS_flow_defined = .false.
+
+   !> Geometry profile of the parallel flow in the direction of symmetry, again
+   !> per unit dphi/dx, so that u_par(z) = (dphi/dx) * sym_flow_fac(z).
+   !>
+   !> A flow purely along the symmetry direction is V = omega R^2 grad zeta in a
+   !> tokamak, and its parallel projection is omega I / B.  So the profile is
+   !> I/B, with I the current combination that the symmetry picks out: for a
+   !> quasisymmetric field (MG+NI)/(N-iota*M), which reduces to R Btor in a
+   !> tokamak.  That is exactly the quantity RH_drift_phase_fac already holds,
+   !> up to constant factors that cancel in the normalisation below, so this
+   !> costs no new geometry.
+   !>
+   !> Normalised to 2q in the flux-surface average, which makes it identically
+   !> 2q at large aspect ratio: there I/B -> R0, a constant, and the profile
+   !> collapses to the constant parallel flow that used to stand in for it.
+   !> That constant was the large-aspect-ratio approximation of this, in the
+   !> same way that 2 q cos(theta) was of PS_flow_fac.
+   !>
+   !> Together the two profiles span every divergence-free parallel flow that
+   !> can accompany a given ExB flow: any two differ by the homogeneous solution
+   !> u_par = K B, and sym = PS + K_PS B for the K_PS that PS_flow_fac's
+   !> <u_par B> = 0 condition removes.
+   !>
+   !> <sym_flow_defined> is false where the geometry cannot say what the
+   !> symmetry direction is -- a field that is not quasisymmetric has none, and
+   !> the question has no answer rather than a hard one.  Same contract as
+   !> RH_drift_phase_defined, whose array this is built from.
+   real, dimension(:), allocatable :: sym_flow_fac
+   logical :: sym_flow_defined = .false.
    real, dimension(:, :), allocatable :: bmag, bmag_psi0, dbdzed 
    real, dimension(:, :), allocatable :: cvdrift, cvdrift0, gbdrift, gbdrift0
    real, dimension(:, :), allocatable :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
@@ -282,11 +312,11 @@ contains
       ! Normalize dl/B by int dl/B
       dl_over_b = dl_over_b / spread(sum(dl_over_b, dim=2), 2, 2 * nzgrid + 1)
 
-      !> Pfirsch-Schlueter parallel-flow profile.  Built here, in the path
-      !> common to every geometry, because it needs only gbdrift0, bmag,
-      !> b_dot_grad_z and the now-normalised dl_over_b -- all of which any
-      !> geometry provides.  See the declaration for the derivation.
-      call init_PS_flow_fac
+      !> Zonal parallel-flow profiles.  Built here, in the path common to every
+      !> geometry, because they need only gbdrift0, bmag, b_dot_grad_z,
+      !> RH_drift_phase_fac and the now-normalised dl_over_b.  See their
+      !> declarations for the derivations.
+      call init_zonal_flow_profiles
 
       ! We normalize the fluxes with sum( dl/J * |nabla rho| )
       grho_norm = sum(dl_over_b(1, :) * grho(1, :))
@@ -1448,9 +1478,9 @@ contains
    !============================================================================ 
    !============================ FINISH THE GEOMETRY ===========================
    !============================================================================
-   !> Build the Pfirsch-Schlueter parallel-flow profile PS_flow_fac.  See its
-   !> declaration for the derivation; this is the quadrature.
-   subroutine init_PS_flow_fac
+   !> Build the two zonal parallel-flow profiles, PS_flow_fac and sym_flow_fac.
+   !> See their declarations for the derivations; this is the quadrature.
+   subroutine init_zonal_flow_profiles
 
       use zgrid, only: nzgrid, delzed
 
@@ -1493,9 +1523,22 @@ contains
       PS_flow_fac = bmag(ia, :) * (running - mean)
       PS_flow_defined = .true.
 
+      !> The flow along the direction of symmetry, u_par = omega I / B.  The
+      !> constant factors carried by RH_drift_phase_fac -- it is q I / rhoc for
+      !> Miller -- cancel against its own flux-surface average, so what is left
+      !> is I/B normalised to 2q in the mean, which is 2q identically once the
+      !> aspect ratio is large enough that I/B stops varying.
+      if (RH_drift_phase_defined) then
+         if (.not. allocated(sym_flow_fac)) allocate (sym_flow_fac(-nzgrid:nzgrid))
+         sym_flow_fac = RH_drift_phase_fac / bmag(ia, :)
+         mean = sum(dl_over_b(ia, :) * sym_flow_fac) / sum(dl_over_b(ia, :))
+         sym_flow_fac = 2. * geo_surf%qinp_psi0 * sym_flow_fac / mean
+         sym_flow_defined = .true.
+      end if
+
       deallocate (integrand, running)
 
-   end subroutine init_PS_flow_fac
+   end subroutine init_zonal_flow_profiles
 
    subroutine finish_geometry
 
@@ -1510,6 +1553,8 @@ contains
       if (allocated(rmajor)) deallocate (rmajor)
       if (allocated(PS_flow_fac)) deallocate (PS_flow_fac)
       PS_flow_defined = .false.
+      if (allocated(sym_flow_fac)) deallocate (sym_flow_fac)
+      sym_flow_defined = .false.
       if (allocated(RH_drift_phase_fac)) deallocate (RH_drift_phase_fac)
       RH_drift_phase_defined = .false.
       if (allocated(dbdzed)) deallocate (dbdzed)

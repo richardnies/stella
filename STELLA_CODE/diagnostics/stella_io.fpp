@@ -1676,7 +1676,7 @@ contains
 #ifdef NETCDF
       use neasyf, only: neasyf_write
       use geometry, only: bmag, gradpar, gbdrift, gbdrift0
-      use geometry, only: PS_flow_fac
+      use geometry, only: PS_flow_fac, sym_flow_fac, sym_flow_defined
       use geometry, only: cvdrift, cvdrift0, gds2, gds21, gds22, grho, jacob
       use geometry, only: drhodpsi, djacdrho, b_dot_grad_z, geo_surf 
       use parameters_physics, only: beta
@@ -1707,6 +1707,11 @@ contains
       call neasyf_write(file_id, "gradpar", gradpar, dim_names=["zed"], long_name="Parallel derivative multiplier")
       call neasyf_write(file_id, "PS_flow_fac", PS_flow_fac, dim_names=["zed"], &
                         long_name="Pfirsch-Schlueter parallel flow per unit dphi/dx")
+      !> Only a quasisymmetric field has a symmetry direction to flow along, so
+      !> this is absent rather than zero where the geometry cannot define it.
+      if (sym_flow_defined) &
+         call neasyf_write(file_id, "sym_flow_fac", sym_flow_fac, dim_names=["zed"], &
+                           long_name="Symmetry-direction parallel flow per unit dphi/dx")
 
       ! Vectors on the flux surface
       call neasyf_write(file_id, "gbdrift", gbdrift, dim_names=flux_surface_dim, long_name="Magnetic gradient drift")

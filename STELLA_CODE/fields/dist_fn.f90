@@ -38,14 +38,16 @@ contains
       use zgrid, only: nzgrid, ntubes, zed
       use species, only: spec, pfac, electron_species, nspec
       use geometry, only: dBdrho, gfac, geo_surf
-      use geometry, only: PS_flow_fac
+      use geometry, only: PS_flow_fac, sym_flow_fac, sym_flow_defined
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
-      use parameters_physics, only: triangular_ZF, triangular_ZF_g_exb, triangular_ZF_RH, triangular_ZF_PS
-      use parameters_physics, only: triangular_ZF_upar, triangular_ZF_upar_fac, cos_ZF
+      use parameters_physics, only: triangular_ZF, triangular_ZF_g_exb, triangular_ZF_RH
+      use parameters_physics, only: triangular_ZF_flow, triangular_ZF_flow_PS, triangular_ZF_flow_sym
+      use parameters_physics, only: triangular_ZF_upar_fac, cos_ZF
       use grids_kxky, only: akx
       use constants, only: zi
+      use mp, only: mp_abort
 
       implicit none
 
@@ -54,7 +56,22 @@ contains
       real, dimension(:, :), allocatable :: energy
       complex, dimension(:, :), allocatable :: g0k
       complex, dimension(nakx, -nzgrid:nzgrid) :: phi_ZF
+      real, dimension(-nzgrid:nzgrid) :: u_parallel_ZF
       logical, intent(in) :: restarted
+
+      !> The parallel flow the zonal Maxwellian carries, per unit dphi/dx.  A
+      !> field that is not quasisymmetric has no symmetry direction, so asking
+      !> for a flow along one is an error rather than something to approximate.
+      u_parallel_ZF = 0.
+      if (triangular_ZF_flow) then
+         if (abs(triangular_ZF_flow_sym) > epsilon(0.) .and. .not. sym_flow_defined) call mp_abort &
+            ('triangular_ZF_flow_sym asks for a zonal flow along the direction of &
+             &symmetry, but the active geometry is not quasisymmetric and so has no &
+             &symmetry direction to flow along.  Set triangular_ZF_flow_sym = 0. &
+             &Aborting.')
+         u_parallel_ZF = triangular_ZF_flow_PS * PS_flow_fac
+         if (sym_flow_defined) u_parallel_ZF = u_parallel_ZF + triangular_ZF_flow_sym * sym_flow_fac
+      end if
 
       if (gxyz_initialized) return
       gxyz_initialized = .false.
@@ -135,22 +152,19 @@ contains
                                    + real(RH_inertia(ikx,iz,it,is))) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
-                        else if (triangular_ZF_PS) then
-                           !> Pfirsch-Schlueter return flow.  PS_flow_fac is the
-                           !> parallel flow per unit dphi/dx that makes the ExB
-                           !> flow divergence-free, integrated along the field
-                           !> line from the radial grad-B drift, so this holds at
-                           !> finite aspect ratio and in a stellarator.  It
-                           !> reduces to 2 q cos(theta) at large aspect ratio,
-                           !> which is what stood here before.
+                        else if (triangular_ZF_flow) then
+                           !> A Maxwellian carrying a parallel flow.  The two
+                           !> profiles span every divergence-free parallel flow
+                           !> that can accompany the ExB flow, so the two scalars
+                           !> reach any of them: (0,0) leaves a density
+                           !> perturbation, (1,0) is pure Pfirsch-Schlueter,
+                           !> (0,1) is flow along the symmetry direction.  Both
+                           !> are built by the geometry module and hold at finite
+                           !> aspect ratio; their large-aspect-ratio limits are
+                           !> the 2 q cos(theta) and constant forms that separate
+                           !> flags used to hardcode.
                            gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
-                               - aj0x(1,ikx,iz,ivmu)*zi*akx(ikx)*vpa(iv)*PS_flow_fac(iz)*triangular_ZF_upar_fac ) &
-                              * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
-
-                        else if (triangular_ZF_upar) then
-                           ! Constant uparallel (e.g. to make toroidal rotation)
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
-                               - aj0x(1,ikx,iz,ivmu)*2*geo_surf%qinp_psi0*zi*akx(ikx)*vpa(iv)*triangular_ZF_upar_fac ) &
+                               - aj0x(1,ikx,iz,ivmu)*zi*akx(ikx)*vpa(iv)*u_parallel_ZF(iz) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else
