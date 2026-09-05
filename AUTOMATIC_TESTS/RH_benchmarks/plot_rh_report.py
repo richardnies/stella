@@ -296,3 +296,31 @@ def figure_quadrature(rows, outfile):
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+def figure_drift_scan(xdrift, phi_err, upar_err, trapped, phi_tf, upar_tf, outfile):
+    """What actually breaks the annihilation.
+
+    Left: conservation error against the strength of the magnetic drift, at
+    fixed kx.  It vanishes with the drift, which is the signature of an
+    incomplete cancellation between the discrete streaming and drift operators
+    rather than of a quadrature error.  Right: the same error against trapped
+    fraction, where the mirror force -- the other half of discrete streaming --
+    is strongest.
+    """
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.6, 3.0))
+    ax.loglog(xdrift, phi_err, 'o-', color=PHI, lw=1.6, ms=5, label=r'$\varphi_{\rm RH}$')
+    ax.loglog(xdrift, upar_err, 's-', color=UPA, lw=1.6, ms=5, label=r'$u_{\parallel\rm RH}$')
+    ax.set_xlabel('xdriftknob  (magnetic drift strength)')
+    ax.set_ylabel('conservation error')
+    ax.set_title(r'At fixed $k_x\rho_i=2$', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=8.5)
+
+    ax2.loglog(trapped, phi_tf, 'o-', color=PHI, lw=1.6, ms=5)
+    ax2.loglog(trapped, upar_tf, 's-', color=UPA, lw=1.6, ms=5)
+    ax2.set_xlabel('trapped fraction')
+    ax2.set_title(r'At fixed $k_x\rho_i=2$, drift on', fontsize=9.5, loc='left')
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
