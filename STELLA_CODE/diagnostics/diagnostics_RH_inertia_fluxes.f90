@@ -318,11 +318,13 @@ contains
    subroutine write_RH_upar_to_netcdf_file(nout, timer)
 
       use rosenbluth_hinton, only: get_RH_upar, RH_upar_inertia
+      use rosenbluth_hinton, only: get_RH_upar_fluxes_fluxtube
       use arrays_dist_fn, only: gnew
-      use parameters_kxky_grids, only: nakx
+      use parameters_kxky_grids, only: nakx, naky
       use zgrid, only: nztot, ntubes
       use species, only: nspec
       use stella_io, only: write_RH_upar_nc, write_RH_upar_inertia_nc
+      use stella_io, only: write_RH_upar_fluxes_nc
       use job_manage, only: time_message
       use mp, only: proc0
       use parameters_diagnostics, only: write_RH_inertia_fluxes
@@ -333,6 +335,8 @@ contains
       integer, intent(in) :: nout
 
       complex, dimension(:, :, :, :), allocatable :: RH_upar_vs_kxzts
+      complex, dimension(:, :, :, :, :), allocatable :: flux_nl
+      complex, dimension(:, :, :, :), allocatable :: flux_coll, flux_drift
       logical, save :: inertia_written = .false.
 
       if (.not. write_RH_inertia_fluxes) return
@@ -340,20 +344,25 @@ contains
       if (proc0) call time_message(.false., timer(:), 'Write RH_upar')
 
       allocate (RH_upar_vs_kxzts(nakx, nztot, ntubes, nspec))
+      allocate (flux_nl(naky, nakx, nztot, ntubes, nspec))
+      allocate (flux_coll(nakx, nztot, ntubes, nspec))
+      allocate (flux_drift(nakx, nztot, ntubes, nspec))
 
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_upar'
 
       call get_RH_upar(gnew, RH_upar_vs_kxzts)
+      call get_RH_upar_fluxes_fluxtube(gnew, flux_nl, flux_coll, flux_drift)
 
       if (proc0) then
          call write_RH_upar_nc(nout, RH_upar_vs_kxzts)
+         call write_RH_upar_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
          if (.not. inertia_written) then
             call write_RH_upar_inertia_nc(RH_upar_inertia)
             inertia_written = .true.
          end if
       end if
 
-      deallocate (RH_upar_vs_kxzts)
+      deallocate (RH_upar_vs_kxzts, flux_nl, flux_coll, flux_drift)
 
       if (proc0) call time_message(.false., timer(:), 'Write RH_upar')
 

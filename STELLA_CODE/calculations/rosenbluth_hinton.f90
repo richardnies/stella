@@ -39,7 +39,7 @@ module rosenbluth_hinton
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
    public :: RH_upar_weight, RH_upar_inertia
-   public :: get_RH_upar
+   public :: get_RH_upar, get_RH_upar_fluxes_fluxtube
    public :: RH_drift_bounce_avg
    public :: RH_drift_is_trapped
    public :: eval_bounce_averaged_drift
@@ -869,6 +869,172 @@ contains
       deallocate (upar_tmp)
 
    end subroutine get_RH_upar
+
+
+   !> The fluxes driving the parallel-flow invariant.  Same three channels as the
+   !> potential-like fluxes -- nonlinear, collisional and the transit-averaged
+   !> radial drift -- and the same conventions, in particular the factor
+   !> -1/(i kx) that turns a source term into a flux so that
+   !>
+   !>     d<RH_upar>/dt|_channel = -i kx <F_channel>.
+   !>
+   !> The only differences from get_RH_fluxes_fluxtube are the weight, which is
+   !> V_sigma rather than the sigma-even and sigma-odd pair, and the species
+   !> factor, which is n_s alone because a flow carries no charge weighting.
+   !> There is correspondingly no even/odd split: V_sigma is one array.
+   subroutine get_RH_upar_fluxes_fluxtube(g, RH_upar_flux_nl, RH_upar_flux_coll, RH_upar_flux_drift)
+
+      use zgrid, only: nzgrid, ntubes
+      use species, only: spec, nspec
+      use vpamu_grids, only: vpa, mu, vperp2, integrate_vmu
+      use vpamu_grids, only: maxwell_mu, maxwell_fac, maxwell_vpa
+      use parameters_kxky_grids, only: naky, nakx, nx
+      use grids_kxky, only: aky, akx
+      use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
+      use gyro_averages, only: gyro_average, gyro_average_j1, aj0x
+      use arrays_fields, only: phi, apar, bpar
+      use parameters_numerical, only: maxwellian_normalization, fphi
+      use stella_transforms, only: transform_kx2x_xfirst, transform_x2kx_xfirst
+      use constants, only: zi
+      use parameters_physics, only: nonlinear, xdriftknob
+      use parameters_physics, only: include_apar, include_bpar
+      use geometry, only: exb_nonlin_fac, geo_surf, q_as_x
+      use dissipation, only: include_collisions, collisions_implicit
+      use dissipation, only: advance_collisions_explicit, advance_collisions_implicit
+      use stella_time, only: code_dt
+
+      use arrays_dist_fn, only: gvmu
+      use arrays_dist_fn, only: integrand   => g0
+      use arrays_dist_fn, only: work        => g1
+
+      implicit none
+
+      complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
+      !> Keeps its ky axis: the nonlinear drive of a zonal mode is carried by the
+      !> ky beat, and vchix ~ i ky phi is identically zero on the ky = 0 row, so
+      !> collapsing to that row would discard the whole term.  The consumer sums
+      !> over ky, exactly as for the potential-like nonlinear fluxes.
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_upar_flux_nl
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar_flux_coll
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar_flux_drift
+
+      complex, dimension(naky, nakx) :: vchix_gyro, NL_term
+      complex, dimension(naky, nx)   :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
+      complex, dimension(:, :, :, :, :), allocatable :: flux_tmp
+      complex, dimension(:, :, :, :), allocatable :: phi_copy, apar_copy, bpar_copy
+      complex, dimension(:, :, :), allocatable :: gvmu_saved
+      real,    dimension(:), allocatable :: drift_weight
+      complex, dimension(:), allocatable :: boltzmann
+
+      integer :: ivmu, iv, imu, is, ia, iz, it
+
+      ia = 1
+      allocate (flux_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec))
+
+      !----------------------------- nonlinear -------------------------------
+      RH_upar_flux_nl = 0.
+      if (nonlinear) then
+         integrand = 0.
+         do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+            iv = iv_idx(vmu_lo, ivmu)
+            imu = imu_idx(vmu_lo, ivmu)
+            is = is_idx(vmu_lo, ivmu)
+            do it = 1, ntubes
+               do iz = -nzgrid, nzgrid
+                  call gyro_average(zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_gyro)
+                  if (include_apar) &
+                     call gyro_average(-zi*spread(aky,2,nakx)*apar(:,:,iz,it)*vpa(iv)*spec(is)%stm_psi0, &
+                                       iz, ivmu, vchix_gyro)
+                  call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
+                  call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
+                  NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
+                  call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
+                  integrand(:,:,iz,it,ivmu) = NL_term * spread(RH_upar_weight(:,iz,it,ivmu), 1, naky)
+               end do
+            end do
+         end do
+         call integrate_vmu(integrand, spec%dens_psi0, RH_upar_flux_nl)
+      end if
+
+      !---------------------------- collisional ------------------------------
+      RH_upar_flux_coll = 0.
+      if (include_collisions) then
+         !> advance_collisions_implicit is a time advance, not a side-effect-free
+         !> evaluation of C[g]; hand it copies and restore gvmu, exactly as the
+         !> potential-like flux does.
+         if (collisions_implicit) then
+            allocate (phi_copy, source=phi)
+            allocate (apar_copy, source=apar)
+            allocate (bpar_copy, source=bpar)
+            allocate (gvmu_saved, source=gvmu)
+            integrand = g
+            call advance_collisions_implicit(.false., phi_copy, apar_copy, bpar_copy, integrand)
+            integrand = integrand - g
+            gvmu = gvmu_saved
+            deallocate (phi_copy, apar_copy, bpar_copy, gvmu_saved)
+         else
+            integrand = 0.
+            call advance_collisions_explicit(g, phi, bpar, integrand)
+         end if
+
+         ! Zonal modes only
+         integrand(2:,:,:,:,:) = 0.0
+
+         work = 1/code_dt * integrand * spread(RH_upar_weight, 1, naky)
+         flux_tmp = 0.
+         call integrate_vmu(work, spec%dens_psi0, flux_tmp)
+         RH_upar_flux_coll = flux_tmp(1,:,:,:,:)
+
+         !> -1/(i kx), matching the nonlinear flux convention.
+         if (abs(akx(1)) < epsilon(0.)) then
+            RH_upar_flux_coll(1, :,:,:) = 0.0
+            RH_upar_flux_coll(2:,:,:,:) = -RH_upar_flux_coll(2:,:,:,:) &
+               / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
+         else
+            RH_upar_flux_coll(1:,:,:,:) = -RH_upar_flux_coll(1:,:,:,:) &
+               / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
+         end if
+      end if
+
+      !------------------------------- drift ---------------------------------
+      !> As for the potential-like drift flux, the two factors of kx cancel and
+      !> what is left is a plain velocity integral; and it is only meaningful
+      !> where Q was integrated along the field line, the closed form being
+      !> derived on the assumption that the transit-averaged drift vanishes.
+      RH_upar_flux_drift = 0.
+      if (.not. use_analytic_drift_phase) then
+         allocate (drift_weight(nspec))
+         allocate (boltzmann(nakx))
+         drift_weight = 0.5 * xdriftknob * spec%dens_psi0 * spec%tz_psi0
+         if (.not. q_as_x) drift_weight = drift_weight / geo_surf%shat
+
+         integrand = 0.
+         do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+            iv = iv_idx(vmu_lo, ivmu)
+            imu = imu_idx(vmu_lo, ivmu)
+            is = is_idx(vmu_lo, ivmu)
+            do it = 1, ntubes
+               do iz = -nzgrid, nzgrid
+                  !> The drift acts on h = g + (Z/T) J0 phi F_M, not on g alone.
+                  boltzmann = fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt
+                  if (.not. maxwellian_normalization) &
+                     boltzmann = boltzmann * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
+                  integrand(1, :, iz, it, ivmu) = &
+                     (g(1, :, iz, it, ivmu) + boltzmann) &
+                     * RH_upar_weight(:, iz, it, ivmu) * RH_drift_bounce_avg(iz, ivmu)
+               end do
+            end do
+         end do
+
+         flux_tmp = 0.
+         call integrate_vmu(integrand, drift_weight, flux_tmp)
+         RH_upar_flux_drift = flux_tmp(1,:,:,:,:)
+         deallocate (drift_weight, boltzmann)
+      end if
+
+      deallocate (flux_tmp)
+
+   end subroutine get_RH_upar_fluxes_fluxtube
 
 
    subroutine get_RH_phi_I_fluxtube(g, RH_phi_I)

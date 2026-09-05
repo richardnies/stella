@@ -73,6 +73,7 @@ module stella_io
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
    public :: write_RH_upar_nc
+   public :: write_RH_upar_fluxes_nc
    public :: write_RH_upar_inertia_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
@@ -963,6 +964,32 @@ contains
 #endif
 
    end subroutine write_RH_upar_nc
+
+
+   subroutine write_RH_upar_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: flux_nl
+      complex, dimension(:, :, :, :), intent(in) :: flux_coll, flux_drift
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
+      character(*), dimension(*), parameter :: dims_nl = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(6) :: start
+      integer, dimension(7) :: start_nl
+      start = [1, 1, 1, 1, 1, nout]
+      start_nl = [1, 1, 1, 1, 1, 1, nout]
+
+      call netcdf_write_complex(ncid, "RH_upar_flux_nonlinear", flux_nl, dim_names=dims_nl, start=start_nl, &
+              long_name="Nonlinear flux driving the RH parallel-flow invariant")
+      call netcdf_write_complex(ncid, "RH_upar_flux_collisional", flux_coll, dim_names=dims, start=start, &
+              long_name="Collisional flux driving the RH parallel-flow invariant")
+      call netcdf_write_complex(ncid, "RH_upar_flux_drift", flux_drift, dim_names=dims, start=start, &
+              long_name="Transit-averaged magnetic drift flux driving the RH parallel-flow invariant")
+#endif
+
+   end subroutine write_RH_upar_fluxes_nc
 
 
    subroutine write_RH_upar_inertia_nc(RH_upar_inertia)

@@ -233,3 +233,120 @@ def field_line_averaged_rh_inertia(netcdf_file):
     weight[-1] = 0.0
     weight = weight / weight.sum()
     return _field_line_average(ncdata, 'RH_inertia', weight)
+
+
+################################################################################
+#           THE PARALLEL-FLOW ROSENBLUTH-HINTON BUDGET                         #
+################################################################################
+# The sigma-odd member of the same family of projections: RH_upar is annihilated
+# by parallel streaming and the non-secular radial drift exactly as RH_phi_I is,
+# and RH_upar_inertia is the same projection applied to a unit-flow shifted
+# Maxwellian, so their ratio is the residual parallel flow.  The energy is then
+# the parallel kinetic energy that flow carries,
+#
+#     E_uRH = sum_s (1/2) m_s n_s |<RH_upar_s>/<RH_upar_inertia_s>|^2 ,
+#
+# and, the inertia being time independent,
+#
+#     dE_uRH/dt = sum_s m_s n_s Re[ conj(<RH_upar_s>) d<RH_upar_s>/dt ] / |<I_u,s>|^2
+#               = sum_channels P_uRH .
+#
+# See DOCUMENTATION/RH_parallel_flow for the derivation.
+################################################################################
+
+RH_UPAR_FLUX_NONLINEAR   = 'RH_upar_flux_nonlinear'
+RH_UPAR_FLUX_COLLISIONAL = 'RH_upar_flux_collisional'
+RH_UPAR_FLUX_DRIFT       = 'RH_upar_flux_drift'
+
+
+def _field_line_average_per_species(ncdata, name, weight):
+    '''As _field_line_average, but keeping the species axis.
+
+    The flow energy weights each species by its own mass and normalises by its
+    own inertia, so the species cannot be summed before those are applied.
+    Returns an array with axes (time, species, kx), or (species, kx) for a
+    variable with no time axis.
+    '''
+    if name not in ncdata.variables:
+        return None
+    array, dimensions = _complex(ncdata, name)
+    array = np.tensordot(array, weight, axes=([dimensions.index('zed')], [0]))
+    dimensions = [d for d in dimensions if d != 'zed']
+    #> The nonlinear flux carries a ky axis, because the drive of a zonal mode
+    #> is the ky beat rather than anything on the ky = 0 row; summing over it is
+    #> what recovers the zonal drive.  The collisional and drift fluxes are
+    #> already zonal and have no ky axis.
+    if 'ky' in dimensions:
+        array = array.sum(axis=dimensions.index('ky'))
+        dimensions.remove('ky')
+    if 'tube' in dimensions:
+        array = array.take(0, axis=dimensions.index('tube'))
+        dimensions.remove('tube')
+    #> Order the remaining axes as (t, species, kx), or (species, kx).
+    order = [d for d in ('t', 'species', 'kx') if d in dimensions]
+    array = np.transpose(array, [dimensions.index(d) for d in order])
+    return array
+
+
+def get_rh_upar_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
+    '''The parallel-flow RH budget.
+
+    Returns (time, E_uRH, dE_uRH_dt, P_total, P_nonlinear, P_collisional, P_drift).
+    '''
+    ncdata = Dataset(netcdf_file)
+
+    time = np.array(ncdata.variables['t'][:])
+    kx = np.array(ncdata.variables['kx'][:])
+    zed = np.array(ncdata.variables['zed'][:])
+    jacobian = np.array(ncdata.variables['jacob'][:])[:, 0]
+
+    weight = (zed[1] - zed[0]) * jacobian.copy()
+    weight[-1] = 0.0
+    weight = weight / weight.sum()
+
+    upar = _field_line_average_per_species(ncdata, 'RH_upar', weight)
+    inertia = _field_line_average_per_species(ncdata, 'RH_upar_inertia', weight)
+    if upar is None or inertia is None:
+        raise KeyError('this run did not write the RH parallel-flow diagnostics')
+
+    mass = np.array(ncdata.variables['mass'][:])
+    density = np.array(ncdata.variables['dens'][:])
+
+    #> Drop kx = 0, which carries no zonal flow, and anything above kx_max.
+    keep = np.abs(kx) > 1e-12
+    if kx_max is not None:
+        keep &= np.abs(kx) <= kx_max
+    kx = kx[keep]
+    upar = upar[..., keep]
+    inertia = inertia[..., keep]
+
+    weight_s = (mass * density)[None, :, None]
+    inertia2 = np.abs(inertia)[None, :, :]**2
+
+    E = 0.5 * weight_s * np.abs(upar)**2 / inertia2          # (t, species, kx)
+
+    def power(name):
+        flux = _field_line_average_per_species(ncdata, name, weight)
+        if flux is None:
+            return np.zeros(E.shape)
+        flux = flux[..., keep]
+        return -weight_s * np.real(1j * kx[None, None, :] * flux * np.conj(upar)) / inertia2
+
+    P_nl   = power(RH_UPAR_FLUX_NONLINEAR)
+    P_coll = power(RH_UPAR_FLUX_COLLISIONAL)
+    P_dr   = power(RH_UPAR_FLUX_DRIFT)
+
+    E_total = E.sum(axis=(1, 2))
+    dE_dt = np.gradient(E_total, time)
+
+    interior = slice(1, -1)
+    time, E_total, dE_dt = time[interior], E_total[interior], dE_dt[interior]
+    P_nl, P_coll, P_dr = (P[interior].sum(axis=(1, 2)) for P in (P_nl, P_coll, P_dr))
+
+    window = np.ones_like(time, dtype=bool)
+    if time_min is not None: window &= time >= time_min
+    if time_max is not None: window &= time <= time_max
+
+    return (time[window], E_total[window], dE_dt[window],
+            (P_nl + P_coll + P_dr)[window],
+            P_nl[window], P_coll[window], P_dr[window])
