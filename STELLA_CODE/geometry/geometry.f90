@@ -26,6 +26,7 @@ module geometry
    ! Geometric quantities for the gyrokinetic equations 
    public :: bmag, dbdzed, btor, bmag_psi0, grho, grho_norm, grad_x
    public :: RH_drift_phase_fac, RH_drift_phase_defined
+   public :: zed_is_poloidal_angle
    public :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
    public :: gds2, gds21, gds22, gds23, gds24, gds25, gds26, gradpar
    public :: cvdrift, cvdrift0, gbdrift, gbdrift0
@@ -91,6 +92,20 @@ module geometry
    !> of geometry options somewhere else.
    real, dimension(:), allocatable :: RH_drift_phase_fac
    logical :: RH_drift_phase_defined = .false.
+
+   !> Whether the parallel coordinate <zed> is the poloidal angle, so that
+   !> cos(zed) is the poloidal angle's cosine and geo_surf%qinp_psi0 is the
+   !> safety factor that goes with it.  That pair is what the Pfirsch-Schlueter
+   !> flow models are written in: u_par = 2 q cos(theta) v_E holds for an
+   !> axisymmetric equilibrium, and in a stellarator neither half of it means
+   !> what it says -- zed runs along the field line through many field periods
+   !> rather than around the poloidal angle once.
+   !>
+   !> Same contract as <RH_drift_phase_defined> above: false until a geometry
+   !> path claims it, so the guard lifts by itself when a geometry learns to
+   !> support these models rather than by editing a list of geometry options
+   !> elsewhere.
+   logical :: zed_is_poloidal_angle = .false.
    real, dimension(:, :), allocatable :: bmag, bmag_psi0, dbdzed 
    real, dimension(:, :), allocatable :: cvdrift, cvdrift0, gbdrift, gbdrift0
    real, dimension(:, :), allocatable :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
@@ -791,6 +806,10 @@ contains
       RH_drift_phase_fac = geo_surf%qinp_psi0 * btor * Rmajor / geo_surf%rhoc
       RH_drift_phase_defined = .true.
 
+      !> Miller runs on a single poloidal turn with zed the poloidal angle, so
+      !> the Pfirsch-Schlueter flow models may use cos(zed) and qinp_psi0.
+      zed_is_poloidal_angle = .true.
+
       if (debug) write (*, *) 'geometry::Miller::get_geometry_arrays_from_Miller_finished'
 
    end subroutine get_geometry_arrays_from_Miller
@@ -1128,6 +1147,7 @@ contains
       call broadcast(btor)
       call broadcast(RH_drift_phase_fac)
       call broadcast(RH_drift_phase_defined)
+      call broadcast(zed_is_poloidal_angle)
       call broadcast(gradpar)
       call broadcast(b_dot_grad_z)
       call broadcast(b_dot_grad_z_averaged) 
@@ -1426,6 +1446,7 @@ contains
       if (allocated(rmajor)) deallocate (rmajor)
       if (allocated(RH_drift_phase_fac)) deallocate (RH_drift_phase_fac)
       RH_drift_phase_defined = .false.
+      zed_is_poloidal_angle = .false.
       if (allocated(dbdzed)) deallocate (dbdzed)
       if (allocated(jacob)) deallocate (jacob)
       if (allocated(djacdrho)) deallocate (djacdrho)
