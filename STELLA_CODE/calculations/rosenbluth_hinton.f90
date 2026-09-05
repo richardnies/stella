@@ -918,7 +918,7 @@ contains
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar_flux_coll
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar_flux_drift
 
-      complex, dimension(naky, nakx) :: vchix_gyro, NL_term
+      complex, dimension(naky, nakx) :: vchix_gyro, vchix_part, NL_term
       complex, dimension(naky, nx)   :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
       complex, dimension(:, :, :, :, :), allocatable :: flux_tmp
       complex, dimension(:, :, :, :), allocatable :: phi_copy, apar_copy, bpar_copy
@@ -941,10 +941,20 @@ contains
             is = is_idx(vmu_lo, ivmu)
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
+                  !> The gyroaveraged radial ExB velocity from the whole of chi.
+                  !> The three field contributions add; gyro_average overwrites
+                  !> its output, so they are accumulated rather than chained.
                   call gyro_average(zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_gyro)
-                  if (include_apar) &
-                     call gyro_average(-zi*spread(aky,2,nakx)*apar(:,:,iz,it)*vpa(iv)*spec(is)%stm_psi0, &
-                                       iz, ivmu, vchix_gyro)
+                  if (include_apar) then
+                     call gyro_average(-2.0 * vpa(iv)*spec(is)%stm_psi0 &
+                                       * zi*spread(aky,2,nakx)*apar(:,:,iz,it), iz, ivmu, vchix_part)
+                     vchix_gyro = vchix_gyro + vchix_part
+                  end if
+                  if (include_bpar) then
+                     call gyro_average_j1(4.0*mu(imu)*spec(is)%tz &
+                                          * zi*spread(aky,2,nakx)*bpar(:,:,iz,it), iz, ivmu, vchix_part)
+                     vchix_gyro = vchix_gyro + vchix_part
+                  end if
                   call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
                   call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
                   NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
