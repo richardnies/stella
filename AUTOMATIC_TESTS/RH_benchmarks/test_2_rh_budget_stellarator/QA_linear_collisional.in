@@ -1,0 +1,74 @@
+! Rosenbluth-Hinton energy budget in QA geometry: linear zonal flow with
+! collisional damping.  A single zonal mode initialised with ginit_option='rh'
+! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
+! fluxes vanish and the budget is driven by the collisional channel together
+! with the magnetic-drift channel, which is what distinguishes this from the
+! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
+! vanishes and P_drift with it, while here it is the dominant source.
+&parameters_physics
+  adiabatic_option = 'field-line-average-term'
+  nonlinear = .false.
+  vnew_ref = 0.1
+/
+&kt_grids_knobs
+  grid_option = 'range'
+/
+&kt_grids_range_parameters
+  naky = 1
+  aky_min = 0.0
+  akx_min = 0.05
+  nakx = 1
+/
+&init_g_knobs
+  ginit_option = 'rh'
+  phiinit = 15.0
+  width0 = 1.0
+/
+&species_knobs
+  nspec = 1
+/
+&species_parameters_1
+  dens = 1.0
+  fprim = 0.0
+  mass = 1.0
+  temp = 1.0
+  tprim = 0.0
+  type = 'ion'
+  z = 1.0
+/
+&zgrid_parameters
+  boundary_option = 'unconnected'
+  nperiod = 1
+  nzed = 128
+/
+&vpamu_grids_parameters
+  nmu = 24
+  nvgrid = 48
+/
+&knobs
+  delt = 0.05
+  nstep = 600
+  print_extra_info_to_terminal = .false.
+  drifts_implicit = .true.
+/
+&stella_diagnostics_knobs
+  nsave = -1
+  nwrite = 1
+  save_for_restart = .false.
+  write_RH_integrands = .false.
+  write_RH_inertia_fluxes = .true.
+/
+&geo_knobs
+  geo_option = 'vmec'
+/
+&vmec_parameters
+  nfield_periods = 8
+  torflux = 0.5
+  alpha0 = 0.7
+  vmec_filename = 'wout_QA.nc'
+/
+&dissipation
+  include_collisions = .true.
+  collision_model = 'dougherty'
+  hyper_dissipation = .false.
+/

@@ -1,0 +1,4 @@
+# The VMEC equilibria these decks need are too large to keep in the repository
+# (some 24 MB together).  Drop them here to enable the suite; the tests skip
+# when they are absent.
+wout_*.nc

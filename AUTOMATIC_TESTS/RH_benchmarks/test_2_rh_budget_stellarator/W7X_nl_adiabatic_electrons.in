@@ -1,0 +1,74 @@
+! Rosenbluth-Hinton energy budget in W7X geometry: minimal nonlinear
+! electrostatic run.  CBC-like gradients drive an ITG mode whose saturation
+! feeds a genuine nonlinearly driven zonal flow, so the nonlinear RH flux
+! channel is exercised in a field where the drift channel is also active.
+&parameters_physics
+  adiabatic_option = 'field-line-average-term'
+  nonlinear = .true.
+  vnew_ref = 0.01
+/
+&kt_grids_knobs
+  grid_option = 'box'
+/
+&kt_grids_box_parameters
+  ny = 8
+  nx = 8
+  y0 = 2.0
+/
+&init_g_knobs
+  ginit_option = 'noise'
+  phiinit = 0.01
+  width0 = 1.0
+/
+&species_knobs
+  nspec = 1
+/
+&species_parameters_1
+  dens = 1.0
+  fprim = 2.2
+  mass = 1.0
+  temp = 1.0
+  tprim = 8.0
+  type = 'ion'
+  z = 1.0
+/
+&zgrid_parameters
+  boundary_option = 'stellarator'
+  nperiod = 1
+  nzed = 64
+/
+&vpamu_grids_parameters
+  nmu = 8
+  nvgrid = 18
+/
+&knobs
+  ! Fix the seed: ginit_option='noise' otherwise draws a different initial
+  ! condition each run, and these runs grow exponentially, so the residual
+  ! would not be reproducible between invocations of the same deck.
+  rng_seed = 1
+  delt = 0.02
+  nstep = 2500
+  print_extra_info_to_terminal = .false.
+  drifts_implicit = .true.
+/
+&stella_diagnostics_knobs
+  nsave = -1
+  nwrite = 2
+  save_for_restart = .false.
+  write_RH_integrands = .false.
+  write_RH_inertia_fluxes = .true.
+/
+&geo_knobs
+  geo_option = 'vmec'
+/
+&vmec_parameters
+  nfield_periods = 8
+  torflux = 0.5
+  alpha0 = 0.7
+  vmec_filename = 'wout_w7x_standard.nc'
+/
+&dissipation
+  include_collisions = .true.
+  collision_model = 'dougherty'
+  hyper_dissipation = .false.
+/

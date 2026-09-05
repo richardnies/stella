@@ -107,8 +107,43 @@ Known gaps
 
 - The unexplained ~7e-3 floor described above.
 
-- `RH_phi_I` is integrated with weight `spec%z`, while `RH_inertia` and every RH
-  flux use `spec%dens_psi0*spec%z` (rosenbluth_hinton.f90:581 against :301, :420
-  and the rest).  Eq (13) and (16) of the derivation both carry n_s, so :581
-  looks like the odd one out.  Every deck here has `dens = 1.0`, so the two agree
-  and nothing exercises it, and it has been left alone pending a decision.
+Stellarator benchmarks
+----------------------
+`test_2_rh_budget_stellarator/` runs the same assertion in five VMEC equilibria
+rather than a Miller tokamak, on the `alpha0 = 0.7` field line.  What it adds is
+the magnetic-drift channel: in an axisymmetric field the bounce-averaged radial
+drift vanishes and `P_RH_drift` with it, so `test_1` never exercises the channel
+that the stellarator generalisation exists for.  Here it carries between 1% and
+39% of the peak of the linear budget.
+
+ITER is the control.  It is a VMEC equilibrium but axisymmetric, so it runs the
+same code path with a drift channel that should stay negligible, and it would
+catch a generalisation that failed to reduce to the tokamak limit.
+
+| configuration | drift share | linear | nl, adiabatic electrons | nl, adiabatic ions |
+|---------------|-------------|--------|-------------------------|--------------------|
+| ITER (axisym) |  4%         | 2.0e-2 | 3.2e-3  (t = 34..44)    | 7.7e-3  (t = 34..44) |
+| W7-X standard |  1%         | 3.8e-2 | 1.4e-3  (t = 30..40)    | 2.1e-3  (t = 30..40) |
+| QA            | 32%         | 9.3e-2 | 7.4e-3  (t = 28..38)    | 7.4e-3  (t = 28..38) |
+| QH            | 13%         | 2.6e-2 | 3.5e-2  (t = 34..44)    | 4.0e-2  (t = 30..40) |
+| TJ-II         | 39%         | 7.0e-2 | 1.5e-2  (t = 28..38)    | 8.5e-3  (t = 30..40) |
+
+Two differences from the tokamak decks are worth knowing.
+
+*The windows sit later.*  These ITG modes grow more slowly, reaching nonlinear
+amplitude only around t = 25, so the clean window is roughly t = 28..44 rather
+than t = 10..27.  The degradation past it is the same runaway as in `test_1`:
+for W7-X the nonlinear channel closes to 1.4e-3 over t = 30..40, 8.0e-2 over
+t = 45..55, and 3.9e-1 over t = 50..58.
+
+*The field line matters.*  At `alpha0 = 0` every one of these configurations
+sits near a symmetry where the bounce-averaged drift very nearly vanishes.  Both
+sides of the budget then fall to the time-integration noise floor -- for ITER
+the drive `rms(P)/E` is 3e-4 and `rms(dE/dt)` exceeds `rms(P)` tenfold -- and the
+comparison measures noise rather than physics.  The decks therefore use
+`alpha0 = 0.7`.  `plot_rh_stellarator.py` reports the drive alongside the slope
+and labels a panel rather than quoting a number when it is below a per-mille.
+
+The VMEC equilibria are not in the repository, being some 24 MB together.  Each
+test skips if its `wout` file is absent; drop them beside the decks to enable
+the suite.
