@@ -358,3 +358,28 @@ def figure_asymptotics(datasets, outfile):
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+def figure_phase_mixing(Q, W_all, W_passing, outfile):
+    """Coherence of the transit-average weight against the drift-orbit phase.
+
+    Every flux channel carries exactly one factor of this weight, so the law it
+    follows -- unity while Q < 1, then 1/Q -- sets the short-wavelength
+    behaviour of all of them at once.
+    """
+    Q = np.asarray(Q)
+    fig, ax = plt.subplots(figsize=(4.6, 3.2))
+    ax.loglog(Q, W_all, 'o-', color=PHI, lw=1.6, ms=5, label=r'all particles')
+    ax.loglog(Q, W_passing, 's--', color=UPA, lw=1.4, ms=4, label=r'passing only')
+    tail = Q[Q > 3]
+    ax.loglog(tail, 4.0 / tail, ':', color=GREY, lw=1.4, label=r'$4/Q$')
+    ax.axhline(1.0, color=GREY, ls=':', lw=1.0)
+    ax.axvline(1.0, color=GREY, ls='--', lw=1.0)
+    ax.set_xlabel(r'drift-orbit phase  $Q$')
+    ax.set_ylabel(r'$\langle |W| \rangle$')
+    ax.set_title('Phase mixing of the projection weight', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=8.5)
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
