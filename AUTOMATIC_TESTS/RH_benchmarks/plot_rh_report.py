@@ -324,3 +324,37 @@ def figure_drift_scan(xdrift, phi_err, upar_err, trapped, phi_tf, upar_tf, outfi
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+def figure_asymptotics(datasets, outfile):
+    """Inertia against the drift-orbit phase, for two aspect ratios.
+
+    `datasets` maps a label to (Q, enhancement, I_upar, eps, q).  Plotting
+    against Q rather than kx is the point: the neoclassical enhancement leaves
+    its plateau when Q ~ 1, at values of kx rho that differ by q/eps between the
+    two, so the controlling parameter is the orbit width against 1/kx and not
+    the gyroradius against 1/kx.
+    """
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.8, 3.1))
+    colours = [PHI, UPA]
+    for (label, (Q, enh, Iu, eps, q)), colour in zip(datasets.items(), colours):
+        ax.loglog(Q, np.array(enh) - 1, 'o-', color=colour, lw=1.5, ms=4, label=label)
+        plateau = 1.6 * q**2 / np.sqrt(eps)
+        ax.axhline(plateau, color=colour, ls=':', lw=1.1)
+        ax2.semilogx(Q, np.array(Iu), 's-', color=colour, lw=1.5, ms=4, label=label)
+    ax.axvline(1.0, color=GREY, ls='--', lw=1.0)
+    ax.text(1.15, ax.get_ylim()[0] * 2, r'$Q = 1$', fontsize=8, color=GREY)
+    ax.set_xlabel(r'drift-orbit phase  $Q \sim k_x \rho\, q/\epsilon$')
+    ax.set_ylabel(r'$\langle I\rangle/[(1-\Gamma_0)Z^2n/T] - 1$')
+    ax.set_title('Neoclassical enhancement', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=8)
+    ax2.axhline(0.5, color=GREY, ls=':', lw=1.1)
+    ax2.text(Q[0], 0.52, r'$1/2$', fontsize=8, color=GREY)
+    ax2.axvline(1.0, color=GREY, ls='--', lw=1.0)
+    ax2.set_xlabel(r'drift-orbit phase  $Q$')
+    ax2.set_ylabel(r'$\langle I_u\rangle$')
+    ax2.set_title('Parallel-flow inertia', fontsize=9.5, loc='left')
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
