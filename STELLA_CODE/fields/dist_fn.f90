@@ -38,7 +38,7 @@ contains
       use zgrid, only: nzgrid, ntubes, zed
       use species, only: spec, pfac, electron_species, nspec
       use geometry, only: dBdrho, gfac, geo_surf
-      use geometry, only: PS_flow_fac, sym_flow_fac, sym_flow_defined
+      use geometry, only: PS_flow_fac, sym_flow_fac
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
@@ -47,7 +47,6 @@ contains
       use parameters_physics, only: triangular_ZF_upar_fac, cos_ZF
       use grids_kxky, only: akx
       use constants, only: zi
-      use mp, only: mp_abort
 
       implicit none
 
@@ -59,19 +58,13 @@ contains
       real, dimension(-nzgrid:nzgrid) :: u_parallel_ZF
       logical, intent(in) :: restarted
 
-      !> The parallel flow the zonal Maxwellian carries, per unit dphi/dx.  A
-      !> field that is not quasisymmetric has no symmetry direction, so asking
-      !> for a flow along one is an error rather than something to approximate.
+      !> The parallel flow the zonal Maxwellian carries, per unit dphi/dx.  Both
+      !> profiles are available in any geometry; geometry warns if the symmetry
+      !> one is being used where quasisymmetry does not hold.
       u_parallel_ZF = 0.
-      if (triangular_ZF_flow) then
-         if (abs(triangular_ZF_flow_sym) > epsilon(0.) .and. .not. sym_flow_defined) call mp_abort &
-            ('triangular_ZF_flow_sym asks for a zonal flow along the direction of &
-             &symmetry, but the active geometry is not quasisymmetric and so has no &
-             &symmetry direction to flow along.  Set triangular_ZF_flow_sym = 0. &
-             &Aborting.')
-         u_parallel_ZF = triangular_ZF_flow_PS * PS_flow_fac
-         if (sym_flow_defined) u_parallel_ZF = u_parallel_ZF + triangular_ZF_flow_sym * sym_flow_fac
-      end if
+      if (triangular_ZF_flow) &
+         u_parallel_ZF = triangular_ZF_flow_PS * PS_flow_fac &
+                       + triangular_ZF_flow_sym * sym_flow_fac
 
       if (gxyz_initialized) return
       gxyz_initialized = .false.

@@ -1483,6 +1483,7 @@ contains
    subroutine init_zonal_flow_profiles
 
       use zgrid, only: nzgrid, delzed
+      use mp, only: proc0
 
       implicit none
 
@@ -1523,17 +1524,34 @@ contains
       PS_flow_fac = bmag(ia, :) * (running - mean)
       PS_flow_defined = .true.
 
-      !> The flow along the direction of symmetry, u_par = omega I / B.  The
-      !> constant factors carried by RH_drift_phase_fac -- it is q I / rhoc for
-      !> Miller -- cancel against its own flux-surface average, so what is left
-      !> is I/B normalised to 2q in the mean, which is 2q identically once the
-      !> aspect ratio is large enough that I/B stops varying.
-      if (RH_drift_phase_defined) then
-         if (.not. allocated(sym_flow_fac)) allocate (sym_flow_fac(-nzgrid:nzgrid))
-         sym_flow_fac = RH_drift_phase_fac / bmag(ia, :)
-         mean = sum(dl_over_b(ia, :) * sym_flow_fac) / sum(dl_over_b(ia, :))
-         sym_flow_fac = 2. * geo_surf%qinp_psi0 * sym_flow_fac / mean
-         sym_flow_defined = .true.
+      !> The flow along the direction of symmetry, u_par = omega I / B, with I
+      !> the current combination quasisymmetry picks out, (MG+NI)/(N-iota*M).
+      !> That combination is built from G, I, iota and the helicities, every one
+      !> of which is a flux function, so it is constant along the field line and
+      !> cancels identically against the flux-surface average below.  What is
+      !> left is 1/B alone: the profile never needs the currents evaluated, and
+      !> is therefore computable in any geometry.
+      !>
+      !> Normalised to 2q in the mean, so it is identically 2q once the aspect
+      !> ratio is large enough that 1/B stops varying -- the constant parallel
+      !> flow this replaced.
+      if (.not. allocated(sym_flow_fac)) allocate (sym_flow_fac(-nzgrid:nzgrid))
+      sym_flow_fac = 1. / bmag(ia, :)
+      mean = sum(dl_over_b(ia, :) * sym_flow_fac) / sum(dl_over_b(ia, :))
+      sym_flow_fac = 2. * geo_surf%qinp_psi0 * sym_flow_fac / mean
+      sym_flow_defined = .true.
+
+      !> Whether the field actually has a symmetry direction for that flow to
+      !> lie along is a separate question from whether the profile is
+      !> computable.  A field that is not quasisymmetric has none, and the
+      !> profile is then the flow it would have were the field quasisymmetric.
+      !> That is a useful thing to be able to initialise, so it is offered with
+      !> a warning rather than refused.
+      if (proc0 .and. .not. RH_drift_phase_defined) then
+         write (*, *) 'WARNING: the symmetry-direction zonal flow profile assumes the field &
+                      &is quasisymmetric, which the active geometry is not known to be.  &
+                      &The profile is 1/B normalised, which is exact for a quasisymmetric &
+                      &field; away from quasisymmetry it is an approximation.'
       end if
 
       deallocate (integrand, running)
