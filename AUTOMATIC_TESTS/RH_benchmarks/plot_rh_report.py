@@ -268,3 +268,31 @@ def figure_summary(cases, outfile):
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+def figure_quadrature(rows, outfile):
+    """Conservation error against parallel resolution, at several kx.
+
+    The construction is exact at every wavelength, so each curve must fall with
+    resolution.  A curve that flattens -- or rises -- is a defect in the
+    quadrature rather than a limit of the theory.
+
+    `rows` maps kx to (nzed list, phi errors, upar errors).
+    """
+    kxs = sorted(rows)
+    fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.1), sharey=True)
+    shades = plt.cm.viridis(np.linspace(0.15, 0.85, len(kxs)))
+    for ax, index, name, colour in ((axes[0], 1, r'$\varphi_{\rm RH}$', PHI),
+                                    (axes[1], 2, r'$u_{\parallel\rm RH}$', UPA)):
+        for kx, shade in zip(kxs, shades):
+            nzed, *series = rows[kx]
+            ax.loglog(nzed, series[index - 1], 'o-', color=shade, lw=1.4, ms=4,
+                      label=rf'$k_x\rho_i={kx}$')
+        ax.set_xlabel(r'$n_{\rm zed}$')
+        ax.set_title(name, fontsize=10, loc='left', color=colour)
+    axes[0].set_ylabel('conservation error')
+    axes[1].legend(frameon=False, fontsize=7.5, loc='upper right', ncol=1)
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile

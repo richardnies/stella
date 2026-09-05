@@ -843,9 +843,14 @@ contains
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
-      use vpamu_grids, only: integrate_vmu
+      use vpamu_grids, only: integrate_vmu, vpa
+      use vpamu_grids, only: maxwell_vpa, maxwell_mu, maxwell_fac
       use parameters_kxky_grids, only: naky, nakx
-      use stella_layouts, only: vmu_lo
+      use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
+      use parameters_physics, only: include_apar
+      use parameters_numerical, only: maxwellian_normalization
+      use arrays_fields, only: apar
+      use gyro_averages, only: gyro_average
 
       use arrays_dist_fn, only: RH_upar_tmp => g1
 
@@ -854,7 +859,9 @@ contains
       complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar
 
-      complex, dimension(:, :, :, :, :), allocatable :: upar_tmp
+      complex, dimension(:, :, :, :, :), allocatable :: upar_tmp, pdf
+      complex, dimension(naky, nakx) :: gyro_apar, correction
+      integer :: ivmu, iv, imu, is, iz, it
 
       allocate (upar_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); upar_tmp = 0.
       if (.not. allocated(RH_upar_tmp)) &
@@ -863,7 +870,34 @@ contains
       RH_upar_tmp = 0.
       RH_upar_tmp(1,:,:,:,:) = RH_upar_weight
 
-      call integrate_vmu(g * RH_upar_tmp, spec%dens_psi0, upar_tmp)
+      !> Electromagnetically it is gbar, not g, that the parallel streaming
+      !> advects: stella carries gbar = g + 2 (Z/T) stm vpa <Apar> F_M and
+      !> converts between the two around the implicit solve.  So it is the
+      !> projection of gbar that the annihilation leaves constant.  The
+      !> difference is odd in vpa, which is why an even-dominated weight barely
+      !> notices it while this one, being odd, sees it in full.
+      allocate (pdf(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      pdf = g
+      if (include_apar) then
+         do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+            iv = iv_idx(vmu_lo, ivmu)
+            imu = imu_idx(vmu_lo, ivmu)
+            is = is_idx(vmu_lo, ivmu)
+            do it = 1, ntubes
+               do iz = -nzgrid, nzgrid
+                  call gyro_average(apar(:, :, iz, it), iz, ivmu, gyro_apar)
+                  correction = 2.0 * spec(is)%zt * spec(is)%stm_psi0 * vpa(iv) * gyro_apar
+                  if (.not. maxwellian_normalization) &
+                     correction = correction * maxwell_vpa(iv, is) &
+                                * maxwell_mu(1, iz, imu, is) * maxwell_fac(is)
+                  pdf(:, :, iz, it, ivmu) = pdf(:, :, iz, it, ivmu) + correction
+               end do
+            end do
+         end do
+      end if
+
+      call integrate_vmu(pdf * RH_upar_tmp, spec%dens_psi0, upar_tmp)
+      deallocate (pdf)
       RH_upar = upar_tmp(1,:,:,:,:)
 
       deallocate (upar_tmp)
@@ -956,6 +990,10 @@ contains
                      vchix_gyro = vchix_gyro + vchix_part
                   end if
                   call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
+                  !> g, not gbar, here.  The nonlinearity advects g by the ExB
+                  !> velocity; it is the conserved projection, not the flux, that
+                  !> carries the Apar term.  Substituting gbar here was tried and
+                  !> makes the electromagnetic budget worse (0.29 -> 0.44).
                   call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
                   NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
                   call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
