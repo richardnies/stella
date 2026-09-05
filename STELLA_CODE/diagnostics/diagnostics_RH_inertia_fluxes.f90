@@ -29,6 +29,7 @@ module diagnostics_RH_inertia_fluxes
    public :: write_RH_fluxes_to_netcdf_file
    public :: write_RH_inertia_to_netcdf_file
    public :: write_RH_phi_I_to_netcdf_file
+   public :: write_RH_upar_to_netcdf_file
 
    private
 
@@ -311,6 +312,54 @@ contains
    !============================================================================
    !========== CALCULATE AND WRITE RH_PHI TO NETCDF FILE =======================
    !============================================================================
+   !> The parallel-flow Rosenbluth-Hinton invariant and its inertia.  Same
+   !> structure as write_RH_phi_I_to_netcdf_file; the inertia does not evolve, so
+   !> it is written once on the first call.
+   subroutine write_RH_upar_to_netcdf_file(nout, timer)
+
+      use rosenbluth_hinton, only: get_RH_upar, RH_upar_inertia
+      use arrays_dist_fn, only: gnew
+      use parameters_kxky_grids, only: nakx
+      use zgrid, only: nztot, ntubes
+      use species, only: nspec
+      use stella_io, only: write_RH_upar_nc, write_RH_upar_inertia_nc
+      use job_manage, only: time_message
+      use mp, only: proc0
+      use parameters_diagnostics, only: write_RH_inertia_fluxes
+
+      implicit none
+
+      real, dimension(:), intent(in out) :: timer
+      integer, intent(in) :: nout
+
+      complex, dimension(:, :, :, :), allocatable :: RH_upar_vs_kxzts
+      logical, save :: inertia_written = .false.
+
+      if (.not. write_RH_inertia_fluxes) return
+
+      if (proc0) call time_message(.false., timer(:), 'Write RH_upar')
+
+      allocate (RH_upar_vs_kxzts(nakx, nztot, ntubes, nspec))
+
+      if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_upar'
+
+      call get_RH_upar(gnew, RH_upar_vs_kxzts)
+
+      if (proc0) then
+         call write_RH_upar_nc(nout, RH_upar_vs_kxzts)
+         if (.not. inertia_written) then
+            call write_RH_upar_inertia_nc(RH_upar_inertia)
+            inertia_written = .true.
+         end if
+      end if
+
+      deallocate (RH_upar_vs_kxzts)
+
+      if (proc0) call time_message(.false., timer(:), 'Write RH_upar')
+
+   end subroutine write_RH_upar_to_netcdf_file
+
+
    subroutine write_RH_phi_I_to_netcdf_file(nout, timer)
 
       use rosenbluth_hinton, only: get_RH_phi_I_fluxtube

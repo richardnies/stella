@@ -72,6 +72,8 @@ module stella_io
    public :: write_RH_fluxes_coll_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
+   public :: write_RH_upar_nc
+   public :: write_RH_upar_inertia_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
    public :: write_RH_bounce_drift_nc
@@ -944,6 +946,41 @@ contains
    end subroutine write_RH_phi_I_nc
 
    !----------------------- RH inertia ----------------------
+   subroutine write_RH_upar_nc(nout, RH_upar)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :), intent(in) :: RH_upar
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(6) :: start
+      start = [1, 1, 1, 1, 1, nout]
+
+      call netcdf_write_complex(ncid, "RH_upar", RH_upar, &
+              dim_names=dims, start=start, &
+              long_name="Rosenbluth-Hinton parallel-flow invariant (=upar*I_uRH in the RH limit)")
+#endif
+
+   end subroutine write_RH_upar_nc
+
+
+   subroutine write_RH_upar_inertia_nc(RH_upar_inertia)
+      implicit none
+
+      complex, dimension(:, :, :, :), intent(in) :: RH_upar_inertia
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species"]
+
+      call netcdf_write_complex(ncid, "RH_upar_inertia", RH_upar_inertia, &
+              dim_names=dims, &
+              long_name="Rosenbluth-Hinton parallel-flow inertia (projection of a unit-flow shifted Maxwellian)")
+#endif
+
+   end subroutine write_RH_upar_inertia_nc
+
+
    subroutine write_RH_inertia_nc(RH_inertia)
       implicit none
 
