@@ -477,6 +477,7 @@ contains
 
       ! Variables needed to write and calculate diagnostics 
       complex, dimension(:, :, :, :), allocatable :: RH_phi_I_vs_kxzts
+      complex, dimension(:, :, :, :), allocatable :: RH_phi_I_g_vs_kxzts
 
       !---------------------------------------------------------------------- 
 
@@ -488,6 +489,7 @@ contains
 
       ! Allocate the array for RH_phi_I
       allocate (RH_phi_I_vs_kxzts(nakx, nztot, ntubes, nspec))
+      allocate (RH_phi_I_g_vs_kxzts(nakx, nztot, ntubes, nspec))
 
       ! Calculate the RH phi
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_phi_I'
@@ -496,14 +498,15 @@ contains
 
       ! Calculate the RH_phi_I for a flux tube simulation
       if (write_RH_inertia_fluxes) then
-         call get_RH_phi_I_fluxtube(gnew, RH_phi_I_vs_kxzts)
+         call get_RH_phi_I_fluxtube(gnew, RH_phi_I_vs_kxzts, RH_phi_I_g_vs_kxzts)
       end if
 
       ! Write the RH_phi_I to the netcdf file
-      if (proc0 .and. write_RH_inertia_fluxes) call write_RH_phi_I_nc(nout, RH_phi_I_vs_kxzts)
+      if (proc0 .and. write_RH_inertia_fluxes) call write_RH_phi_I_nc(nout, RH_phi_I_vs_kxzts, RH_phi_I_g_vs_kxzts)
 
       ! Deallocate the arrays for the RH_phi_I
       deallocate (RH_phi_I_vs_kxzts)
+      deallocate (RH_phi_I_g_vs_kxzts)
 
        ! End timer
        if (proc0) call time_message(.false., timer(:), 'Write RH_phi_I')

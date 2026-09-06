@@ -1021,11 +1021,12 @@ contains
 
 
    !----------------------- RH phi -----------------------
-   subroutine write_RH_phi_I_nc(nout, RH_phi_I)
+   subroutine write_RH_phi_I_nc(nout, RH_phi_I, RH_phi_I_g)
       implicit none
 
       integer, intent(in) :: nout
       complex, dimension(:, :, :, :), intent(in) :: RH_phi_I
+      complex, dimension(:, :, :, :), intent(in), optional :: RH_phi_I_g
 
 #ifdef NETCDF
 
@@ -1037,6 +1038,11 @@ contains
       ! Write the RH phi (kx,z,tube,s,t,ri)
       call netcdf_write_complex(ncid, "RH_phi_I",  RH_phi_I, &
               dim_names=dims, start=start, long_name="Rosenbluth-Hinton potential*inertia (=<phi*I_RH>_psi in RH limit where H_s = <H_s>_tau") 
+
+      if (present(RH_phi_I_g)) then
+         call netcdf_write_complex(ncid, "RH_phi_I_g", RH_phi_I_g, dim_names=dims, start=start, &
+                 long_name="RH potential-like projection of g alone, without the gbar Apar part")
+      end if
 
 #endif
 

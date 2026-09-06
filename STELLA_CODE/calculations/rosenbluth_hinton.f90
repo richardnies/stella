@@ -1361,7 +1361,7 @@ contains
    end subroutine get_RH_umom_fluxes_fluxtube
 
 
-   subroutine get_RH_phi_I_fluxtube(g, RH_phi_I)
+   subroutine get_RH_phi_I_fluxtube(g, RH_phi_I, RH_phi_I_g)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -1389,9 +1389,12 @@ contains
 
       ! The RH phi is returned with dimensions (kx, z, tube, s)
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_phi_I
+      complex, dimension(:, -nzgrid:, :, :), intent(out), optional :: RH_phi_I_g
 
       ! Temp variable holding RH_phi_I with dimensions (ky, kx, z, tube, spec) (1st is dummy)
       complex, dimension(:, :, :, :, :), allocatable :: RH_phi_I_tmp
+      complex, dimension(:, :, :, :, :), allocatable :: pdf
+      complex, dimension(naky, nakx) :: gyro_apar, correction
 
       ! Local variables
       integer :: ivmu, iv, imu, is, ia, iz, it
@@ -1419,19 +1422,43 @@ contains
       !> exactly the kind of mismatch that stops RH_phi_I being the inertia times
       !> phi.  It cancels from the budget slope, appearing in dE_RH/dt and in
       !> P_RH alike, which is why the benchmarks never saw it.
-      !> NOTE: an unresolved defect lives here.  Electromagnetically the drive on
-      !> the right of the gyrokinetic equation is d<chi>/dt, and moving to g
-      !> cancels only its dphi/dt part, leaving a dApar/dt term that gbar is
-      !> meant to absorb.  Projecting gbar instead of g was tried: it improves
-      !> W7-X (1.18 -> 0.12) and QA (0.90 -> 0.17) and makes TJ-II far worse
-      !> (5.4 -> 22.8), and the TJ-II error then grows under refinement rather
-      !> than falling, which is the signature of a wrong formula and not of an
-      !> unresolved grid.  So it is not that, and g is kept until the right
-      !> statement is derived.  The defect only shows in runs that are both
-      !> electromagnetic and away from quasisymmetry.
-      call integrate_vmu(g * RH_integrand_tmp, spec%dens_psi0 * spec%z, RH_phi_I_tmp)
+      !> gbar, not g.  stella's own time advance says so -- "convert from g to
+      !> gbar ... as gbar appears in time derivative" -- and the derivation
+      !> agrees: substituting h = g + (Z/T)J0 phi F_M into the gyrokinetic
+      !> equation cancels the dphi/dt half of the d<chi>/dt drive exactly and
+      !> leaves the dApar/dt half, which is precisely what gbar absorbs.  So it
+      !> is the projection of gbar that the annihilation leaves constant, and
+      !> the difference is invisible electrostatically.
+      allocate (pdf, source=g)
+      if (include_apar) then
+         do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+            iv = iv_idx(vmu_lo, ivmu)
+            imu = imu_idx(vmu_lo, ivmu)
+            is = is_idx(vmu_lo, ivmu)
+            do it = 1, ntubes
+               do iz = -nzgrid, nzgrid
+                  call gyro_average(apar(:, :, iz, it), iz, ivmu, gyro_apar)
+                  correction = 2.0 * spec(is)%zt * spec(is)%stm_psi0 * vpa(iv) * gyro_apar
+                  if (.not. maxwellian_normalization) &
+                     correction = correction * maxwell_vpa(iv, is) &
+                                * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
+                  pdf(:, :, iz, it, ivmu) = pdf(:, :, iz, it, ivmu) + correction
+               end do
+            end do
+         end do
+      end if
+
+      call integrate_vmu(pdf * RH_integrand_tmp, spec%dens_psi0 * spec%z, RH_phi_I_tmp)
       RH_phi_I = RH_phi_I_tmp(1,:,:,:,:)
 
+      !> The same projection of g alone, so that the two can be told apart in a
+      !> run rather than argued about.
+      if (present(RH_phi_I_g)) then
+         call integrate_vmu(g * RH_integrand_tmp, spec%dens_psi0 * spec%z, RH_phi_I_tmp)
+         RH_phi_I_g = RH_phi_I_tmp(1,:,:,:,:)
+      end if
+
+      deallocate (pdf)
       deallocate (RH_phi_I_tmp)
 
    end subroutine get_RH_phi_I_fluxtube
