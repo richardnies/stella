@@ -141,7 +141,7 @@ contains
       use species, only: spec
       use constants, only: zi
 
-      use geometry, only: RH_drift_phase_fac
+      use geometry, only: RH_pmom_geo_fac
       use parameters_diagnostics, only: write_RH_asymptotics
       implicit none
 
@@ -305,7 +305,7 @@ contains
                   RH_integrand_odd( ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls-integrand_tmp_min)
                   !> Apply the geometric factor I; only the geometry knows it, and
                   !> for a quasisymmetric field it is (MG+NI)/(N-iota M).
-                  RH_pmom_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_drift_phase_fac(iz)
+                  RH_pmom_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_pmom_geo_fac(iz)
 
                   if (write_RH_asymptotics) then
                      call get_RH_LW_weights(energyval, muval, vpa(iv), akx(ikx), iz, is, &
@@ -1031,7 +1031,7 @@ contains
       use parameters_kxky_grids, only: naky, nakx
       use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
       use parameters_numerical, only: maxwellian_normalization
-      use geometry, only: RH_drift_phase_fac, bmag
+      use geometry, only: RH_pmom_geo_fac, bmag
       use arrays_dist_fn, only: integrand_vpamu => g1
 
       implicit none
@@ -1056,7 +1056,7 @@ contains
                !> geometric factor and the ratio returns a frequency.
                integrand_vpamu(1, :, iz, it, ivmu) = RH_pmom_weight(:, iz, it, ivmu) &
                     * vpa(iv) * spec(is)%mass / spec(is)%temp &
-                    * RH_drift_phase_fac(iz) / bmag(ia, iz)
+                    * RH_pmom_geo_fac(iz) / bmag(ia, iz)
                !> integrate_vmu folds the Maxwellian into its own weights when
                !> the evolved pdf is normalised by one.
                if (.not. maxwellian_normalization) &
@@ -2060,10 +2060,10 @@ contains
    !> restricted to its own well; a passing one runs over the whole line.
    subroutine eval_pmom_transit_int(energy, mu, sigma, akx, iz_ref, is, Q_profile, T_v)
 
-      use geometry, only: bmag, dl_over_b, gds22, geo_surf, q_as_x
+      use geometry, only: bmag, dl_over_b, gds22, geo_surf, q_as_x, gradpar
       use species, only: spec
       use spfunc, only: j0
-      use zgrid, only: nzgrid
+      use zgrid, only: nzgrid, zed
 
       implicit none
 
@@ -2072,7 +2072,7 @@ contains
       complex, dimension(-nzgrid:), intent(in) :: Q_profile
       complex, intent(out) :: T_v
 
-      real    :: B_c, vpa2, vperp2, kperp2, aj0
+      real    :: B_c, vpa2, vperp2, kperp2, aj0, measure_scale
       integer :: ia, iz, iz_lo, iz_hi
       logical :: trapped, well_found
 
@@ -2109,6 +2109,20 @@ contains
          !> measure, dl = (dl/B) * B.
          T_v = T_v + sigma * aj0 * exp(-Q_profile(iz)) * dl_over_b(ia, iz)
       end do
+
+      !> The bounce time this is divided by is not always in these units.  The
+      !> circulating branch of eval_transit_ints weights by B*dl_over_b, which
+      !> carries the same normalisation of dl_over_b as the sum above, so the
+      !> ratio is right.  The trapped branch, bounce_ints_in_well, weights by
+      !> 1/|gradpar| instead, which does not -- the two differ by the constant
+      !>     S = (dz/|gradpar|) / (B dl_over_b),
+      !> the sum that normalises dl_over_b to unity.  Left uncorrected the
+      !> trapped part of the momentum weight is too small by that factor, which
+      !> is of order a hundred in the stellarator equilibria here.
+      if (trapped) then
+         measure_scale = (zed(1) - zed(0)) / (abs(gradpar(0)) * bmag(ia, 0) * dl_over_b(ia, 0))
+         T_v = T_v * measure_scale
+      end if
 
    end subroutine eval_pmom_transit_int
 
