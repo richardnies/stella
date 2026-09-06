@@ -491,3 +491,130 @@ def figure_LW_power(panels, outfile):
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+def stress_split(netcdf_file, time_min, time_max):
+    """Split the even nonlinear flux into its Reynolds and diamagnetic channels.
+
+    The FLR expansion 1 - J0 ~ kperp^2 vperp^2 / 4 Omega^2 puts a vperp^2 inside
+    a velocity integral over the whole distribution.  Taken against the
+    adiabatic part of that distribution it returns a functional of phi alone --
+    the Reynolds stress; taken against the non-adiabatic part it returns the
+    perpendicular pressure -- the diamagnetic stress.  Both are the same order
+    in kperp*rho, so the even channel carries both and the diagnostic does not
+    separate them.
+
+    Rebuild each from the saved fields and fit them to the measured flux:
+
+      P_phi(kx) = sum_k' [i ky phi](k') [Gamma_pol phi](k-k')
+      P_p(kx)   = sum_k' [i ky phi](k') [b p_perp](k-k')
+
+    Returns (t, kx, measured, P_phi, P_p) field-line averaged, restricted to the
+    window and to finite kx.  Needs write_phi_vs_kxkyz and write_moments.
+    """
+    ncdata = Dataset(netcdf_file)
+    t = np.array(ncdata.variables['t'][:])
+    kx = np.array(ncdata.variables['kx'][:]); ky = np.array(ncdata.variables['ky'][:])
+    zed = np.array(ncdata.variables['zed'][:])
+    jac = np.array(ncdata.variables['jacob'][:])[:, 0]
+    kp2 = np.array(ncdata.variables['kperp2'][:])[:, 0]
+    mass = np.array(ncdata.variables['mass'][:]); temp = np.array(ncdata.variables['temp'][:])
+    chg = np.array(ncdata.variables['charge'][:]); dens = np.array(ncdata.variables['dens'][:])
+    w = (zed[1] - zed[0]) * jac.copy(); w[-1] = 0.0; w /= w.sum()
+
+    phi = _complex(ncdata, 'phi_vs_t')[0][:, 0]
+    pperp = _complex(ncdata, 'pressure_perp')[0][:, 0, 0]
+    meas = _complex(ncdata, 'RH_fluxes_phi_even')[0][:, 0, 0]
+
+    Gpol = np.zeros(kp2.shape); bfac = np.zeros(kp2.shape)
+    for z_s, m_s, T_s, n_s in zip(chg, mass, temp, dens):
+        x = kp2 * (m_s * T_s / z_s**2) / 2.0
+        Gpol += z_s**2 * n_s / T_s * (1 - np.i0(x) * np.exp(-x))
+        bfac += x
+
+    nkx = len(kx)
+    idx = -np.ones((nkx, nkx), dtype=int)
+    for p in range(nkx):
+        for q in range(nkx):
+            hit = np.where(np.abs(kx - (kx[p] - kx[q])) < 1e-8)[0]
+            if hit.size:
+                idx[p, q] = hit[0]
+    ref = np.array([np.where(np.abs(kx + kx[q]) < 1e-8)[0][0] for q in range(nkx)])
+
+    def convolve(field):
+        out = np.zeros(phi.shape[:3], dtype=complex)
+        for iy in range(len(ky)):
+            if ky[iy] <= 0:
+                continue
+            A = 1j * ky[iy] * phi[:, :, :, iy]
+            B = field[:, :, :, iy]
+            for q in range(nkx):
+                acc = np.zeros(phi.shape[:2], dtype=complex)
+                for p in range(nkx):
+                    r = idx[p, q]
+                    if r >= 0:
+                        acc += A[:, :, p] * np.conj(B[:, :, r])
+                out[:, :, q] += acc
+        return out + np.conj(out[:, :, ref])
+
+    fla = lambda a: np.einsum('z,tzk->tk', w, a)
+    P_phi = fla(convolve(Gpol[None] * phi))
+    P_p = fla(convolve(bfac[None] * pperp))
+    M = fla(meas.sum(axis=3))
+
+    window = (t >= time_min) & (t <= time_max)
+    finite = np.abs(kx) > 1e-12
+    return t[window], kx[finite], M[window][:, finite], P_phi[window][:, finite], P_p[window][:, finite]
+
+
+def _fit(columns, target):
+    """Real coefficients fitted to complex data, plus the relative residual."""
+    A = np.vstack([np.column_stack(columns).real, np.column_stack(columns).imag])
+    y = np.concatenate([target.real, target.imag])
+    c, *_ = np.linalg.lstsq(A, y, rcond=None)
+    return c, np.linalg.norm(y - A @ c) / np.linalg.norm(y)
+
+
+def figure_stress_split(netcdf_file, outfile, time_min, time_max, title=''):
+    """Show that the even channel needs the diamagnetic stress as well.
+
+    Left: the measured flux at the longest wavelength the box holds, against a
+    Reynolds-only fit and a fit carrying both stresses.  Right: how that changes
+    with kx.  A Reynolds-only description is not merely imprecise -- it is
+    missing a term of the same order.
+    """
+    t, kx, M, P_phi, P_p = stress_split(netcdf_file, time_min, time_max)
+    c1, r1 = _fit([P_phi.ravel()], M.ravel())
+    cb, rb = _fit([P_phi.ravel(), P_p.ravel()], M.ravel())
+
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.2))
+    j = int(np.argmin(np.abs(kx - kx[kx > 0].min())))
+    ax.plot(t, M[:, j].real, color=PHI, lw=1.8, label='measured')
+    ax.plot(t, (c1[0] * P_phi[:, j]).real, color=GREY, lw=1.4, ls='--',
+            label=r'Reynolds only')
+    ax.plot(t, (cb[0] * P_phi[:, j] + cb[1] * P_p[:, j]).real, color=UPA, lw=1.4, ls=':',
+            label=r'Reynolds $+$ diamagnetic')
+    ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
+    ax.set_ylabel(r'$F^{\rm NL}_{\rm even}$')
+    ax.set_title(f'{title}  $k_x\\rho = {kx[j]:.2f}$', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=8)
+
+    pos = kx > 0
+    e1, eb = [], []
+    for jj in np.where(pos)[0]:
+        m = M[:, jj]
+        e1.append(np.linalg.norm(m - c1[0] * P_phi[:, jj]) / np.linalg.norm(m) * 100)
+        eb.append(np.linalg.norm(m - cb[0] * P_phi[:, jj] - cb[1] * P_p[:, jj]) / np.linalg.norm(m) * 100)
+    ax2.semilogy(kx[pos], e1, 'o--', color=GREY, lw=1.4, ms=5, label='Reynolds only')
+    ax2.semilogy(kx[pos], eb, 's-', color=UPA, lw=1.6, ms=5, label=r'Reynolds $+$ diamagnetic')
+    ax2.set_xlabel(r'$k_x\rho$')
+    ax2.set_ylabel('residual [%]')
+    ax2.set_title('Both stresses are needed', fontsize=9.5, loc='left')
+    ax2.legend(frameon=False, fontsize=8)
+    weight = np.linalg.norm(cb[1] * P_p) / np.linalg.norm(cb[0] * P_phi)
+    ax2.text(0.97, 0.06, rf'$|\Pi_T|/|\Pi_\varphi| = {weight:.2f}$', transform=ax2.transAxes,
+             ha='right', fontsize=8.5, color='#444')
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
