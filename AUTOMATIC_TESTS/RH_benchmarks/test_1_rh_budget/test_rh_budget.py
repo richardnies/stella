@@ -338,3 +338,78 @@ def test_whether_analytic_and_numerical_drift_phase_agree(tmp_path, stella_versi
     print(f'  -->  Analytic and numerical drift-orbit phase agree: inertia to '
           f'{inertia_difference:.1e}, E_RH(t) to {energy_difference:.1e}.')
     return
+
+
+#-------------------------------------------------------------------------------
+#              THE TOROIDAL-MOMENTUM BUDGET                                     #
+#-------------------------------------------------------------------------------
+def check_rh_pmom_budget(input_filename, tmp_path, stella_version, tolerance,
+                         time_min=None, time_max=None, channel='total',
+                         kx_max=None, error=False):
+    '''Run <input_filename> and assert that the toroidal-momentum budget closes.
+
+    The same statement as check_rh_budget, for the other invariant: the second
+    member of the annihilated family is conserved by the same lemma, so its
+    energy has to be accounted for by its own flux channels.
+    '''
+    run_local_stella_simulation(input_filename, tmp_path, stella_version)
+    local_netcdf_file = tmp_path / input_filename.replace('.in', '.out.nc')
+
+    time, E, dE_dt, P, P_nl, P_coll, P_drift = get_rh_pmom_budget(
+        local_netcdf_file, time_min, time_max, kx_max)
+
+    if channel == 'nonlinear':
+        measured, expected, what = dE_dt - P_coll - P_drift, P_nl, 'nonlinear channel'
+    else:
+        measured, expected, what = dE_dt, P, 'total budget'
+    residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)
+
+    #> The same guard against a vacuous pass as the potential-like budget uses.
+    integrand = np.abs(dE_dt)
+    turnover = np.sum(0.5 * (integrand[1:] + integrand[:-1]) * np.diff(time)) / E.mean()
+    if not (turnover > 0.5):
+        print('\nERROR: The zonal flow barely evolved, so the test is vacuous.'); error = True
+        print(f'    integral |dE/dt| dt / mean(E) = {turnover:.4f}   (need > 0.5)')
+
+    if not (residual < tolerance):
+        print(f'\nERROR: The toroidal-momentum budget does not close for {input_filename}.'); error = True
+        print(f'    {what}, relative L2 residual = {residual:14.6e}   (tolerance {tolerance:.1e})')
+        print(f'    {"time":>10} {"measured":>16} {"expected":>16} {"ratio":>10}')
+        for i in range(0, len(time), max(1, len(time) // 12)):
+            ratio = measured[i] / expected[i] if expected[i] != 0 else np.nan
+            print(f'    {time[i]:10.3f} {measured[i]:16.6e} {expected[i]:16.6e} {ratio:10.4f}')
+
+    assert (not error), f'The toroidal-momentum budget does not close for {input_filename}.'
+    print(f'  -->  Toroidal-momentum budget closes: {what} residual {residual:.2e}, '
+          f'turnover {turnover:.1f}.')
+    return
+
+
+def test_whether_pmom_budget_closes_for_linear_collisional_zonal_flow(tmp_path, stella_version):
+    '''The toroidal-momentum budget on the linear collisional case.
+
+    This is the sharpest of the momentum tests: the flow decays by a factor of
+    several thousand over the window, so both sides of the budget are large and
+    the comparison has nowhere to hide.
+    '''
+    check_rh_pmom_budget('rh_linear_collisional.in', tmp_path, stella_version,
+                         tolerance=0.05)
+    return
+
+
+def test_whether_pmom_budget_closes_for_nonlinear_adiabatic_electrons(tmp_path, stella_version):
+    '''The toroidal-momentum budget driven by the nonlinearity.
+
+    Single species, so the momentum energy sits at the long wavelengths the
+    construction is built for.  With kinetic electrons it does not: the electrons
+    carry essentially all of the momentum energy and put it at k_x rho_i = 2.5,
+    where the diagnostic is known to lose accuracy and where the potential-like
+    budget fails too -- and fails harder, 6.4e-1 against 2.9e-1 for this one.
+    Those cases are judged on k_x <= 1.1 for the potential-like invariant, which
+    is not available here because after that cut the momentum channel has no
+    signal left to test.
+    '''
+    check_rh_pmom_budget('rh_nl_adiabatic_electrons.in', tmp_path, stella_version,
+                         tolerance=0.06, time_min=20.0, time_max=30.0,
+                         channel='nonlinear')
+    return

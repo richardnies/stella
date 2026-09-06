@@ -1079,7 +1079,7 @@ contains
    !> which the linear parallel streaming and the non-secular part of the radial
    !> magnetic drift annihilate exactly.  Divided by RH_pmom_inertia it is the
    !> residual parallel flow.
-   subroutine get_RH_pmom(g, RH_pmom)
+   subroutine get_RH_pmom(g, RH_pmom, RH_pmom_g)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -1098,6 +1098,7 @@ contains
 
       complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_pmom
+      complex, dimension(:, -nzgrid:, :, :), intent(out), optional :: RH_pmom_g
 
       complex, dimension(:, :, :, :, :), allocatable :: pmom_tmp, pdf
       complex, dimension(naky, nakx) :: gyro_apar, correction
@@ -1137,8 +1138,17 @@ contains
       end if
 
       call integrate_vmu(pdf * RH_pmom_tmp, spec%dens_psi0, pmom_tmp)
-      deallocate (pdf)
       RH_pmom = pmom_tmp(1,:,:,:,:)
+
+      !> The same projection taken of g alone.  The difference is the Apar
+      !> part of gbar, and its time derivative is a source of the gbar
+      !> projection that no flux channel carries; writing both is what lets
+      !> that be separated from the fluxes rather than lumped into a residual.
+      if (present(RH_pmom_g)) then
+         call integrate_vmu(g * RH_pmom_tmp, spec%dens_psi0, pmom_tmp)
+         RH_pmom_g = pmom_tmp(1,:,:,:,:)
+      end if
+      deallocate (pdf)
 
       deallocate (pmom_tmp)
 
