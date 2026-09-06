@@ -38,6 +38,7 @@ module rosenbluth_hinton
    public :: RH_U_parallel_fac
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
+   public :: RH_asym_even, RH_asym_odd
    public :: RH_pmom_weight, RH_pmom_inertia
    public :: get_RH_pmom, get_RH_pmom_fluxes_fluxtube
    public :: RH_drift_bounce_avg
@@ -52,6 +53,10 @@ module rosenbluth_hinton
    ! (nakx, -nzgrid:nzgrid, ntubes, nspec)
 
    complex, dimension(:,:,:,:), allocatable :: RH_integrand_even, RH_integrand_odd
+
+   !> Long-wavelength approximations to the same weights, filled only when
+   !> <write_RH_asymptotics> asks for them.
+   complex, dimension(:,:,:,:), allocatable :: RH_asym_even, RH_asym_odd
 
    !> The parallel-flow counterpart of the Rosenbluth-Hinton projection.
    !> <RH_pmom_weight> is V_sigma(z) = <vpa J0 exp(-Q)>_tau exp(Q(z)), the
@@ -135,11 +140,13 @@ contains
       use constants, only: zi
 
       use geometry, only: RH_drift_phase_fac
+      use parameters_diagnostics, only: write_RH_asymptotics
       implicit none
 
       real :: energyval, muval, bmag_max, drift_average
       real, dimension(:), allocatable :: Q_hat_z
       complex :: integrand_tmp_pls, integrand_tmp_min, integrand_tmp_v
+      complex :: asym_even_tmp, asym_odd_tmp
       logical :: trapped, well_found
 
       integer :: ivmu, iv, imu, is, ia, iz, it, ikx
@@ -221,6 +228,10 @@ contains
       allocate (RH_integrand_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_odd  = 0.
       allocate (RH_pmom_weight(  nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_pmom_weight = 0.
       allocate (RH_pmom_inertia( nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_pmom_inertia = 0.
+      if (write_RH_asymptotics) then
+         allocate (RH_asym_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_asym_even = 0.
+         allocate (RH_asym_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_asym_odd  = 0.
+      end if
 
       ! Allocate array for RH_U_parallel_fac
       allocate (RH_U_parallel_fac( -nzgrid:nzgrid, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_U_parallel_fac = 0.
@@ -286,6 +297,13 @@ contains
                   !> for a quasisymmetric field it is (MG+NI)/(N-iota M).
                   RH_pmom_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_drift_phase_fac(iz)
 
+                  if (write_RH_asymptotics) then
+                     call get_RH_asymptotic_weights(energyval, muval, vpa(iv), akx(ikx), iz, is, &
+                                                    trapped, asym_even_tmp, asym_odd_tmp, Q_hat_z)
+                     RH_asym_even(ikx,iz,it,ivmu) = asym_even_tmp
+                     RH_asym_odd( ikx,iz,it,ivmu) = asym_odd_tmp
+                  end if
+
                end do !ikx
 
                !> RH_U_parallel_fac is the same construction evaluated at a tiny
@@ -326,6 +344,8 @@ contains
       if (allocated(RH_integrand_odd )) deallocate (RH_integrand_odd)
       if (allocated(RH_pmom_weight )) deallocate (RH_pmom_weight)
       if (allocated(RH_pmom_inertia)) deallocate (RH_pmom_inertia)
+      if (allocated(RH_asym_even)) deallocate (RH_asym_even)
+      if (allocated(RH_asym_odd )) deallocate (RH_asym_odd)
       if (allocated(RH_U_parallel_fac)) deallocate (RH_U_parallel_fac)
       if (allocated(RH_inertia))        deallocate (RH_inertia)
       if (allocated(RH_drift_bounce_avg)) deallocate (RH_drift_bounce_avg)
@@ -1870,6 +1890,104 @@ contains
    end subroutine eval_pmom_transit_int
 
 
+   !> The long-wavelength (order kx^2) approximation to the projection weight.
+   !>
+   !> Expanding W = <J0 exp(-Q)>_tau exp(Q) with Q = i kx dx and splitting into
+   !> parts even and odd in sgn(v_par), Q being odd,
+   !>
+   !>   even(W) - 1 = -<a^2>_tau/4 - (kx^2/2)[ <dx^2>_tau + dx^2 - 2 dxbar dx ]
+   !>   odd(W)      =  i kx ( dx - dxbar )
+   !>
+   !> so the two halves are O(kx^2) and O(kx) respectively.  Which order a given
+   !> quantity needs is not uniform, and getting it wrong is easy: the leading
+   !> term survives for phi_RH, but cancels for the inertia (against the 1 in
+   !> 1 - J0 W), for the nonlinear flux (by quasineutrality, the gyrocentre
+   !> charge density being itself O(b)) and for the collisional flux (because
+   !> the collision operator conserves particles).  Having both forms available
+   !> in the same run is what lets such a claim be checked rather than asserted.
+   subroutine get_RH_asymptotic_weights(energyval, muval, vpaval, akxval, iz, is, trapped, &
+                                        even_asym, odd_asym, Q_hat_in)
+
+      use species, only: spec
+      use zgrid, only: nzgrid
+      use geometry, only: bmag, gds22, geo_surf, q_as_x
+      use constants, only: zi
+
+      implicit none
+
+      real,    intent(in)  :: energyval, muval, vpaval, akxval
+      integer, intent(in)  :: iz, is
+      logical, intent(in)  :: trapped
+      complex, intent(out) :: even_asym, odd_asym
+      real, dimension(-nzgrid:), intent(in), optional :: Q_hat_in
+
+      real,    dimension(-nzgrid:nzgrid) :: Q_hat
+      complex, dimension(-nzgrid:nzgrid) :: Q_profile
+      real    :: dx_here, dxbar, dx2bar, tau_b, a2, kperp2, vperp2
+      complex :: tmp
+      integer :: ia
+
+      ia = 1
+      even_asym = 0.; odd_asym = 0.
+      if (abs(akxval) <= epsilon(0.)) return
+
+      !> The excursion profile, from the same phase the exact weight uses.
+      if (use_analytic_drift_phase) then
+         do ia = -nzgrid, nzgrid
+            call eval_Q_fac(sign(1., vpaval) * sqrt(max(energyval - 2.*muval*bmag(1, ia), 0.)), &
+                            akxval, ia, is, Q_profile(ia))
+         end do
+         ia = 1
+      else
+         if (present(Q_hat_in)) then
+            Q_hat = Q_hat_in
+         else if (energyval > epsilon(0.)) then
+            call eval_Q_profile_hat(muval/energyval, iz, Q_hat)
+         else
+            Q_hat = 0.
+         end if
+         Q_profile = zi * akxval * sqrt(max(energyval, 0.)) * spec(is)%smz_psi0 &
+                   * sign(1., vpaval) * Q_hat
+      end if
+
+      dx_here = aimag(Q_profile(iz)) / akxval
+
+      !> Transit averages of the excursion and its square, through the same
+      !> quadrature as the exact weight.
+      call eval_transit_ints(energyval, muval, sign(1., vpaval), akxval, iz, is, tmp, tau_b, &
+                             Q_profile, moment=1)
+      dxbar = real(tmp)
+      call eval_transit_ints(energyval, muval, sign(1., vpaval), akxval, iz, is, tmp, tau_b, &
+                             Q_profile, moment=2)
+      dx2bar = real(tmp)
+      if (tau_b > 0.) then
+         dxbar = dxbar / tau_b
+         dx2bar = dx2bar / tau_b
+      else
+         return
+      end if
+      !> A trapped orbit samples both signs of v_par, so its mean excursion
+      !> vanishes; the code's symmetrisation of the exact weight does the same.
+      if (trapped) dxbar = 0.
+
+      !> The finite-Larmor-radius piece, -<a^2>/4, with a^2 evaluated locally --
+      !> its transit and field-line averages coincide under the orbit measure.
+      vperp2 = 2.*muval*bmag(ia, iz)
+      if (q_as_x) then
+         kperp2 = akxval**2 * gds22(ia, iz)
+      else
+         kperp2 = akxval**2 * gds22(ia, iz) / (geo_surf%shat**2)
+      end if
+      kperp2 = max(kperp2, 0.)
+      a2 = kperp2 * vperp2 * (spec(is)%smz_psi0 / bmag(ia, iz))**2
+
+      even_asym = 1. - 0.25 * a2 &
+                - 0.5 * akxval**2 * (dx2bar + dx_here**2 - 2.*dxbar*dx_here)
+      odd_asym  = zi * akxval * (dx_here - dxbar)
+
+   end subroutine get_RH_asymptotic_weights
+
+
    subroutine get_RH_transit_integrands(energyval, muval, vpaval, akxval, iz, is, trapped, &
                                         integrand_pls, integrand_min, Q_hat_in, integrand_v)
 
@@ -1991,7 +2109,7 @@ contains
    !> hands off to the well-resolved quadrature below, falling back to the plain
    !> sum only if no complete well can be found -- which happens when the well
    !> runs off the end of the simulated field line.
-   subroutine eval_transit_ints(energy, mu, sigma, akx, iz_ref, is, transit_int_eiQJ0, bounce_time, Q_profile)
+   subroutine eval_transit_ints(energy, mu, sigma, akx, iz_ref, is, transit_int_eiQJ0, bounce_time, Q_profile, moment)
 
       use geometry, only: bmag, dl_over_b
       use zgrid, only: nzgrid
@@ -2004,6 +2122,7 @@ contains
       real,    intent(out) :: bounce_time
 
       complex, dimension(-nzgrid:), intent(in), optional :: Q_profile
+      integer, intent(in), optional :: moment
 
       complex, dimension(-nzgrid:nzgrid) :: integrand_eiQJ0
       complex, dimension(-nzgrid:nzgrid) :: integrand_tau_b
@@ -2025,10 +2144,10 @@ contains
          if (well_found) then
             if (present(Q_profile)) then
                call bounce_ints_in_well(energy, mu, sigma, akx, B_c, iz_lo, iz_hi, is, &
-                                        transit_int_eiQJ0, bounce_time, Q_profile)
+                                        transit_int_eiQJ0, bounce_time, Q_profile, moment)
             else
                call bounce_ints_in_well(energy, mu, sigma, akx, B_c, iz_lo, iz_hi, is, &
-                                        transit_int_eiQJ0, bounce_time)
+                                        transit_int_eiQJ0, bounce_time, moment=moment)
             end if
             return
          end if
@@ -2038,7 +2157,7 @@ contains
       do iz = -nzgrid, nzgrid
 
          if (present(Q_profile)) then
-            call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .false., integrand_eiQJ0(iz), Q_profile(iz))
+            call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .false., integrand_eiQJ0(iz), Q_profile(iz), moment)
             call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .true.,  integrand_tau_b(iz), Q_profile(iz))
          else
             call eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, .false., integrand_eiQJ0(iz))
@@ -2057,7 +2176,7 @@ contains
    !> 1/|vpa| that carries the turning-point singularity.  bounce_ints_in_well
    !> needs the two separated, because the singular factor is absorbed into the
    !> quadrature weight rather than evaluated.
-   subroutine eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator, Q_at_z)
+   subroutine eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator, Q_at_z, moment)
 
       use geometry, only: bmag
       use species, only: spec
@@ -2070,11 +2189,19 @@ contains
       integer, intent(in)  :: iz, is
       complex, intent(out) :: numerator
       complex, intent(in), optional :: Q_at_z
+      !> See eval_transit_int_integrand_RH: 0 or absent gives J0 exp(-Q), 1 and 2
+      !> give the radial excursion and its square, which the long-wavelength
+      !> expansion needs.  Without this the trapped branch silently returned the
+      !> exact integrand for a moment request.
+      integer, intent(in), optional :: moment
 
-      real    :: vpa2, vpa, vperp2, kperp2, aj0x_local
+      real    :: vpa2, vpa, vperp2, kperp2, aj0x_local, dxloc
+      integer :: mom
       complex :: Q_fac
       integer :: ia
       ia = 1
+      mom = 0
+      if (present(moment)) mom = moment
 
       vpa2 = energy - 2.*mu*bmag(ia, iz)
       if (vpa2 <= epsilon(0.)) then
@@ -2098,7 +2225,17 @@ contains
          call eval_Q_fac(vpa, akx, iz, is, Q_fac)
       end if
 
+      if (mom == 0) then
       numerator = exp(-Q_fac) * aj0x_local
+      else
+         dxloc = 0.
+         if (abs(akx) > epsilon(0.)) dxloc = aimag(Q_fac) / akx
+         if (mom == 1) then
+            numerator = dxloc
+         else
+            numerator = dxloc**2
+         end if
+      end if
 
    end subroutine eval_transit_int_numerator
 
@@ -2128,7 +2265,7 @@ contains
    !> grid values; g is taken to its analytic limit at the two turning points,
    !> where the definition above is 0/0.
    subroutine bounce_ints_in_well(energy, mu, sigma, akx, B_c, iz_lo, iz_hi, is, &
-                                  transit_int_eiQJ0, bounce_time, Q_profile)
+                                  transit_int_eiQJ0, bounce_time, Q_profile, moment)
 
       use geometry, only: bmag, gradpar, dbdzed
       use zgrid, only: nzgrid, zed
@@ -2146,6 +2283,8 @@ contains
       !> Nodes in the Chebyshev sum.  The integrand left after the substitution is
       !> smooth, so this converges quickly; 64 is far into the converged regime
       !> for the wells a stella grid resolves.
+      integer, intent(in), optional :: moment
+
       integer, parameter :: n_nodes = 64
 
       real    :: z_l, z_r, mid, half
@@ -2179,9 +2318,9 @@ contains
          g_well(i) = (B_c - bmag(ia, iz)) / ((z_well(i) - z_l) * (z_r - z_well(i)))
          weight_well(i) = 1.0 / abs(gradpar(iz))
          if (present(Q_profile)) then
-            call eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator_well(i), Q_profile(iz))
+            call eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator_well(i), Q_profile(iz), moment)
          else
-            call eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator_well(i))
+            call eval_transit_int_numerator(energy, mu, sigma, akx, iz, is, numerator_well(i), moment=moment)
          end if
       end do
 
@@ -2265,7 +2404,13 @@ contains
 
 
    ! Evaluate integrand in RH transit average
-   subroutine eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, bounce_time_bool, transit_avg_integrand, Q_at_z)
+   !> <moment> selects what is transit-averaged: absent or 0 gives the
+   !> Rosenbluth-Hinton integrand J_0 exp(-Q), 1 gives the radial excursion
+   !> delta_x = Q/(i kx), and 2 gives delta_x^2.  The last two are what the
+   !> long-wavelength expansion needs, and taking them through the same
+   !> quadrature is the point: the turning-point treatment that makes the
+   !> exact weight accurate makes the asymptotic one accurate too.
+   subroutine eval_transit_int_integrand_RH(energy, mu, sigma, akx, iz, is, bounce_time_bool, transit_avg_integrand, Q_at_z, moment)
 
       use geometry, only: bmag
       use species, only: spec
@@ -2279,11 +2424,16 @@ contains
       logical, intent(in)  :: bounce_time_bool ! if true, evaluate integrand for bounce time
       complex, intent(out) :: transit_avg_integrand
       complex, intent(in), optional :: Q_at_z
+      integer, intent(in), optional :: moment
 
+      real    :: dxloc
+      integer :: mom
       real    :: vpa2, vpa, vperp2, kperp2
       complex :: Q_fac, aj0x
       integer :: ia
       ia = 1
+      mom = 0
+      if (present(moment)) mom = moment
 
       !> Evaluate the integrand, zero in the forbidden region.  This is correct
       !> for a field line with many wells as it stands: which well the orbit
@@ -2321,7 +2471,20 @@ contains
             end if
 
             ! Integrand
-            transit_avg_integrand = exp(-Q_fac) * aj0x / abs(vpa)
+            if (mom == 0) then
+               transit_avg_integrand = exp(-Q_fac) * aj0x / abs(vpa)
+            else
+               !> Q is purely imaginary, so the excursion is its imaginary part
+               !> divided by kx.  Guard the division: at kx = 0 the excursion is
+               !> not resolved by the phase and the moments are not needed.
+               dxloc = 0.
+               if (abs(akx) > epsilon(0.)) dxloc = aimag(Q_fac) / akx
+               if (mom == 1) then
+                  transit_avg_integrand = dxloc / abs(vpa)
+               else
+                  transit_avg_integrand = dxloc**2 / abs(vpa)
+               end if
+            end if
 
          end if
       end if

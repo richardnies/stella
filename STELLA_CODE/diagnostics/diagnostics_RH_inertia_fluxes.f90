@@ -88,6 +88,7 @@ contains
    subroutine write_RH_integrands_to_netcdf_file()
 
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd
+      use rosenbluth_hinton, only: RH_asym_even, RH_asym_odd
 
       ! Dimensions
       use parameters_kxky_grids, only: naky, nakx
@@ -102,14 +103,14 @@ contains
       use parameters_physics, only: full_flux_surface
 
       ! Write to netcdf file 
-      use stella_io, only: write_RH_integrands_nc
+      use stella_io, only: write_RH_integrands_nc, write_RH_asymptotics_nc
       
       ! Routines
       use mp, only: proc0
       
       ! Input file
       use parameters_diagnostics, only: write_RH_inertia_fluxes
-      use parameters_diagnostics, only: write_RH_integrands
+      use parameters_diagnostics, only: write_RH_integrands, write_RH_asymptotics
 
       implicit none 
 
@@ -118,6 +119,8 @@ contains
       ! Variables needed to write and calculate diagnostics 
       complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_even_vs_kxztsvpamu
       complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_odd_vs_kxztsvpamu
+      complex, dimension(:, :, :, :, :, :), allocatable :: asym_even_vs, asym_odd_vs
+      logical, save :: asym_written = .false.
 
       !---------------------------------------------------------------------- 
 
@@ -144,6 +147,22 @@ contains
          RH_integrand_even_vs_kxztsvpamu(:,:,:,is,iv,imu) = RH_integrand_even(:,:,:,ivmu)
          RH_integrand_odd_vs_kxztsvpamu( :,:,:,is,iv,imu) = RH_integrand_odd( :,:,:,ivmu)
       end do
+
+      !> The long-wavelength approximations, on the same grid, written once.
+      if (write_RH_asymptotics .and. .not. asym_written) then
+         allocate (asym_even_vs(nakx, nztot, ntubes, nspec, nvpa, nmu)); asym_even_vs = 0.
+         allocate (asym_odd_vs( nakx, nztot, ntubes, nspec, nvpa, nmu)); asym_odd_vs  = 0.
+         do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
+            iv = iv_idx(vmu_lo, ivmu); imu = imu_idx(vmu_lo, ivmu); is = is_idx(vmu_lo, ivmu)
+            asym_even_vs(:,:,:,is,iv,imu) = RH_asym_even(:,:,:,ivmu)
+            asym_odd_vs( :,:,:,is,iv,imu) = RH_asym_odd( :,:,:,ivmu)
+         end do
+         call sum_reduce(asym_even_vs, 0)
+         call sum_reduce(asym_odd_vs, 0)
+         if (proc0) call write_RH_asymptotics_nc(asym_even_vs, asym_odd_vs)
+         deallocate (asym_even_vs, asym_odd_vs)
+         asym_written = .true.
+      end if
 
       !> Make sure proc0 has the full array.  This is the expensive diagnostic in
       !> the module: the array is (kx, z, tube, species, vpa, mu) and is held

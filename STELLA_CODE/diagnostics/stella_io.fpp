@@ -77,6 +77,7 @@ module stella_io
    public :: write_RH_pmom_inertia_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
+   public :: write_RH_asymptotics_nc
    public :: write_RH_bounce_drift_nc
    public :: write_radial_fluxes_nc
    public :: write_radial_moments_nc
@@ -1050,6 +1051,27 @@ contains
 #endif
 
    end subroutine write_RH_bounce_drift_nc
+
+   subroutine write_RH_asymptotics_nc(asym_even, asym_odd)
+      implicit none
+
+      complex, dimension(:, :, :, :, :, :), intent(in) :: asym_even, asym_odd
+
+#ifdef NETCDF
+      !> Same layout as the exact integrands, so the two can be compared
+      !> element by element.
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "vpa", "mu"]
+      integer, dimension(7) :: start
+      start = [1, 1, 1, 1, 1, 1, 1]
+
+      call netcdf_write_complex(ncid, "RH_asym_even", asym_even, dim_names=dims, start=start, &
+              long_name="Long-wavelength (order kx^2) approximation to the even projection weight")
+      call netcdf_write_complex(ncid, "RH_asym_odd", asym_odd, dim_names=dims, start=start, &
+              long_name="Long-wavelength (order kx) approximation to the odd projection weight")
+#endif
+
+   end subroutine write_RH_asymptotics_nc
+
 
    subroutine write_RH_integrands_nc(RH_integrand_even, RH_integrand_odd)
       implicit none

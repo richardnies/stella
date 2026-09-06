@@ -54,6 +54,7 @@ module parameters_diagnostics
    public :: write_RH_inertia_fluxes
    public :: write_RH_bounce_drift
    public :: write_RH_integrands
+   public :: write_RH_asymptotics
 
    private
 
@@ -110,6 +111,12 @@ module parameters_diagnostics
    !> is held twice -- so it has its own switch.  Left on by default, since it
    !> was previously written whenever the RH diagnostics were.
    logical :: write_RH_integrands
+
+   !> Write the long-wavelength (order kx^2) approximations to the projection
+   !> weights alongside the exact ones, so that an asymptotic claim can be
+   !> checked in the run that motivates it rather than argued about.  Off by
+   !> default: it costs a second pass over the transit averages.
+   logical :: write_RH_asymptotics
 
 
 contains
@@ -243,6 +250,7 @@ contains
          write_RH_inertia_fluxes = .false.
          write_RH_bounce_drift = .false.
          write_RH_integrands = .true.
+         write_RH_asymptotics = .false.
          
          !------------------------------
          !      Radial variation       !
@@ -296,6 +304,7 @@ contains
             write_phi2_vs_kxky, write_apar2_vs_kxky, write_bpar2_vs_kxky, &
             write_omega_vs_kxky, write_omega_avg_vs_kxky, write_moments, write_radial_fluxes, &
             write_RH_inertia_fluxes, write_RH_bounce_drift, write_RH_integrands, &
+            write_RH_asymptotics, &
             write_radial_moments, write_fluxes_kxkyz, write_fluxes_kxky, write_all, flux_norm, nc_mult, &
             ! Backwards compatibility for old stella code
             write_omega, write_phi_vs_time, write_apar_vs_time, write_bpar_vs_time, &
@@ -404,6 +413,7 @@ contains
          call broadcast(write_RH_inertia_fluxes)
          call broadcast(write_RH_bounce_drift)
          call broadcast(write_RH_integrands)
+         call broadcast(write_RH_asymptotics)
          call broadcast(write_g2_vs_vpamus)
          call broadcast(write_g2_vs_zvpas)
          call broadcast(write_g2_vs_zmus)
