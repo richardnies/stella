@@ -353,3 +353,78 @@ def test_whether_umom_budget_closes_in_stellarator_geometry(configuration, tmp_p
                                   tmp_path, stella_version,
                                   tolerance=UMOM_TOLERANCE[configuration])
     return
+
+
+#-------------------------------------------------------------------------------
+#            THE DRIFT CHANNEL WITH ELECTROMAGNETIC FIELDS                      #
+#-------------------------------------------------------------------------------
+#> Collisionless, linear, and electromagnetic in a field that is not
+#> quasisymmetric.  Nothing else in the suite covers that combination, and it is
+#> the only place where the difference between projecting g and projecting gbar
+#> matters: gbar is the conserved one, since moving to g cancels only the
+#> dphi/dt half of the d<chi>/dt drive.
+#>
+#> The momentum invariant is asserted tightly.  The potential-like one is not,
+#> because it is the one known defect in this note: with the right projection it
+#> still accounts for its drift channel only to about ten per cent, the error
+#> plateaus under refinement of all four grids, and three candidates have been
+#> excluded (resolution, the projection, and the distribution the drift acts on).
+#> It is bounded here rather than left untested, so that a change in it -- a fix
+#> or a regression -- shows up as a failure instead of going unnoticed.
+EM_DRIFT_UMOM_TOLERANCE = {'W7X': 5.0e-3, 'TJII': 1.0e-2, 'QA': 5.0e-3}
+EM_DRIFT_PHI_KNOWN = {'W7X': 0.119, 'TJII': 1.34, 'QA': 0.170}
+
+
+@pytest.mark.parametrize('configuration', ['W7X', 'TJII', 'QA'])
+def test_whether_the_drift_channel_holds_electromagnetically(configuration, tmp_path, stella_version, error=False):
+    '''The drift channel with Apar on, in a non-quasisymmetric field.'''
+    require_equilibrium(configuration)
+    input_filename = f'{configuration}_em_drift.in'
+    run_local_stella_simulation(input_filename, tmp_path, stella_version,
+                                vmec_file=VMEC_FILE[configuration])
+    ncdata = Dataset(tmp_path / input_filename.replace('.in', '.out.nc'))
+
+    time = np.array(ncdata.variables['t'][:])
+    kx = np.array(ncdata.variables['kx'][:])
+    zed = np.array(ncdata.variables['zed'][:])
+    jacobian = np.array(ncdata.variables['jacob'][:])[:, 0]
+    weight = (zed[1] - zed[0]) * jacobian.copy()
+    weight[-1] = 0.0
+    weight = weight / weight.sum()
+    keep = np.abs(kx) > 1e-12
+    kxf = kx[keep]
+
+    def unaccounted(projection, flux):
+        accumulated = _accumulated(time, kxf, flux)
+        #> Normalised by max|projection|, not by its value at t = 0: TJ-II's
+        #> initial gbar projection is a near cancellation, and dividing by it
+        #> turns a working diagnostic into an apparent factor-of-twenty failure.
+        return np.abs((projection[1:] - projection[0]) - accumulated).max() / np.abs(projection).max()
+
+    umom = _field_line_average_per_species(ncdata, 'RH_umom', weight)[:, 0, keep]
+    umom_drift = _field_line_average_per_species(ncdata, 'RH_umom_flux_drift', weight)[:, 0, keep]
+    r_u = unaccounted(umom, umom_drift)
+
+    phi = _field_line_average(ncdata, 'RH_phi_I', weight)[:, keep]
+    phi_drift = sum(_field_line_average(ncdata, n, weight)
+                    for n in ('RH_fluxes_drift_trapped', 'RH_fluxes_drift_passing'))[:, keep]
+    r_phi = unaccounted(phi, phi_drift)
+
+    tol = EM_DRIFT_UMOM_TOLERANCE[configuration]
+    if not (r_u < tol):
+        print(f'\nERROR: U_RH does not follow its drift channel in electromagnetic {configuration}.')
+        error = True
+        print(f'    unaccounted fraction = {r_u:.6e}   (tolerance {tol:.1e})')
+
+    #> Two-sided, so that an improvement is reported as loudly as a regression.
+    known = EM_DRIFT_PHI_KNOWN[configuration]
+    if not (0.4 * known < r_phi < 1.6 * known):
+        print(f'\nNOTE: the known electromagnetic phi_RH defect has changed in {configuration}.')
+        print(f'    unaccounted fraction = {r_phi:.6e}, was {known:.3f}')
+        print('    If it fell, the defect may be fixed and this bound should be tightened.')
+        error = True
+
+    assert (not error), f'The electromagnetic drift channel changed in {configuration}.'
+    print(f'  -->  {configuration} electromagnetic: U_RH to {r_u:.1e}; '
+          f'phi_RH at {r_phi:.2f}, the known defect, unchanged.')
+    return

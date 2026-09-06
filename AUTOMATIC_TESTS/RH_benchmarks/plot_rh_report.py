@@ -861,3 +861,147 @@ def figure_asymptotic_weights(outfile):
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+# ---------------------------------------------------------------------------
+# Closed forms measured against direct quadrature, and the energies.
+# Every number below was measured; the tables they replace are in the git
+# history of DOCUMENTATION/RH_parallel_flow/rh_parallel_flow.tex.
+# ---------------------------------------------------------------------------
+
+LW_CLOSED = dict(kx=[0.005, 0.01, 0.02, 0.05, 0.1, 0.2],
+                 even=[0.07, 0.10, 0.21, 1.00, 3.8, 15.0],
+                 odd=[0.02, 0.08, 0.30, 1.9, 7.3, 27.0])
+I_ERR = dict(kx=[0.02, 0.05, 0.2], err=[0.21, 1.01, 14.9])
+STATPHASE = dict(kx=[5, 10, 20], quad=[0.1956, 0.1401, 0.0987],
+                 sp=[0.1933, 0.1367, 0.0967])
+C_CONST = dict(kx=[5, 10, 20], c=[1.457, 1.503, 1.554])
+RESID1 = dict(kx=[0.05, 0.2, 0.5, 1.0, 2.0], Q=[0.4, 1.6, 3.9, 7.8, 15.6],
+              ratio=[0.90, 0.95, 0.96, 0.92, 0.86], marginal=[True, False, False, False, False])
+
+
+def figure_closed_forms(outfile):
+    """The three closed forms against the quadrature they approximate.
+
+    Long wavelength converges as k_x^2; the stationary-phase amplitude is good
+    to 2% at short wavelength; and the first equality of the residual identity,
+    which carries no long-wavelength caveat, holds across the whole range.
+    """
+    fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(12.4, 3.4))
+
+    a1.loglog(LW_CLOSED['kx'], LW_CLOSED['even'], 'o-', color=PHI, lw=1.6, ms=5,
+              label=r'$\langle\,\mathrm{even}(W)\,\rangle - 1$')
+    a1.loglog(LW_CLOSED['kx'], LW_CLOSED['odd'], 's-', color=UPA, lw=1.6, ms=5,
+              label=r'$\mathrm{rms}\,\mathrm{odd}(W)$')
+    a1.loglog(I_ERR['kx'], I_ERR['err'], '^--', color='#2e7d6b', lw=1.4, ms=6,
+              label=r'the inertia $\langle I\rangle$')
+    ref = np.array([0.005, 0.2])
+    a1.loglog(ref, 0.21 * (ref / 0.02)**2, ':', color=GREY, lw=1.3, label=r'$\propto k_x^2$')
+    a1.set_xlabel(r'$k_x\rho$'); a1.set_ylabel('error against quadrature [%]')
+    a1.set_title('Long wavelength: the $O(k_x^2)$ expansion', fontsize=9.5, loc='left')
+    a1.legend(frameon=False, fontsize=7.4)
+
+    a2.plot(STATPHASE['kx'], STATPHASE['quad'], 'o-', color=PHI, lw=1.6, ms=6,
+            label='quadrature')
+    a2.plot(STATPHASE['kx'], STATPHASE['sp'], 's--', color=UPA, lw=1.6, ms=6,
+            label='stationary phase')
+    a2.set_xscale('log'); a2.set_yscale('log')
+    a2.set_xlabel(r'$k_x\rho$'); a2.set_ylabel(r'$|\langle e^{-ik_x\delta x}\rangle_\tau|$')
+    a2.set_title('Short wavelength: the amplitude', fontsize=9.5, loc='left')
+    a2.legend(frameon=False, fontsize=7.6)
+    for kx, q, s in zip(STATPHASE['kx'], STATPHASE['quad'], STATPHASE['sp']):
+        a2.annotate(f'{s/q:.3f}', xy=(kx, s), xytext=(0, -13),
+                    textcoords='offset points', ha='center', fontsize=7, color='#444')
+    a2.text(0.03, 0.06, 'labels: closed form / quadrature\n' +
+            r'$c=\langle|W|\rangle\Delta\theta_{\rm rms}$ = ' +
+            ', '.join(f'{c:.2f}' for c in C_CONST['c']) + r' at $k_x\rho=5,10,20$',
+            transform=a2.transAxes, fontsize=6.8, color='#444')
+
+    filled = [not m for m in RESID1['marginal']]
+    a3.plot(RESID1['kx'], RESID1['ratio'], '-', color=PHI, lw=1.6, zorder=1)
+    for kx, r, f in zip(RESID1['kx'], RESID1['ratio'], filled):
+        a3.plot(kx, r, 'o', ms=6, color=PHI if f else 'white',
+                mec=PHI, mew=1.4, zorder=2)
+    a3.axhline(1.0, color=GREY, ls=':', lw=1.3)
+    a3.set_xscale('log'); a3.set_ylim(0.6, 1.15)
+    a3.set_xlabel(r'$k_x\rho$')
+    a3.set_ylabel(r'measured $\varphi(\infty)$ / predicted')
+    a3.set_title('The residual identity, first equality', fontsize=9.5, loc='left')
+    sec = a3.secondary_xaxis('top')
+    sec.set_xticks(RESID1['kx'])
+    sec.set_xticklabels([f'{q:g}' for q in RESID1['Q']], fontsize=7.5)
+    sec.set_xlabel(r'$\mathcal{Q}$', fontsize=8.5)
+    a3.text(0.5, 0.08, 'open marker: flow barely moves,\nso the ratio is poorly determined',
+            transform=a3.transAxes, fontsize=6.9, color='#444', ha='center')
+
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
+ECL_LW = dict(kx=[0.002, 0.005, 0.01, 0.02], val=[0.0112, 0.0112, 0.0112, 0.0112])
+ECL_SW = dict(kx=[5, 10, 20], val=[0.450, 0.474, 0.487])
+COLL_PARITY = dict(kx=[0.02, 0.05, 0.1, 0.2, 0.5],
+                   ratio=[1.34, 0.76, 0.81, 1.48, 2.11])
+
+
+def figure_energy_and_parity(outfile):
+    """The energy normalisation across the two regimes, and the collisional parity.
+
+    Left: E_RH/|phi_RH|^2 scales as k_x^-2 at long wavelength and saturates at
+    1/2 at short.  Right: the collisional drive is odd-dominated at long
+    wavelength, the opposite ordering to the nonlinear channel.
+    """
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.0, 3.4))
+
+    a1.loglog(ECL_LW['kx'], np.array(ECL_LW['val']) / np.array(ECL_LW['kx'])**2,
+              'o-', color=PHI, lw=1.6, ms=5, label='measured')
+    a1.loglog(ECL_SW['kx'], ECL_SW['val'], 'o-', color=PHI, lw=1.6, ms=5)
+    ref = np.array([0.002, 0.02])
+    a1.loglog(ref, 0.0112 / ref**2, ':', color=GREY, lw=1.4, label=r'$\propto k_x^{-2}$')
+    a1.axhline(0.5, color=UPA, ls='--', lw=1.4, label=r'saturation at $1/2$')
+    a1.set_xlabel(r'$k_x\rho$')
+    a1.set_ylabel(r'$E_{\rm RH}/|\langle\varphi_{\rm RH}\rangle|^2 = \Gamma_{\rm cl}/2\langle I\rangle^2$')
+    a1.set_title('The energy normalisation spans both regimes', fontsize=9.5, loc='left')
+    a1.legend(frameon=False, fontsize=7.6)
+
+    a2.semilogx(COLL_PARITY['kx'], COLL_PARITY['ratio'], 'o-', color=UPA, lw=1.6, ms=6)
+    a2.axhline(1.0, color=GREY, ls=':', lw=1.3)
+    a2.set_xlabel(r'$k_x\rho$')
+    a2.set_ylabel(r'$|F^{\rm coll}_{\rm even}|/|F^{\rm coll}_{\rm odd}|$')
+    a2.set_ylim(0, 2.5)
+    a2.set_title('Collisional drive: the two parities stay comparable',
+                 fontsize=9.5, loc='left')
+    a2.text(0.04, 0.86, 'no clean $k_x^2$ suppression of the even part:\n'
+            'collisions move no particles radially, so the\n'
+            'ordering argument bounds it but does not\n'
+            'make it small over this range',
+            transform=a2.transAxes, fontsize=6.9, color='#444', va='top')
+
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
+# ---------------------------------------------------------------------------
+# Regenerate every figure that is built from measured constants alone (no
+# netCDF needed):  python3 plot_rh_report.py [outdir]
+# ---------------------------------------------------------------------------
+
+STANDALONE_FIGURES = {
+    'fig_convergence.pdf': 'figure_convergence',
+    'fig_stellarator_summary.pdf': 'figure_stellarator_summary',
+    'fig_asymptotic_weights.pdf': 'figure_asymptotic_weights',
+    'fig_closed_forms.pdf': 'figure_closed_forms',
+    'fig_energy_and_parity.pdf': 'figure_energy_and_parity',
+}
+
+if __name__ == '__main__':
+    import sys
+    outdir = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path('.')
+    outdir.mkdir(parents=True, exist_ok=True)
+    for name, fn in STANDALONE_FIGURES.items():
+        globals()[fn](outdir / name)
+        print('wrote', outdir / name)
