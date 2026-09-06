@@ -1043,24 +1043,24 @@ contains
    end subroutine write_RH_phi_I_nc
 
    !----------------------- RH inertia ----------------------
-   subroutine write_RH_pmom_nc(nout, RH_upar, RH_upar_g)
+   subroutine write_RH_pmom_nc(nout, pmom, pmom_g)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :), intent(in) :: RH_upar
-      complex, dimension(:, :, :, :), intent(in), optional :: RH_upar_g
+      complex, dimension(:, :, :, :), intent(in) :: pmom
+      complex, dimension(:, :, :, :), intent(in), optional :: pmom_g
 
 #ifdef NETCDF
       character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
       integer, dimension(6) :: start
       start = [1, 1, 1, 1, 1, nout]
 
-      call netcdf_write_complex(ncid, "RH_pmom", RH_upar, &
+      call netcdf_write_complex(ncid, "RH_pmom", pmom, &
               dim_names=dims, start=start, &
               long_name="Rosenbluth-Hinton toroidal-momentum invariant (= omega*I_pRH in the RH limit)")
 
-      if (present(RH_upar_g)) then
-         call netcdf_write_complex(ncid, "RH_pmom_g", RH_upar_g, &
+      if (present(pmom_g)) then
+         call netcdf_write_complex(ncid, "RH_pmom_g", pmom_g, &
                  dim_names=dims, start=start, &
                  long_name="RH toroidal-momentum projection of g alone, without the gbar Apar part")
       end if
