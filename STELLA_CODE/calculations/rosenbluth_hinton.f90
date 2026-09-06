@@ -2238,6 +2238,63 @@ contains
    !> regular in vpa, so the endpoint behaves as a plain Fourier integral with a
    !> linear phase and contributes at O(1/kx) -- down by kx^(-1/2) on the terms
    !> kept here.
+   !> Y0 and K0, needed for the uniform (Bessel) form of the transit average
+   !> near the trapped-passing boundary.  stella's spfunc carries only J0 and J1,
+   !> and these are the standard Abramowitz & Stegun rational approximations
+   !> (9.4.1-9.4.4 and 9.8.1-9.8.6), good to about 1e-8 -- far finer than the
+   !> asymptotics they serve.  Kept private here rather than added to spfunc so
+   !> that nothing outside this module is disturbed.
+   real function bessel_y0(x)
+
+      use spfunc, only: j0
+      use constants, only: pi
+
+      implicit none
+      real, intent(in) :: x
+      real :: y, f0, th0, r
+
+      if (x <= 0.) then
+         bessel_y0 = 0.
+      else if (x <= 3.) then
+         y = (x / 3.)**2
+         bessel_y0 = (2./pi) * log(0.5*x) * j0(x) &
+            + 0.36746691 + y*(0.60559366 + y*(-0.74350384 + y*(0.25300117 &
+            + y*(-0.04261214 + y*(0.00427916 + y*(-0.00024846))))))
+      else
+         r = 3. / x
+         f0 = 0.79788456 + r*(-0.00000077 + r*(-0.00552740 + r*(-0.00009512 &
+            + r*(0.00137237 + r*(-0.00072805 + r*0.00014476)))))
+         th0 = x - 0.78539816 + r*(-0.04166397 + r*(-0.00003954 + r*(0.00262573 &
+            + r*(-0.00054125 + r*(-0.00029333 + r*0.00013558)))))
+         bessel_y0 = f0 * sin(th0) / sqrt(x)
+      end if
+
+   end function bessel_y0
+
+   real function bessel_k0(x)
+
+      implicit none
+      real, intent(in) :: x
+      real :: y, t, i0
+
+      if (x <= 0.) then
+         bessel_k0 = 0.
+      else if (x <= 2.) then
+         t = x / 3.75
+         y = t*t
+         i0 = 1. + y*(3.5156229 + y*(3.0899424 + y*(1.2067492 + y*(0.2659732 &
+            + y*(0.0360768 + y*0.0045813)))))
+         y = 0.25 * x * x
+         bessel_k0 = -log(0.5*x) * i0 - 0.57721566 + y*(0.42278420 + y*(0.23069756 &
+            + y*(0.03488590 + y*(0.00262698 + y*(0.00010750 + y*0.0000074)))))
+      else
+         y = 2. / x
+         bessel_k0 = exp(-x) / sqrt(x) * (1.25331414 + y*(-0.07832358 + y*(0.02189568 &
+            + y*(-0.01062446 + y*(0.00587872 + y*(-0.00251540 + y*0.00053208))))))
+      end if
+
+   end function bessel_k0
+
    subroutine get_RH_SW_weights(energyval, muval, vpaval, akxval, iz, is, trapped, &
                                 even_SW, odd_SW, Q_hat_in)
 
@@ -2257,10 +2314,12 @@ contains
 
       real,    dimension(-nzgrid:nzgrid) :: Q_hat, dx_prof
       complex, dimension(-nzgrid:nzgrid) :: Q_profile
-      complex :: W0, W, tmp
+      complex :: W0, W, tmp, hank
       real    :: tau_b, B_c, dz, sigma
       real    :: dm, d0, dp, curv, shift, dx_s, frac
       real    :: bmag_s, vpa2_s, vperp2_s, kperp2_s, aj0_s, measure_s, amp
+      real    :: X_barrier, amp_u, Bc, Bm, Bpp, kappa, Xt, vpa2_in
+      integer :: izb, iztp, istep, izin
       integer :: ia, izz, izm, izp, iznb, izz_start, izz_end, iz_lo, iz_hi, nstat
       logical :: well_found, is_trapped
 
@@ -2359,10 +2418,85 @@ contains
          aj0_s = j0(sqrt(kperp2_s * vperp2_s) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag_s)
 
          amp = aj0_s * measure_s / sqrt(vpa2_s)
-         W0 = W0 + amp * sqrt(2.*pi / (abs(akxval) * abs(curv))) &
-                 * exp(-zi * akxval * dx_s - zi * sign(1., akxval * curv) * 0.25 * pi)
+
+         !> A stationary point where |dx| is a minimum is a maximum of B, and
+         !> there the turning point sits nearby -- at the separatrix it sits on
+         !> top of it.  The Gaussian form then diverges as 1/sqrt(|vpa|), because
+         !> the amplitude blows up as 1/|vpa| faster than sqrt(1/|dx''|) can
+         !> shrink.  Use the uniform Bessel form there instead, which is finite.
+         !> A stationary point where |dx| is a maximum is a minimum of B: |vpa| is
+         !> largest there, no turning point is near, and the Gaussian is right.
+         if (dx_s * curv > 0.) then
+            X_barrier = abs(akxval * dx_s)
+            !> a = mu |B''| of the local model, written through the relation
+            !> |dx''| = a |dx| / vpa^2 so that only quantities already in hand
+            !> are used.  amp_u = J0 * measure / sqrt(a).
+            amp_u = aj0_s * measure_s / sqrt(abs(curv) * vpa2_s / abs(dx_s))
+            !> The whole term conjugates when the phase runs the other way, the
+            !> -i pi prefactor with it -- conjugating only H0 leaves the sign of
+            !> the term wrong.
+            hank = -zi * pi * amp_u * cmplx(j0(X_barrier), -bessel_y0(X_barrier))
+            if (akxval * dx_s < 0.) hank = conjg(hank)
+            W0 = W0 + hank
+         else
+            W0 = W0 + amp * sqrt(2.*pi / (abs(akxval) * abs(curv))) &
+                    * exp(-zi * akxval * dx_s - zi * sign(1., akxval * curv) * 0.25 * pi)
+         end if
          nstat = nstat + 1
       end do
+
+      !> The trapped side of the same coalescence.  A trapped particle never
+      !> reaches the barrier top, so that stationary point is off its orbit and
+      !> the sum above misses it entirely; what the orbit has instead is a
+      !> turning point sitting just below the barrier.  The same local model,
+      !>     vpa^2 = Delta + a zeta^2,   Delta = 2(E - mu B_m) < 0,
+      !> integrated from the turning point inwards gives K0 in place of the
+      !> Hankel function, which is the analytic continuation of it through
+      !> Delta = 0.  It is exponentially small away from the separatrix -- which
+      !> is why an endpoint contribution could be dropped there -- and grows
+      !> logarithmically as the separatrix is approached, exactly where the
+      !> Gaussian form was diverging on the other side.
+      !>
+      !> Only the real part is needed: the imaginary part of this endpoint is
+      !> odd in sigma and the trapped symmetrisation below discards it.
+      if (is_trapped) then
+         Bc = energyval / (2.*muval)
+         do istep = 1, 2
+            !> Walk outward from each end of the well to the barrier that closes
+            !> it, i.e. the first maximum of B beyond the turning point.
+            if (istep == 1) then
+               iztp = iz_lo; izb = iz_lo
+               do while (izb > -nzgrid + 1)
+                  if (bmag(ia, izb) >= bmag(ia, izb - 1) .and. bmag(ia, izb) >= bmag(ia, izb + 1)) exit
+                  izb = izb - 1
+               end do
+               izin = min(iztp + 1, nzgrid)
+            else
+               iztp = iz_hi; izb = iz_hi
+               do while (izb < nzgrid - 1)
+                  if (bmag(ia, izb) >= bmag(ia, izb - 1) .and. bmag(ia, izb) >= bmag(ia, izb + 1)) exit
+                  izb = izb + 1
+               end do
+               izin = max(iztp - 1, -nzgrid)
+            end if
+            if (izb <= -nzgrid .or. izb >= nzgrid) cycle
+            Bm = bmag(ia, izb)
+            if (Bm <= Bc) cycle                       ! no barrier above the turning point
+            Bpp = (bmag(ia, izb + 1) - 2.*bmag(ia, izb) + bmag(ia, izb - 1)) / dz**2
+            if (abs(Bpp) <= epsilon(0.)) cycle
+            !> kappa = |dx| / |vpa| of the local model, read just inside the
+            !> turning point, where B is still within (B_m - B_c) of the barrier
+            !> and the ratio is therefore the barrier's own.
+            vpa2_in = energyval - 2.*muval*bmag(ia, izin)
+            if (vpa2_in <= epsilon(0.)) cycle
+            kappa = abs(dx_prof(izin)) / sqrt(vpa2_in)
+            Xt = abs(akxval) * kappa * sqrt(2.*muval*(Bm - Bc))
+            W0 = W0 + j0(sqrt(max(akxval**2 * gds22(ia, izin) / merge(1., geo_surf%shat**2, q_as_x), 0.) &
+                              * 2.*muval*bmag(ia, izin)) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia, izin)) &
+                    * parallel_measure(izin, is_trapped) / sqrt(muval * abs(Bpp)) * bessel_k0(Xt)
+            nstat = nstat + 1
+         end do
+      end if
 
       !> No stationary point on this orbit: the transit average is then smaller
       !> than anything this expansion describes, and zero is the right answer to
