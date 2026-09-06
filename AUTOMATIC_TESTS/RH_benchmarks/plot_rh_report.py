@@ -18,6 +18,45 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from rh_budget import (get_rh_budget, get_rh_pmom_budget, _complex,
                        _field_line_average, _field_line_average_per_species)
 
+
+def asymptotic_inertia(netcdf_file):
+    '''The inertia rebuilt from the long-wavelength weights, if the run has them.
+
+    <I> = (Z^2 n/T) <int F_M (1 - J0 W)>, which needs only the weight and the
+    equilibrium Maxwellian -- no g -- so it can be formed directly from the
+    RH_asym_even/odd that write_RH_asymptotics produces and compared with the
+    exact RH_inertia.  Returns (exact, asymptotic) field-line averages per kx,
+    or (None, None) when the run did not write the asymptotic weights.
+    '''
+    ncdata = Dataset(netcdf_file)
+    if 'RH_asym_even' not in ncdata.variables:
+        return None, None
+    zed = np.array(ncdata.variables['zed'][:])
+    jac = np.array(ncdata.variables['jacob'][:])[:, 0]
+    bmag = np.array(ncdata.variables['bmag'][:])
+    bmag = bmag[:, 0] if bmag.ndim > 1 else bmag
+    w = (zed[1] - zed[0]) * jac.copy(); w[-1] = 0.0; w /= w.sum()
+    vpa = np.array(ncdata.variables['vpa'][:]); mu = np.array(ncdata.variables['mu'][:])
+
+    def weight(name):
+        a = np.array(ncdata.variables[name][:])
+        return a[..., 0] + 1j * a[..., 1]          # (mu, vpa, species, tube, zed, kx)
+
+    exact = weight('RH_integrand_even') + weight('RH_integrand_odd')
+    asym = weight('RH_asym_even') + weight('RH_asym_odd')
+    VP, MU = np.meshgrid(vpa, mu)
+    nkx = exact.shape[-1]
+    out_e = np.zeros(nkx); out_a = np.zeros(nkx)
+    for ikx in range(nkx):
+        ne = na = den = 0.0
+        for iz in range(len(bmag)):
+            fM = np.exp(-(VP**2 + 2 * MU * bmag[iz]))
+            ne += w[iz] * (fM * (1 - exact[:, :, 0, 0, iz, ikx].real)).sum()
+            na += w[iz] * (fM * (1 - asym[:, :, 0, 0, iz, ikx].real)).sum()
+            den += w[iz] * fM.sum()
+        out_e[ikx] = ne / den; out_a[ikx] = na / den
+    return out_e, out_a
+
 PHI = '#1b3a5c'      # the potential-like invariant
 UPA = '#b0532a'      # the parallel-flow invariant
 GREY = '#6b6b6b'
@@ -113,6 +152,18 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
                                      gridspec_kw=dict(height_ratios=[1, 1.3], hspace=0.12))
 
     ax_e.plot(t, E, color=colour, lw=1.8, label=energy_label)
+
+    #> The same energy with the inertia replaced by its long-wavelength form.
+    #> E ~ 1/<I>^2, so this shows directly how far the order-kx^2 expansion is
+    #> from the exact normalisation at the wavelength of the run.
+    exact_I, asym_I = asymptotic_inertia(netcdf_file)
+    if exact_I is not None:
+        finite = exact_I != 0
+        if finite.any():
+            scale = float(np.mean((exact_I[finite] / asym_I[finite])**2))
+            err = abs(np.sqrt(1.0 / scale) - 1.0) * 100
+            ax_e.plot(t, E * scale, color=GREY, lw=1.3, ls=':',
+                      label=energy_label + rf'  with $O(k_x^2)\ \langle I\rangle$  ({err:.1f}\% in $\langle I\rangle$)')
     ax_e.set_ylabel('zonal energy')
     ax_e.legend(frameon=False, fontsize=8.5)
     if title:
@@ -134,9 +185,9 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
     nonlinear = np.any(P_nl != 0)
     measured, expected = (dEdt - P_coll - P_dr, P_nl) if nonlinear else (dEdt, P)
     residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)
-    ax_p.text(0.985, 0.05, f'residual {residual:.2e}'
+    ax_p.text(0.985, 0.92, f'residual {residual:.2e}'
                            f'  ({"nonlinear channel" if nonlinear else "total budget"})',
-              transform=ax_p.transAxes, ha='right', va='bottom', fontsize=8.5, color='#444')
+              transform=ax_p.transAxes, ha='right', va='top', fontsize=8.5, color='#444')
 
     fig.savefig(outfile)
     plt.close(fig)
