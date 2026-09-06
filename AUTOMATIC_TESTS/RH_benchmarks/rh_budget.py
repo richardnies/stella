@@ -254,9 +254,9 @@ def field_line_averaged_rh_inertia(netcdf_file):
 # See DOCUMENTATION/RH_parallel_flow for the derivation.
 ################################################################################
 
-RH_UPAR_FLUX_NONLINEAR   = 'RH_upar_flux_nonlinear'
-RH_UPAR_FLUX_COLLISIONAL = 'RH_upar_flux_collisional'
-RH_UPAR_FLUX_DRIFT       = 'RH_upar_flux_drift'
+RH_PMOM_FLUX_NONLINEAR   = 'RH_pmom_flux_nonlinear'
+RH_PMOM_FLUX_COLLISIONAL = 'RH_pmom_flux_collisional'
+RH_PMOM_FLUX_DRIFT       = 'RH_pmom_flux_drift'
 
 
 def _field_line_average_per_species(ncdata, name, weight):
@@ -288,8 +288,8 @@ def _field_line_average_per_species(ncdata, name, weight):
     return array
 
 
-def get_rh_upar_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
-    '''The parallel-flow RH budget.
+def get_rh_pmom_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
+    '''The toroidal-momentum RH budget.
 
     Returns (time, E_uRH, dE_uRH_dt, P_total, P_nonlinear, P_collisional, P_drift).
     '''
@@ -304,10 +304,10 @@ def get_rh_upar_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     weight[-1] = 0.0
     weight = weight / weight.sum()
 
-    upar = _field_line_average_per_species(ncdata, 'RH_upar', weight)
-    inertia = _field_line_average_per_species(ncdata, 'RH_upar_inertia', weight)
+    upar = _field_line_average_per_species(ncdata, 'RH_pmom', weight)
+    inertia = _field_line_average_per_species(ncdata, 'RH_pmom_inertia', weight)
     if upar is None or inertia is None:
-        raise KeyError('this run did not write the RH parallel-flow diagnostics')
+        raise KeyError('this run did not write the RH toroidal-momentum diagnostics')
 
     mass = np.array(ncdata.variables['mass'][:])
     density = np.array(ncdata.variables['dens'][:])
@@ -332,9 +332,9 @@ def get_rh_upar_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
         flux = flux[..., keep]
         return -weight_s * np.real(1j * kx[None, None, :] * flux * np.conj(upar)) / inertia2
 
-    P_nl   = power(RH_UPAR_FLUX_NONLINEAR)
-    P_coll = power(RH_UPAR_FLUX_COLLISIONAL)
-    P_dr   = power(RH_UPAR_FLUX_DRIFT)
+    P_nl   = power(RH_PMOM_FLUX_NONLINEAR)
+    P_coll = power(RH_PMOM_FLUX_COLLISIONAL)
+    P_dr   = power(RH_PMOM_FLUX_DRIFT)
 
     E_total = E.sum(axis=(1, 2))
     dE_dt = np.gradient(E_total, time)

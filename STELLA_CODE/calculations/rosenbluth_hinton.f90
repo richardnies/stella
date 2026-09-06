@@ -38,8 +38,8 @@ module rosenbluth_hinton
    public :: RH_U_parallel_fac
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
-   public :: RH_upar_weight, RH_upar_inertia
-   public :: get_RH_upar, get_RH_upar_fluxes_fluxtube
+   public :: RH_pmom_weight, RH_pmom_inertia
+   public :: get_RH_pmom, get_RH_pmom_fluxes_fluxtube
    public :: RH_drift_bounce_avg
    public :: RH_drift_is_trapped
    public :: eval_bounce_averaged_drift
@@ -54,13 +54,13 @@ module rosenbluth_hinton
    complex, dimension(:,:,:,:), allocatable :: RH_integrand_even, RH_integrand_odd
 
    !> The parallel-flow counterpart of the Rosenbluth-Hinton projection.
-   !> <RH_upar_weight> is V_sigma(z) = <vpa J0 exp(-Q)>_tau exp(Q(z)), the
+   !> <RH_pmom_weight> is V_sigma(z) = <vpa J0 exp(-Q)>_tau exp(Q(z)), the
    !> sigma-odd member of the same family of weights the linear streaming and
-   !> radial drift annihilate; <RH_upar_inertia> is the same projection applied
+   !> radial drift annihilate; <RH_pmom_inertia> is the same projection applied
    !> to a unit-flow shifted Maxwellian, so that the ratio of their field-line
    !> averages is the parallel flow.  See DOCUMENTATION/RH_parallel_flow.
-   complex, dimension(:,:,:,:), allocatable :: RH_upar_weight
-   complex, dimension(:,:,:,:), allocatable :: RH_upar_inertia
+   complex, dimension(:,:,:,:), allocatable :: RH_pmom_weight
+   complex, dimension(:,:,:,:), allocatable :: RH_pmom_inertia
    ! (nakx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
 
    !> Transit-averaged radial magnetic drift: the bounce average over its own
@@ -134,6 +134,7 @@ contains
       use species, only: spec
       use constants, only: zi
 
+      use geometry, only: RH_drift_phase_fac
       implicit none
 
       real :: energyval, muval, bmag_max, drift_average
@@ -218,8 +219,8 @@ contains
       ! Allocate the arrays for the Rosenbluth-Hinton integrand term
       allocate (RH_integrand_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_even = 0.
       allocate (RH_integrand_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_odd  = 0.
-      allocate (RH_upar_weight(  nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_upar_weight = 0.
-      allocate (RH_upar_inertia( nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_upar_inertia = 0.
+      allocate (RH_pmom_weight(  nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_pmom_weight = 0.
+      allocate (RH_pmom_inertia( nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_pmom_inertia = 0.
 
       ! Allocate array for RH_U_parallel_fac
       allocate (RH_U_parallel_fac( -nzgrid:nzgrid, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_U_parallel_fac = 0.
@@ -281,7 +282,9 @@ contains
                   ! Split into contributions that are even and odd in vpa
                   RH_integrand_even(ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls+integrand_tmp_min)
                   RH_integrand_odd( ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls-integrand_tmp_min)
-                  RH_upar_weight(   ikx,iz,it,ivmu) = integrand_tmp_v
+                  !> Apply the geometric factor I; only the geometry knows it, and
+                  !> for a quasisymmetric field it is (MG+NI)/(N-iota M).
+                  RH_pmom_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_drift_phase_fac(iz)
 
                end do !ikx
 
@@ -304,7 +307,7 @@ contains
       !> full_flux_surface and radial_variation, so this is reached only where
       !> the flux-tube form is the right one.
       call get_RH_inertia_fluxtube()
-      call get_RH_upar_inertia_fluxtube()
+      call get_RH_pmom_inertia_fluxtube()
 
    end subroutine init_rosenbluth_hinton
 
@@ -321,8 +324,8 @@ contains
       ! Deallocate the arrays for the Rosenbluth-Hinton integrand term
       if (allocated(RH_integrand_even)) deallocate (RH_integrand_even)
       if (allocated(RH_integrand_odd )) deallocate (RH_integrand_odd)
-      if (allocated(RH_upar_weight )) deallocate (RH_upar_weight)
-      if (allocated(RH_upar_inertia)) deallocate (RH_upar_inertia)
+      if (allocated(RH_pmom_weight )) deallocate (RH_pmom_weight)
+      if (allocated(RH_pmom_inertia)) deallocate (RH_pmom_inertia)
       if (allocated(RH_U_parallel_fac)) deallocate (RH_U_parallel_fac)
       if (allocated(RH_inertia))        deallocate (RH_inertia)
       if (allocated(RH_drift_bounce_avg)) deallocate (RH_drift_bounce_avg)
@@ -781,12 +784,12 @@ contains
    !============================================================================
    !====================== GET RH_phi_I FOR THE FLUX TUBE ========================
    !============================================================================
-   !> The flow inertia: the parallel-flow projection applied to a shifted
-   !> Maxwellian of unit flow, g = (m vpa / T) F_M.  Dividing the projection of
-   !> the actual g by this returns the flow itself, which is what makes
-   !> <RH_upar>/<RH_upar_inertia> the residual parallel flow.  It is built once,
-   !> from the geometry and the equilibrium Maxwellian, and does not evolve.
-   subroutine get_RH_upar_inertia_fluxtube()
+   !> The toroidal-momentum inertia.  A rigid toroidal rotation of frequency
+   !> omega has V_par = omega I/B, that is g = (m vpa/T)(omega I/B) F_M, so
+   !> applying the projection to that state and dividing it out returns omega
+   !> itself: <RH_pmom>/<RH_pmom_inertia> is the residual toroidal rotation
+   !> frequency.  Built once from the geometry and the equilibrium Maxwellian.
+   subroutine get_RH_pmom_inertia_fluxtube()
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -795,6 +798,7 @@ contains
       use parameters_kxky_grids, only: naky, nakx
       use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
       use parameters_numerical, only: maxwellian_normalization
+      use geometry, only: RH_drift_phase_fac, bmag
       use arrays_dist_fn, only: integrand_vpamu => g1
 
       implicit none
@@ -814,9 +818,12 @@ contains
          is = is_idx(vmu_lo, ivmu)
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
-               !> m/T in stella normalisation is 1/(temp/mass) = mass/temp.
-               integrand_vpamu(1, :, iz, it, ivmu) = RH_upar_weight(:, iz, it, ivmu) &
-                    * vpa(iv) * spec(is)%mass / spec(is)%temp
+               !> The rotating state carries a further I/B, matching the one
+               !> already inside the weight, so the inertia is quadratic in the
+               !> geometric factor and the ratio returns a frequency.
+               integrand_vpamu(1, :, iz, it, ivmu) = RH_pmom_weight(:, iz, it, ivmu) &
+                    * vpa(iv) * spec(is)%mass / spec(is)%temp &
+                    * RH_drift_phase_fac(iz) / bmag(ia, iz)
                !> integrate_vmu folds the Maxwellian into its own weights when
                !> the evolved pdf is normalised by one.
                if (.not. maxwellian_normalization) &
@@ -827,19 +834,19 @@ contains
       end do
 
       call integrate_vmu(integrand_vpamu, spec%dens_psi0, inertia_tmp)
-      RH_upar_inertia(:,:,:,:) = inertia_tmp(1,:,:,:,:)
+      RH_pmom_inertia(:,:,:,:) = inertia_tmp(1,:,:,:,:)
 
       deallocate (inertia_tmp)
 
-   end subroutine get_RH_upar_inertia_fluxtube
+   end subroutine get_RH_pmom_inertia_fluxtube
 
 
    !> The parallel-flow Rosenbluth-Hinton invariant,
-   !>     RH_upar = n_s * velocity_integral( V_sigma g_s ) ,
+   !>     RH_pmom = n_s * velocity_integral( V_sigma g_s ) ,
    !> which the linear parallel streaming and the non-secular part of the radial
-   !> magnetic drift annihilate exactly.  Divided by RH_upar_inertia it is the
+   !> magnetic drift annihilate exactly.  Divided by RH_pmom_inertia it is the
    !> residual parallel flow.
-   subroutine get_RH_upar(g, RH_upar)
+   subroutine get_RH_pmom(g, RH_pmom)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -852,23 +859,23 @@ contains
       use arrays_fields, only: apar
       use gyro_averages, only: gyro_average
 
-      use arrays_dist_fn, only: RH_upar_tmp => g1
+      use arrays_dist_fn, only: RH_pmom_tmp => g1
 
       implicit none
 
       complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
-      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_pmom
 
-      complex, dimension(:, :, :, :, :), allocatable :: upar_tmp, pdf
+      complex, dimension(:, :, :, :, :), allocatable :: pmom_tmp, pdf
       complex, dimension(naky, nakx) :: gyro_apar, correction
       integer :: ivmu, iv, imu, is, iz, it
 
-      allocate (upar_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); upar_tmp = 0.
-      if (.not. allocated(RH_upar_tmp)) &
-         allocate (RH_upar_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      allocate (pmom_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); pmom_tmp = 0.
+      if (.not. allocated(RH_pmom_tmp)) &
+         allocate (RH_pmom_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
 
-      RH_upar_tmp = 0.
-      RH_upar_tmp(1,:,:,:,:) = RH_upar_weight
+      RH_pmom_tmp = 0.
+      RH_pmom_tmp(1,:,:,:,:) = RH_pmom_weight
 
       !> Electromagnetically it is gbar, not g, that the parallel streaming
       !> advects: stella carries gbar = g + 2 (Z/T) stm vpa <Apar> F_M and
@@ -896,13 +903,13 @@ contains
          end do
       end if
 
-      call integrate_vmu(pdf * RH_upar_tmp, spec%dens_psi0, upar_tmp)
+      call integrate_vmu(pdf * RH_pmom_tmp, spec%dens_psi0, pmom_tmp)
       deallocate (pdf)
-      RH_upar = upar_tmp(1,:,:,:,:)
+      RH_pmom = pmom_tmp(1,:,:,:,:)
 
-      deallocate (upar_tmp)
+      deallocate (pmom_tmp)
 
-   end subroutine get_RH_upar
+   end subroutine get_RH_pmom
 
 
    !> The fluxes driving the parallel-flow invariant.  Same three channels as the
@@ -910,13 +917,13 @@ contains
    !> radial drift -- and the same conventions, in particular the factor
    !> -1/(i kx) that turns a source term into a flux so that
    !>
-   !>     d<RH_upar>/dt|_channel = -i kx <F_channel>.
+   !>     d<RH_pmom>/dt|_channel = -i kx <F_channel>.
    !>
    !> The only differences from get_RH_fluxes_fluxtube are the weight, which is
    !> V_sigma rather than the sigma-even and sigma-odd pair, and the species
    !> factor, which is n_s alone because a flow carries no charge weighting.
    !> There is correspondingly no even/odd split: V_sigma is one array.
-   subroutine get_RH_upar_fluxes_fluxtube(g, RH_upar_flux_nl, RH_upar_flux_coll, RH_upar_flux_drift)
+   subroutine get_RH_pmom_fluxes_fluxtube(g, RH_pmom_flux_nl, RH_pmom_flux_coll, RH_pmom_flux_drift)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -948,9 +955,9 @@ contains
       !> ky beat, and vchix ~ i ky phi is identically zero on the ky = 0 row, so
       !> collapsing to that row would discard the whole term.  The consumer sums
       !> over ky, exactly as for the potential-like nonlinear fluxes.
-      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_upar_flux_nl
-      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar_flux_coll
-      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_upar_flux_drift
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_pmom_flux_nl
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_pmom_flux_coll
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_pmom_flux_drift
 
       complex, dimension(naky, nakx) :: vchix_gyro, vchix_part, NL_term
       complex, dimension(naky, nx)   :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
@@ -966,7 +973,7 @@ contains
       allocate (flux_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec))
 
       !----------------------------- nonlinear -------------------------------
-      RH_upar_flux_nl = 0.
+      RH_pmom_flux_nl = 0.
       if (nonlinear) then
          integrand = 0.
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
@@ -997,15 +1004,15 @@ contains
                   call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
                   NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
                   call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
-                  integrand(:,:,iz,it,ivmu) = NL_term * spread(RH_upar_weight(:,iz,it,ivmu), 1, naky)
+                  integrand(:,:,iz,it,ivmu) = NL_term * spread(RH_pmom_weight(:,iz,it,ivmu), 1, naky)
                end do
             end do
          end do
-         call integrate_vmu(integrand, spec%dens_psi0, RH_upar_flux_nl)
+         call integrate_vmu(integrand, spec%dens_psi0, RH_pmom_flux_nl)
       end if
 
       !---------------------------- collisional ------------------------------
-      RH_upar_flux_coll = 0.
+      RH_pmom_flux_coll = 0.
       if (include_collisions) then
          !> advance_collisions_implicit is a time advance, not a side-effect-free
          !> evaluation of C[g]; hand it copies and restore gvmu, exactly as the
@@ -1028,18 +1035,18 @@ contains
          ! Zonal modes only
          integrand(2:,:,:,:,:) = 0.0
 
-         work = 1/code_dt * integrand * spread(RH_upar_weight, 1, naky)
+         work = 1/code_dt * integrand * spread(RH_pmom_weight, 1, naky)
          flux_tmp = 0.
          call integrate_vmu(work, spec%dens_psi0, flux_tmp)
-         RH_upar_flux_coll = flux_tmp(1,:,:,:,:)
+         RH_pmom_flux_coll = flux_tmp(1,:,:,:,:)
 
          !> -1/(i kx), matching the nonlinear flux convention.
          if (abs(akx(1)) < epsilon(0.)) then
-            RH_upar_flux_coll(1, :,:,:) = 0.0
-            RH_upar_flux_coll(2:,:,:,:) = -RH_upar_flux_coll(2:,:,:,:) &
+            RH_pmom_flux_coll(1, :,:,:) = 0.0
+            RH_pmom_flux_coll(2:,:,:,:) = -RH_pmom_flux_coll(2:,:,:,:) &
                / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
          else
-            RH_upar_flux_coll(1:,:,:,:) = -RH_upar_flux_coll(1:,:,:,:) &
+            RH_pmom_flux_coll(1:,:,:,:) = -RH_pmom_flux_coll(1:,:,:,:) &
                / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
          end if
       end if
@@ -1049,7 +1056,7 @@ contains
       !> what is left is a plain velocity integral; and it is only meaningful
       !> where Q was integrated along the field line, the closed form being
       !> derived on the assumption that the transit-averaged drift vanishes.
-      RH_upar_flux_drift = 0.
+      RH_pmom_flux_drift = 0.
       if (.not. use_analytic_drift_phase) then
          allocate (drift_weight(nspec))
          allocate (boltzmann(nakx))
@@ -1069,20 +1076,20 @@ contains
                      boltzmann = boltzmann * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
                   integrand(1, :, iz, it, ivmu) = &
                      (g(1, :, iz, it, ivmu) + boltzmann) &
-                     * RH_upar_weight(:, iz, it, ivmu) * RH_drift_bounce_avg(iz, ivmu)
+                     * RH_pmom_weight(:, iz, it, ivmu) * RH_drift_bounce_avg(iz, ivmu)
                end do
             end do
          end do
 
          flux_tmp = 0.
          call integrate_vmu(integrand, drift_weight, flux_tmp)
-         RH_upar_flux_drift = flux_tmp(1,:,:,:,:)
+         RH_pmom_flux_drift = flux_tmp(1,:,:,:,:)
          deallocate (drift_weight, boltzmann)
       end if
 
       deallocate (flux_tmp)
 
-   end subroutine get_RH_upar_fluxes_fluxtube
+   end subroutine get_RH_pmom_fluxes_fluxtube
 
 
    subroutine get_RH_phi_I_fluxtube(g, RH_phi_I)
@@ -1795,17 +1802,20 @@ contains
    !> The bounce-time integrand is 1/|vpa|, which does not depend on the sign of
    !> vpa, so the two calls to eval_transit_ints return the same bounce time and
    !> only one is kept.
-   !> The parallel-velocity-weighted transit average that the flow invariant
-   !> needs,
-   !>     T_v = sigma * contour_integral( dl J_0 exp(-Q) ) ,
-   !> so that V_sigma(z) = (T_v / tau_b) exp(Q(z)).
+   !> The transit average the toroidal-momentum invariant needs.  The flow part
+   !> of the canonical toroidal angular momentum projects onto the field line as
+   !> R v_zeta = vpar R B_zeta / B = vpar I / B, with I = R B_zeta a flux
+   !> function, so the weight is vpar/B rather than vpar:
+   !>     T_v = sigma * contour_integral( dl J_0 exp(-Q) / B ) ,
+   !> and Pi_sigma(z) = I (T_v / tau_b) exp(Q(z)), the factor I being applied by
+   !> the caller since only the geometry knows it.
    !>
    !> Weighting by v_par cancels the 1/|v_par| of the orbit measure, so unlike
    !> the density transit average this integrand is bounded at the turning
    !> points and a plain sum on the z grid is enough -- no singularity to
    !> subtract, and no need for the well quadrature.  A trapped particle is
    !> restricted to its own well; a passing one runs over the whole line.
-   subroutine eval_upar_transit_int(energy, mu, sigma, akx, iz_ref, is, Q_profile, T_v)
+   subroutine eval_pmom_transit_int(energy, mu, sigma, akx, iz_ref, is, Q_profile, T_v)
 
       use geometry, only: bmag, dl_over_b, gds22, geo_surf, q_as_x
       use species, only: spec
@@ -1852,10 +1862,12 @@ contains
          kperp2 = max(kperp2, 0.)
          aj0 = j0(sqrt(kperp2*vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia, iz))
          !> dl = (dl/B) * B, matching the convention of eval_transit_ints.
-         T_v = T_v + sigma * aj0 * exp(-Q_profile(iz)) * bmag(ia, iz) * dl_over_b(ia, iz)
+         !> The 1/B of the toroidal projection cancels the B of the arc-length
+         !> measure, dl = (dl/B) * B.
+         T_v = T_v + sigma * aj0 * exp(-Q_profile(iz)) * dl_over_b(ia, iz)
       end do
 
-   end subroutine eval_upar_transit_int
+   end subroutine eval_pmom_transit_int
 
 
    subroutine get_RH_transit_integrands(energyval, muval, vpaval, akxval, iz, is, trapped, &
@@ -1934,9 +1946,9 @@ contains
       !> orbit invariant times exp(Q(z)) -- with the transit average taken of
       !> vpa*J0*exp(-Q) rather than J0*exp(-Q).
       if (present(integrand_v)) then
-         call eval_upar_transit_int(energyval, muval, sign(1., vpaval), akxval, iz, is, &
+         call eval_pmom_transit_int(energyval, muval, sign(1., vpaval), akxval, iz, is, &
                                      Q_profile, T_v_pls)
-         call eval_upar_transit_int(energyval, muval, sign(1., -vpaval), akxval, iz, is, &
+         call eval_pmom_transit_int(energyval, muval, sign(1., -vpaval), akxval, iz, is, &
                                      -Q_profile, T_v_min)
          !> A trapped particle traverses both legs within one bounce, so its
          !> bounce average is the mean of the two -- the same symmetrisation the

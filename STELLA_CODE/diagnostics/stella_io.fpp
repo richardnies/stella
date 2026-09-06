@@ -72,9 +72,9 @@ module stella_io
    public :: write_RH_fluxes_coll_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
-   public :: write_RH_upar_nc
-   public :: write_RH_upar_fluxes_nc
-   public :: write_RH_upar_inertia_nc
+   public :: write_RH_pmom_nc
+   public :: write_RH_pmom_fluxes_nc
+   public :: write_RH_pmom_inertia_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
    public :: write_RH_bounce_drift_nc
@@ -947,7 +947,7 @@ contains
    end subroutine write_RH_phi_I_nc
 
    !----------------------- RH inertia ----------------------
-   subroutine write_RH_upar_nc(nout, RH_upar)
+   subroutine write_RH_pmom_nc(nout, RH_upar)
       implicit none
 
       integer, intent(in) :: nout
@@ -958,15 +958,15 @@ contains
       integer, dimension(6) :: start
       start = [1, 1, 1, 1, 1, nout]
 
-      call netcdf_write_complex(ncid, "RH_upar", RH_upar, &
+      call netcdf_write_complex(ncid, "RH_pmom", RH_upar, &
               dim_names=dims, start=start, &
-              long_name="Rosenbluth-Hinton parallel-flow invariant (=upar*I_uRH in the RH limit)")
+              long_name="Rosenbluth-Hinton toroidal-momentum invariant (= omega*I_pRH in the RH limit)")
 #endif
 
-   end subroutine write_RH_upar_nc
+   end subroutine write_RH_pmom_nc
 
 
-   subroutine write_RH_upar_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
+   subroutine write_RH_pmom_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
       implicit none
 
       integer, intent(in) :: nout
@@ -981,31 +981,31 @@ contains
       start = [1, 1, 1, 1, 1, nout]
       start_nl = [1, 1, 1, 1, 1, 1, nout]
 
-      call netcdf_write_complex(ncid, "RH_upar_flux_nonlinear", flux_nl, dim_names=dims_nl, start=start_nl, &
-              long_name="Nonlinear flux driving the RH parallel-flow invariant")
-      call netcdf_write_complex(ncid, "RH_upar_flux_collisional", flux_coll, dim_names=dims, start=start, &
-              long_name="Collisional flux driving the RH parallel-flow invariant")
-      call netcdf_write_complex(ncid, "RH_upar_flux_drift", flux_drift, dim_names=dims, start=start, &
-              long_name="Transit-averaged magnetic drift flux driving the RH parallel-flow invariant")
+      call netcdf_write_complex(ncid, "RH_pmom_flux_nonlinear", flux_nl, dim_names=dims_nl, start=start_nl, &
+              long_name="Nonlinear flux driving the RH toroidal-momentum invariant")
+      call netcdf_write_complex(ncid, "RH_pmom_flux_collisional", flux_coll, dim_names=dims, start=start, &
+              long_name="Collisional flux driving the RH toroidal-momentum invariant")
+      call netcdf_write_complex(ncid, "RH_pmom_flux_drift", flux_drift, dim_names=dims, start=start, &
+              long_name="Transit-averaged magnetic drift flux driving the RH toroidal-momentum invariant")
 #endif
 
-   end subroutine write_RH_upar_fluxes_nc
+   end subroutine write_RH_pmom_fluxes_nc
 
 
-   subroutine write_RH_upar_inertia_nc(RH_upar_inertia)
+   subroutine write_RH_pmom_inertia_nc(RH_pmom_inertia)
       implicit none
 
-      complex, dimension(:, :, :, :), intent(in) :: RH_upar_inertia
+      complex, dimension(:, :, :, :), intent(in) :: RH_pmom_inertia
 
 #ifdef NETCDF
       character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species"]
 
-      call netcdf_write_complex(ncid, "RH_upar_inertia", RH_upar_inertia, &
+      call netcdf_write_complex(ncid, "RH_pmom_inertia", RH_pmom_inertia, &
               dim_names=dims, &
-              long_name="Rosenbluth-Hinton parallel-flow inertia (projection of a unit-flow shifted Maxwellian)")
+              long_name="Rosenbluth-Hinton toroidal-momentum inertia (projection of a rigidly rotating Maxwellian)")
 #endif
 
-   end subroutine write_RH_upar_inertia_nc
+   end subroutine write_RH_pmom_inertia_nc
 
 
    subroutine write_RH_inertia_nc(RH_inertia)

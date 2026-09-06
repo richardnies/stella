@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from rh_budget import (get_rh_budget, get_rh_upar_budget, _complex,
+from rh_budget import (get_rh_budget, get_rh_pmom_budget, _complex,
                        _field_line_average, _field_line_average_per_species)
 
 PHI = '#1b3a5c'      # the potential-like invariant
@@ -106,7 +106,7 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
         t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_budget(netcdf_file, time_min, time_max)[:7]
         colour, energy_label = PHI, r'$E_{\rm RH}$'
     else:
-        t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_upar_budget(netcdf_file, time_min, time_max)
+        t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_pmom_budget(netcdf_file, time_min, time_max)
         colour, energy_label = UPA, r'$E_{u\rm RH}$'
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(6.6, 5.0), sharex=True,
