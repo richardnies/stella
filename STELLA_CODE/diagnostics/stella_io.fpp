@@ -70,6 +70,7 @@ module stella_io
    public :: write_RH_fluxes_apar_nc
    public :: write_RH_fluxes_bpar_nc
    public :: write_RH_fluxes_coll_nc
+   public :: write_RH_fluxes_coll_split_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
    public :: write_RH_pmom_nc
@@ -871,6 +872,30 @@ contains
 
 
    !----------------------- RH collisional fluxes -----------------------
+   !> The collisional flux split by the parity of the weight.  At long
+   !> wavelength the two halves order oppositely: the collision operator
+   !> conserves particles, so the even part loses its leading term exactly and
+   !> is O(kx), while the odd part is O(1).
+   subroutine write_RH_fluxes_coll_split_nc(nout, coll_even, coll_odd)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :), intent(in) :: coll_even, coll_odd
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(6) :: start
+      start = [1, 1, 1, 1, 1, nout]
+
+      call netcdf_write_complex(ncid, "RH_fluxes_coll_even", coll_even, dim_names=dims, start=start, &
+              long_name="Collisional RH flux, even part of the weight")
+      call netcdf_write_complex(ncid, "RH_fluxes_coll_odd", coll_odd, dim_names=dims, start=start, &
+              long_name="Collisional RH flux, odd part of the weight")
+#endif
+
+   end subroutine write_RH_fluxes_coll_split_nc
+
+
    subroutine write_RH_fluxes_coll_nc(nout, RH_fluxes_coll)
       implicit none
 

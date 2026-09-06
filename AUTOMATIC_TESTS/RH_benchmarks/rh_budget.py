@@ -259,6 +259,18 @@ RH_PMOM_FLUX_COLLISIONAL = 'RH_pmom_flux_collisional'
 RH_PMOM_FLUX_DRIFT       = 'RH_pmom_flux_drift'
 
 
+def _first_present(ncdata, *names):
+    '''First of `names` present in the file.
+
+    The toroidal-momentum diagnostics were called RH_upar* before they were
+    reweighted to v_par I/B; older output is still readable through this.
+    '''
+    for n in names:
+        if n in ncdata.variables:
+            return n
+    return names[0]
+
+
 def _field_line_average_per_species(ncdata, name, weight):
     '''As _field_line_average, but keeping the species axis.
 
@@ -304,8 +316,9 @@ def get_rh_pmom_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     weight[-1] = 0.0
     weight = weight / weight.sum()
 
-    upar = _field_line_average_per_species(ncdata, 'RH_pmom', weight)
-    inertia = _field_line_average_per_species(ncdata, 'RH_pmom_inertia', weight)
+    upar = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom', 'RH_upar'), weight)
+    inertia = _field_line_average_per_species(
+        ncdata, _first_present(ncdata, 'RH_pmom_inertia', 'RH_upar_inertia'), weight)
     if upar is None or inertia is None:
         raise KeyError('this run did not write the RH toroidal-momentum diagnostics')
 
@@ -332,9 +345,9 @@ def get_rh_pmom_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
         flux = flux[..., keep]
         return -weight_s * np.real(1j * kx[None, None, :] * flux * np.conj(upar)) / inertia2
 
-    P_nl   = power(RH_PMOM_FLUX_NONLINEAR)
-    P_coll = power(RH_PMOM_FLUX_COLLISIONAL)
-    P_dr   = power(RH_PMOM_FLUX_DRIFT)
+    P_nl   = power(_first_present(ncdata, RH_PMOM_FLUX_NONLINEAR, 'RH_upar_flux_nonlinear'))
+    P_coll = power(_first_present(ncdata, RH_PMOM_FLUX_COLLISIONAL, 'RH_upar_flux_collisional'))
+    P_dr   = power(_first_present(ncdata, RH_PMOM_FLUX_DRIFT, 'RH_upar_flux_drift'))
 
     E_total = E.sum(axis=(1, 2))
     dE_dt = np.gradient(E_total, time)

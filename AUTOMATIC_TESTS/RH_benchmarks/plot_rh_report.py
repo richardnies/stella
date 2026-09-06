@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from rh_budget import (get_rh_budget, get_rh_pmom_budget, _complex,
+from rh_budget import (get_rh_budget, get_rh_pmom_budget, _complex, _first_present,
                        _field_line_average, _field_line_average_per_species)
 
 
@@ -82,15 +82,16 @@ def invariants(netcdf_file):
 
     phi = _field_line_average(ncdata, 'RH_phi_I', weight)
     inertia = _field_line_average(ncdata, 'RH_inertia', weight)
-    upar = _field_line_average_per_species(ncdata, 'RH_upar', weight)
-    upar_inertia = _field_line_average_per_species(ncdata, 'RH_upar_inertia', weight)
+    upar = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom', 'RH_upar'), weight)
+    upar_inertia = _field_line_average_per_species(
+        ncdata, _first_present(ncdata, 'RH_pmom_inertia', 'RH_upar_inertia'), weight)
 
     kx = np.array(ncdata.variables['kx'][:])
     keep = np.abs(kx) > 1e-12
     #> One zonal mode is enough to show conservation; take the smallest finite kx.
     index = np.argmin(np.where(keep, np.abs(kx), np.inf))
     phi_ratio = phi[:, index] / inertia[index]
-    upar_ratio = upar[:, 0, index] / upar_inertia[0, index]
+    upar_ratio = upar[:, 0, index] / upar_inertia[0, index]  # p_RH / I_p
     return time, phi_ratio, upar_ratio
 
 
@@ -106,7 +107,7 @@ def figure_conservation(netcdf_file, outfile, convergence=None):
                                   gridspec_kw=dict(width_ratios=[1.45, 1]))
 
     for series, colour, label in ((phi_ratio, PHI, r'$\langle\varphi_{\rm RH}\rangle/\langle I\rangle$'),
-                                  (upar_ratio, UPA, r'$\langle u_{\parallel\rm RH}\rangle/\langle I_u\rangle$')):
+                                  (upar_ratio, UPA, r'$\langle p_{\rm RH}\rangle/\langle I_p\rangle$')):
         drift = np.abs(series - series[0]) / np.abs(series[0])
         ax.plot(time, drift, color=colour, lw=1.6, label=label)
     ax.set_yscale('log')
@@ -146,7 +147,7 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
         colour, energy_label = PHI, r'$E_{\rm RH}$'
     else:
         t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_pmom_budget(netcdf_file, time_min, time_max)
-        colour, energy_label = UPA, r'$E_{u\rm RH}$'
+        colour, energy_label = UPA, r'$E_{p\rm RH}$'
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(6.6, 5.0), sharex=True,
                                      gridspec_kw=dict(height_ratios=[1, 1.3], hspace=0.12))
@@ -232,10 +233,10 @@ def per_kx_residual(netcdf_file, which, time_min, time_max):
         P_nl = -np.real(1j * kx[None, :] * nonlinear * np.conj(signal)) * pref
         P_ot = -np.real(1j * kx[None, :] * other * np.conj(signal)) * pref
     else:
-        signal = _field_line_average_per_species(ncdata, 'RH_upar', weight).sum(axis=1)
-        inertia = _field_line_average_per_species(ncdata, 'RH_upar_inertia', weight)
+        signal = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom', 'RH_upar'), weight).sum(axis=1)
+        inertia = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom_inertia', 'RH_upar_inertia'), weight)
         mass = np.array(ncdata.variables['mass'][:]); dens = np.array(ncdata.variables['dens'][:])
-        u = _field_line_average_per_species(ncdata, 'RH_upar', weight)
+        u = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom', 'RH_upar'), weight)
         ws = (mass * dens)[None, :, None]
         i2 = np.abs(inertia)[None, :, :]**2
         E = (0.5 * ws * np.abs(u)**2 / i2).sum(axis=1)
@@ -243,8 +244,9 @@ def per_kx_residual(netcdf_file, which, time_min, time_max):
             fl = _field_line_average_per_species(ncdata, name, weight)
             if fl is None: return np.zeros(E.shape)
             return (-ws * np.real(1j * kx[None, None, :] * fl * np.conj(u)) / i2).sum(axis=1)
-        P_nl = pw('RH_upar_flux_nonlinear')
-        P_ot = pw('RH_upar_flux_collisional') + pw('RH_upar_flux_drift')
+        P_nl = pw(_first_present(ncdata, 'RH_pmom_flux_nonlinear', 'RH_upar_flux_nonlinear'))
+        P_ot = (pw(_first_present(ncdata, 'RH_pmom_flux_collisional', 'RH_upar_flux_collisional'))
+                + pw(_first_present(ncdata, 'RH_pmom_flux_drift', 'RH_upar_flux_drift')))
 
     dEdt = np.gradient(E, time, axis=0)
     interior = slice(1, -1)
@@ -274,7 +276,7 @@ def figure_kx(netcdf_file, outfile, time_min, time_max, title=''):
     fig, (ax, ax_w) = plt.subplots(2, 1, figsize=(6.2, 4.4), sharex=True,
                                    gridspec_kw=dict(height_ratios=[2, 1], hspace=0.1))
     for which, colour, marker, label in (('phi', PHI, 'o', r'$\varphi_{\rm RH}$'),
-                                         ('upar', UPA, 's', r'$u_{\parallel\rm RH}$')):
+                                         ('upar', UPA, 's', r'$p_{\rm RH}$')):
         rows = per_kx_residual(netcdf_file, which, time_min, time_max)
         if not rows:
             continue
@@ -304,7 +306,7 @@ def figure_summary(cases, outfile):
     fig, ax = plt.subplots(figsize=(7.0, 0.30 * len(cases) + 1.4))
     height = 0.38
     for offset, index, colour, label in ((+height/2, 1, PHI, r'$\varphi_{\rm RH}$'),
-                                         (-height/2, 2, UPA, r'$u_{\parallel\rm RH}$')):
+                                         (-height/2, 2, UPA, r'$p_{\rm RH}$')):
         values = [c[index] if c[index] is not None else np.nan for c in cases]
         ax.barh(y + offset, values, height=height, color=colour, label=label, alpha=0.9)
     ax.axvline(0.08, color=GREY, ls='--', lw=1.0)
@@ -334,7 +336,7 @@ def figure_quadrature(rows, outfile):
     fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.1), sharey=True)
     shades = plt.cm.viridis(np.linspace(0.15, 0.85, len(kxs)))
     for ax, index, name, colour in ((axes[0], 1, r'$\varphi_{\rm RH}$', PHI),
-                                    (axes[1], 2, r'$u_{\parallel\rm RH}$', UPA)):
+                                    (axes[1], 2, r'$p_{\rm RH}$', UPA)):
         for kx, shade in zip(kxs, shades):
             nzed, *series = rows[kx]
             ax.loglog(nzed, series[index - 1], 'o-', color=shade, lw=1.4, ms=4,
@@ -361,7 +363,7 @@ def figure_drift_scan(xdrift, phi_err, upar_err, trapped, phi_tf, upar_tf, outfi
     """
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.6, 3.0))
     ax.loglog(xdrift, phi_err, 'o-', color=PHI, lw=1.6, ms=5, label=r'$\varphi_{\rm RH}$')
-    ax.loglog(xdrift, upar_err, 's-', color=UPA, lw=1.6, ms=5, label=r'$u_{\parallel\rm RH}$')
+    ax.loglog(xdrift, upar_err, 's-', color=UPA, lw=1.6, ms=5, label=r'$p_{\rm RH}$')
     ax.set_xlabel('xdriftknob  (magnetic drift strength)')
     ax.set_ylabel('conservation error')
     ax.set_title(r'At fixed $k_x\rho_i=2$', fontsize=9.5, loc='left')
@@ -403,8 +405,8 @@ def figure_asymptotics(datasets, outfile):
     ax2.text(Q[0], 0.52, r'$1/2$', fontsize=8, color=GREY)
     ax2.axvline(1.0, color=GREY, ls='--', lw=1.0)
     ax2.set_xlabel(r'drift-orbit phase  $Q$')
-    ax2.set_ylabel(r'$\langle I_u\rangle$')
-    ax2.set_title('Parallel-flow inertia', fontsize=9.5, loc='left')
+    ax2.set_ylabel(r'$\langle I_p\rangle$')
+    ax2.set_title('Toroidal-momentum inertia', fontsize=9.5, loc='left')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)

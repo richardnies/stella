@@ -469,7 +469,8 @@ contains
    subroutine get_RH_fluxes_fluxtube(g, RH_fluxes_phi_even,  RH_fluxes_phi_odd, &
                                         RH_fluxes_apar_even, RH_fluxes_apar_odd, &
                                         RH_fluxes_bpar_even, RH_fluxes_bpar_odd, &
-                                        RH_fluxes_coll, RH_fluxes_drift_trapped, RH_fluxes_drift_passing)
+                                        RH_fluxes_coll, RH_fluxes_drift_trapped, RH_fluxes_drift_passing, &
+                                        RH_fluxes_coll_even, RH_fluxes_coll_odd)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -521,6 +522,8 @@ contains
       complex, dimension(:, :, :, :), allocatable :: phi_copy, apar_copy, bpar_copy
       complex, dimension(:, :, :), allocatable :: gvmu_saved
       complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_coll
+      complex, dimension(   :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_coll_even, RH_fluxes_coll_odd
+      complex, dimension(:, :, :, :, :), allocatable :: work_coll
 
       !> Drive from the transit-averaged radial magnetic drift, reported
       !> separately for the trapped and passing populations; their sum is the
@@ -651,9 +654,15 @@ contains
       endif
 
 
+      if (present(RH_fluxes_coll_even)) then
+         RH_fluxes_coll_even = 0.; RH_fluxes_coll_odd = 0.
+         allocate (work_coll(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      end if
+
       ! Only compute RH collisional flux when collisions are included
       if (.not. include_collisions) then
          RH_fluxes_coll = 0.
+         if (allocated(work_coll)) deallocate (work_coll)
       else
 
          !!!!!!!!!!!!!!!!!!!!!!!!!
@@ -691,6 +700,20 @@ contains
          ! Remove nonzonal terms to save computational time
          integrand_even(2:,:,:,:,:) = 0.0
 
+         !> Split the collisional flux the same way as the nonlinear one.  The
+         !> two halves have opposite orderings at long wavelength: the operator
+         !> conserves particles, so the even part loses its leading term exactly
+         !> and is O(kx) while the odd part is O(1).  Keeping them apart is what
+         !> lets that be checked.
+         if (present(RH_fluxes_coll_even)) then
+            work_coll = 1/code_dt * integrand_even * spread(RH_integrand_even, 1, naky)
+            call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
+            RH_fluxes_coll_even = RH_fluxes_coll_tmp(1,:,:,:,:)
+            work_coll = 1/code_dt * integrand_even * spread(RH_integrand_odd, 1, naky)
+            call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
+            RH_fluxes_coll_odd = RH_fluxes_coll_tmp(1,:,:,:,:)
+         end if
+
          ! Evaluate integrand in RH collisional flux
          integrand_odd = 1/code_dt * integrand_even * spread(RH_integrand_even+RH_integrand_odd, 1, naky)
 
@@ -706,7 +729,23 @@ contains
              RH_fluxes_coll(1:,:,:,:) = -RH_fluxes_coll(1:,:,:,:)/(zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
          end if
 
+         if (present(RH_fluxes_coll_even)) then
+            if (abs(akx(1)) < epsilon(0.)) then
+               RH_fluxes_coll_even(1,:,:,:) = 0.; RH_fluxes_coll_odd(1,:,:,:) = 0.
+               RH_fluxes_coll_even(2:,:,:,:) = -RH_fluxes_coll_even(2:,:,:,:) &
+                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
+               RH_fluxes_coll_odd(2:,:,:,:) = -RH_fluxes_coll_odd(2:,:,:,:) &
+                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
+            else
+               RH_fluxes_coll_even = -RH_fluxes_coll_even &
+                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
+               RH_fluxes_coll_odd = -RH_fluxes_coll_odd &
+                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
+            end if
+         end if
+
          deallocate(RH_fluxes_coll_tmp)
+         if (allocated(work_coll)) deallocate (work_coll)
 
       endif
 
