@@ -309,6 +309,7 @@ contains
 
       logical :: old_nml_exist
       integer :: in_file
+      logical :: probe_analytic_drift_phase
 
       ! These variables belonged to <time_advance_knobs> and are now read in <run_parameters>
       ! We define them here so we can read the namelist, but we will not use them.
@@ -322,6 +323,7 @@ contains
          adiabatic_option, const_alpha_geo, suppress_zonal_interaction, only_zonal_interaction, &
          freeze_nonzonal, freeze_zonal, freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
          triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
+         RH_analytic_drift_phase, &
          triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac
 
       namelist /parameters/ beta, zeff, tite, nine, rhostar, vnew_ref, &
@@ -332,6 +334,17 @@ contains
       in_file = input_unit_exist("physics_flags", old_nml_exist)
       if (old_nml_exist) then
          read (unit=in_file, nml=physics_flags)
+         !> The deprecated namelist is read after the probe in <read_parameters>,
+         !> so repeat the probe here.  Without it a RH_analytic_drift_phase set
+         !> under <physics_flags> would read as unspecified and be overridden by
+         !> the geometry default, silently ignoring the user.
+         probe_analytic_drift_phase = RH_analytic_drift_phase
+         RH_analytic_drift_phase = .not. probe_analytic_drift_phase
+         rewind (in_file)
+         read (unit=in_file, nml=physics_flags)
+         if (RH_analytic_drift_phase .eqv. probe_analytic_drift_phase) &
+            RH_analytic_drift_phase_specified = .true.
+         RH_analytic_drift_phase = probe_analytic_drift_phase
          if(debug) then 
             write(*,*) '!!!!!!!!!!!!!!!!!!!!!!!!!!WARNING!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
             write(*,*) 'Please change the namelist <phyiscs_flags> in the input file'
@@ -423,6 +436,12 @@ contains
      call broadcast(triangular_ZF)
      call broadcast(cos_ZF)
      call broadcast(triangular_ZF_RH)
+     !> Both of these must be broadcast: only proc0 reads the input file, and
+     !> <use_analytic_drift_phase> in rosenbluth_hinton gates a reduction, so a
+     !> rank that disagrees about them deadlocks the run rather than getting a
+     !> wrong answer.
+     call broadcast(RH_analytic_drift_phase)
+     call broadcast(RH_analytic_drift_phase_specified)
      call broadcast(triangular_ZF_flow)
      call broadcast(triangular_ZF_flow_PS)
      call broadcast(triangular_ZF_flow_sym)

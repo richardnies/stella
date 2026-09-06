@@ -71,6 +71,7 @@ module stella_io
    public :: write_RH_fluxes_bpar_nc
    public :: write_RH_fluxes_coll_nc
    public :: write_RH_fluxes_coll_split_nc
+   public :: write_RH_fluxes_asym_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
    public :: write_RH_pmom_nc
@@ -876,6 +877,37 @@ contains
    !> wavelength the two halves order oppositely: the collision operator
    !> conserves particles, so the even part loses its leading term exactly and
    !> is O(kx), while the odd part is O(1).
+   !> The same fluxes formed with the long-wavelength weights.  Comparing them
+   !> with the exact ones tests the expansion independently of the turbulence:
+   !> both are driven by identical fields, so the difference is the weight alone.
+   subroutine write_RH_fluxes_asym_nc(nout, phi_even, phi_odd, coll_even, coll_odd)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: phi_even, phi_odd
+      complex, dimension(:, :, :, :), intent(in) :: coll_even, coll_odd
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dphi = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      character(*), dimension(*), parameter :: dcol = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: sphi
+      integer, dimension(6) :: scol
+      sphi = [1, 1, 1, 1, 1, 1, nout]
+      scol = [1, 1, 1, 1, 1, nout]
+
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_even_asym", phi_even, dim_names=dphi, start=sphi, &
+              long_name="Nonlinear RH flux, even weight, long-wavelength form")
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_asym", phi_odd, dim_names=dphi, start=sphi, &
+              long_name="Nonlinear RH flux, odd weight, long-wavelength form")
+      call netcdf_write_complex(ncid, "RH_fluxes_coll_even_asym", coll_even, dim_names=dcol, start=scol, &
+              long_name="Collisional RH flux, even weight, long-wavelength form")
+      call netcdf_write_complex(ncid, "RH_fluxes_coll_odd_asym", coll_odd, dim_names=dcol, start=scol, &
+              long_name="Collisional RH flux, odd weight, long-wavelength form")
+#endif
+
+   end subroutine write_RH_fluxes_asym_nc
+
+
    subroutine write_RH_fluxes_coll_split_nc(nout, coll_even, coll_odd)
       implicit none
 

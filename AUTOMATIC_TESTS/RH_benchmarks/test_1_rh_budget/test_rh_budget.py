@@ -279,3 +279,62 @@ def test_whether_rh_diagnostics_are_independent_of_parallel_length(tmp_path, ste
     print(f'  -->  RH diagnostics are independent of parallel length: inertia agrees to '
           f'{inertia_difference:.1e}, E_RH(t) to {energy_difference:.1e}.')
     return
+
+
+#-------------------------------------------------------------------------------
+#      Check that the two routes to the drift-orbit phase Q agree              #
+#-------------------------------------------------------------------------------
+def test_whether_analytic_and_numerical_drift_phase_agree(tmp_path, stella_version, error=False):
+    '''The drift-orbit phase Q can be taken from the closed form that holds in a
+    quasisymmetric field, or integrated along the field line from the magnetic
+    drifts.  In an axisymmetric equilibrium the closed form applies, so the two
+    are the same physics and must give the same Rosenbluth-Hinton quantities.
+
+    This is the guard on the numerical route, which is the one a stellarator has
+    to use and which therefore has no independent check of its own: here it is
+    run against a case where the answer is known in closed form.
+
+    It is also the guard on a failure mode that only appears in parallel.  The
+    two routes differ by which reductions the diagnostic performs, so a rank
+    that disagrees about which route is in use does not give a wrong answer --
+    it deadlocks.  That is invisible to a serial test and to any deck that
+    leaves the option at its default, which is why this deck sets it explicitly
+    and why the test is worth its four seconds.
+    '''
+
+    budgets = {}
+    inertias = {}
+    for input_filename in ('rh_linear_collisional.in', 'rh_linear_collisional_numericalQ.in'):
+        run_directory = tmp_path / input_filename.replace('.in', '')
+        run_directory.mkdir()
+        run_local_stella_simulation(input_filename, run_directory, stella_version)
+        local_netcdf_file = run_directory / input_filename.replace('.in', '.out.nc')
+        budgets[input_filename] = get_rh_budget(local_netcdf_file)
+        inertias[input_filename] = field_line_averaged_rh_inertia(local_netcdf_file)
+
+    analytic, numerical = 'rh_linear_collisional.in', 'rh_linear_collisional_numericalQ.in'
+
+    # Q enters the transit averages, so the inertia is the most direct probe of it
+    inertia_difference = np.max(np.abs(inertias[analytic] - inertias[numerical])) \
+                       / np.max(np.abs(inertias[analytic]))
+    if not (inertia_difference < 5e-2):
+        print('\nERROR: the analytic and numerical drift-orbit phases disagree.'); error = True
+        print(f'    analytic : {inertias[analytic]}')
+        print(f'    numerical: {inertias[numerical]}')
+        print(f'    relative difference = {inertia_difference:.6e}   (tolerance 5.0e-02)')
+
+    # And E_RH(t), which is what the residual is read off
+    E_analytic, E_numerical = budgets[analytic][1], budgets[numerical][1]
+    energy_difference = np.max(np.abs(E_analytic - E_numerical)) / np.max(np.abs(E_analytic))
+    if not (energy_difference < 5e-2):
+        print('\nERROR: E_RH(t) depends on how the drift-orbit phase is obtained.'); error = True
+        print(f'    relative difference = {energy_difference:.6e}   (tolerance 5.0e-02)')
+        print(f'    {"time":>10} {"analytic":>16} {"numerical":>16}')
+        time = budgets[analytic][0]
+        for i in range(0, len(time), max(1, len(time) // 10)):
+            print(f'    {time[i]:10.3f} {E_analytic[i]:16.6e} {E_numerical[i]:16.6e}')
+
+    assert (not error), 'The two routes to the drift-orbit phase Q do not agree.'
+    print(f'  -->  Analytic and numerical drift-orbit phase agree: inertia to '
+          f'{inertia_difference:.1e}, E_RH(t) to {energy_difference:.1e}.')
+    return

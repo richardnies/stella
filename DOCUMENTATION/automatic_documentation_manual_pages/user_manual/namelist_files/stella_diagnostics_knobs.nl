@@ -19,3 +19,7 @@ Variable | Type | Default | Description
 `write_fluxes_kxkyz` | boolean | `false` | Write the mode-by-mode radial fluxes as a function of \\( z \\) to the netCDF file.
 `flux_norm` | boolean | `true` | If true, then scale radial fluxes by \\( \langle\lvert \nabla r\rvert \rangle_\psi \\), otherwise perform no rescaling. 
 `nc_mult` | integer | 1 | Multiplication factor of the output cadence for netCDF files, which tend to take up more storage space than the ASCII output files.
+`write_RH_inertia_fluxes` | boolean | `false` | Write the Rosenbluth--Hinton inertia, projected potential and energy-budget fluxes to the netCDF file.
+`write_RH_bounce_drift` | boolean | `false` | Also write the bounce-averaged radial drift, which is nonzero in a stellarator, to the netCDF file.
+`write_RH_integrands` | boolean | `true` | Also write the Rosenbluth--Hinton transit-average integrands, resolved over \\( (k_x, z, \mathrm{tube}, v_\parallel, \mu, s) \\). These are large; set to `false` to keep only the reduced quantities.
+`write_RH_asymptotics` | boolean | `false` | Also evaluate the Rosenbluth--Hinton quantities and fluxes with their long-wavelength (order \\( k_x^2 \\)) weights alongside the exact ones, and write both. Intended for verifying the asymptotic theory against the general formulae in the same run.
