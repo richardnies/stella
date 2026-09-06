@@ -71,7 +71,7 @@ module stella_io
    public :: write_RH_fluxes_bpar_nc
    public :: write_RH_fluxes_coll_nc
    public :: write_RH_fluxes_coll_split_nc
-   public :: write_RH_fluxes_asym_nc
+   public :: write_RH_fluxes_LW_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
    public :: write_RH_pmom_nc
@@ -79,7 +79,7 @@ module stella_io
    public :: write_RH_pmom_inertia_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
-   public :: write_RH_asymptotics_nc
+   public :: write_RH_LW_weights_nc
    public :: write_RH_bounce_drift_nc
    public :: write_radial_fluxes_nc
    public :: write_radial_moments_nc
@@ -880,7 +880,7 @@ contains
    !> The same fluxes formed with the long-wavelength weights.  Comparing them
    !> with the exact ones tests the expansion independently of the turbulence:
    !> both are driven by identical fields, so the difference is the weight alone.
-   subroutine write_RH_fluxes_asym_nc(nout, phi_even, phi_odd, coll_even, coll_odd)
+   subroutine write_RH_fluxes_LW_nc(nout, phi_even, phi_odd, coll_even, coll_odd)
       implicit none
 
       integer, intent(in) :: nout
@@ -895,17 +895,17 @@ contains
       sphi = [1, 1, 1, 1, 1, 1, nout]
       scol = [1, 1, 1, 1, 1, nout]
 
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_even_asym", phi_even, dim_names=dphi, start=sphi, &
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_even_LW", phi_even, dim_names=dphi, start=sphi, &
               long_name="Nonlinear RH flux, even weight, long-wavelength form")
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_asym", phi_odd, dim_names=dphi, start=sphi, &
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_LW", phi_odd, dim_names=dphi, start=sphi, &
               long_name="Nonlinear RH flux, odd weight, long-wavelength form")
-      call netcdf_write_complex(ncid, "RH_fluxes_coll_even_asym", coll_even, dim_names=dcol, start=scol, &
+      call netcdf_write_complex(ncid, "RH_fluxes_coll_even_LW", coll_even, dim_names=dcol, start=scol, &
               long_name="Collisional RH flux, even weight, long-wavelength form")
-      call netcdf_write_complex(ncid, "RH_fluxes_coll_odd_asym", coll_odd, dim_names=dcol, start=scol, &
+      call netcdf_write_complex(ncid, "RH_fluxes_coll_odd_LW", coll_odd, dim_names=dcol, start=scol, &
               long_name="Collisional RH flux, odd weight, long-wavelength form")
 #endif
 
-   end subroutine write_RH_fluxes_asym_nc
+   end subroutine write_RH_fluxes_LW_nc
 
 
    subroutine write_RH_fluxes_coll_split_nc(nout, coll_even, coll_odd)
@@ -1109,10 +1109,10 @@ contains
 
    end subroutine write_RH_bounce_drift_nc
 
-   subroutine write_RH_asymptotics_nc(asym_even, asym_odd)
+   subroutine write_RH_LW_weights_nc(LW_even, LW_odd)
       implicit none
 
-      complex, dimension(:, :, :, :, :, :), intent(in) :: asym_even, asym_odd
+      complex, dimension(:, :, :, :, :, :), intent(in) :: LW_even, LW_odd
 
 #ifdef NETCDF
       !> Same layout as the exact integrands, so the two can be compared
@@ -1121,13 +1121,13 @@ contains
       integer, dimension(7) :: start
       start = [1, 1, 1, 1, 1, 1, 1]
 
-      call netcdf_write_complex(ncid, "RH_asym_even", asym_even, dim_names=dims, start=start, &
+      call netcdf_write_complex(ncid, "RH_LW_even", LW_even, dim_names=dims, start=start, &
               long_name="Long-wavelength (order kx^2) approximation to the even projection weight")
-      call netcdf_write_complex(ncid, "RH_asym_odd", asym_odd, dim_names=dims, start=start, &
+      call netcdf_write_complex(ncid, "RH_LW_odd", LW_odd, dim_names=dims, start=start, &
               long_name="Long-wavelength (order kx) approximation to the odd projection weight")
 #endif
 
-   end subroutine write_RH_asymptotics_nc
+   end subroutine write_RH_LW_weights_nc
 
 
    subroutine write_RH_integrands_nc(RH_integrand_even, RH_integrand_odd)

@@ -16,20 +16,24 @@ from netCDF4 import Dataset
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from rh_budget import (get_rh_budget, get_rh_pmom_budget, _complex, _first_present,
-                       _field_line_average, _field_line_average_per_species)
+                       _field_line_average, _field_line_average_per_species,
+                       get_rh_budget_LW)
 
 
-def asymptotic_inertia(netcdf_file):
+def LW_inertia(netcdf_file):
     '''The inertia rebuilt from the long-wavelength weights, if the run has them.
 
     <I> = (Z^2 n/T) <int F_M (1 - J0 W)>, which needs only the weight and the
     equilibrium Maxwellian -- no g -- so it can be formed directly from the
-    RH_asym_even/odd that write_RH_asymptotics produces and compared with the
-    exact RH_inertia.  Returns (exact, asymptotic) field-line averages per kx,
+    RH_LW_even/odd that write_RH_asymptotics produces and compared with the
+    exact RH_inertia.  Returns (exact, LWptotic) field-line averages per kx,
     or (None, None) when the run did not write the asymptotic weights.
     '''
     ncdata = Dataset(netcdf_file)
-    if 'RH_asym_even' not in ncdata.variables:
+    #> Written as RH_asym_* before the LW/SW naming; keep reading both.
+    even_name = _first_present(ncdata, 'RH_LW_even', 'RH_asym_even')
+    odd_name = _first_present(ncdata, 'RH_LW_odd', 'RH_asym_odd')
+    if even_name not in ncdata.variables:
         return None, None
     zed = np.array(ncdata.variables['zed'][:])
     jac = np.array(ncdata.variables['jacob'][:])[:, 0]
@@ -43,7 +47,7 @@ def asymptotic_inertia(netcdf_file):
         return a[..., 0] + 1j * a[..., 1]          # (mu, vpa, species, tube, zed, kx)
 
     exact = weight('RH_integrand_even') + weight('RH_integrand_odd')
-    asym = weight('RH_asym_even') + weight('RH_asym_odd')
+    LW = weight(even_name) + weight(odd_name)
     VP, MU = np.meshgrid(vpa, mu)
     nkx = exact.shape[-1]
     out_e = np.zeros(nkx); out_a = np.zeros(nkx)
@@ -52,7 +56,7 @@ def asymptotic_inertia(netcdf_file):
         for iz in range(len(bmag)):
             fM = np.exp(-(VP**2 + 2 * MU * bmag[iz]))
             ne += w[iz] * (fM * (1 - exact[:, :, 0, 0, iz, ikx].real)).sum()
-            na += w[iz] * (fM * (1 - asym[:, :, 0, 0, iz, ikx].real)).sum()
+            na += w[iz] * (fM * (1 - LW[:, :, 0, 0, iz, ikx].real)).sum()
             den += w[iz] * fM.sum()
         out_e[ikx] = ne / den; out_a[ikx] = na / den
     return out_e, out_a
@@ -157,14 +161,14 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
     #> The same energy with the inertia replaced by its long-wavelength form.
     #> E ~ 1/<I>^2, so this shows directly how far the order-kx^2 expansion is
     #> from the exact normalisation at the wavelength of the run.
-    exact_I, asym_I = asymptotic_inertia(netcdf_file)
+    exact_I, LW_I = LW_inertia(netcdf_file)
     if exact_I is not None:
         finite = exact_I != 0
         if finite.any():
-            scale = float(np.mean((exact_I[finite] / asym_I[finite])**2))
+            scale = float(np.mean((exact_I[finite] / LW_I[finite])**2))
             err = abs(np.sqrt(1.0 / scale) - 1.0) * 100
             ax_e.plot(t, E * scale, color=GREY, lw=1.3, ls=':',
-                      label=energy_label + rf'  with $O(k_x^2)\ \langle I\rangle$  ({err:.1f}\% in $\langle I\rangle$)')
+                      label=energy_label + rf'  with $O(k_x^2)\ \langle I\rangle$  ({err:.1f}% in $\langle I\rangle$)')
     ax_e.set_ylabel('zonal energy')
     ax_e.legend(frameon=False, fontsize=8.5)
     if title:
@@ -432,6 +436,57 @@ def figure_phase_mixing(Q, W_all, W_passing, outfile):
     ax.set_ylabel(r'$\langle |W| \rangle$')
     ax.set_title('Phase mixing of the projection weight', fontsize=9.5, loc='left')
     ax.legend(frameon=False, fontsize=8.5)
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
+CHANNEL_COLOURS = {
+    'nonlinear, even': '#7d3c6b',
+    'nonlinear, odd': '#2e7d6b',
+    'collisional, even': '#8a6d1f',
+    'collisional, odd': '#b0532a',
+}
+
+
+def figure_LW_power(panels, outfile):
+    """P_RH channel by channel, exact weight against its long-wavelength form.
+
+    Each panel is (title, file, t_min, t_max, channel-prefix or None).
+    Solid is the exact transit-average weight, dotted
+    the order-kx^2 expansion of it; both are built from the same fields and
+    turned into a power with the same RH_phi_I, so the gap between a pair is
+    the weight and nothing else.  That is what makes this a test of the
+    expansion rather than of whatever happens to be driving the flux -- the
+    drive cancels out of the comparison.
+    """
+    fig, axes = plt.subplots(1, len(panels), figsize=(3.5 * len(panels), 3.1))
+    if len(panels) == 1:
+        axes = [axes]
+
+    for ax, (title, netcdf_file, time_min, time_max, only) in zip(axes, panels):
+        time, channels = get_rh_budget_LW(netcdf_file, time_min, time_max)
+        if time is None:
+            continue
+        for label, (exact, LW) in channels.items():
+            #> A run can carry several channels at once, and they need not be
+            #> the same size; `only` keeps a panel to the one being made about.
+            if only is not None and not label.startswith(only):
+                continue
+            colour = CHANNEL_COLOURS.get(label, GREY)
+            #> Integrated over the window rather than pointwise: the pointwise
+            #> ratio is meaningless wherever the channel passes through zero.
+            error = abs(np.trapz(LW, time) / np.trapz(exact, time) - 1) * 100
+            ax.plot(time, exact, color=colour, lw=1.5,
+                    label=rf'{label}  ({error:.1f}%)')
+            ax.plot(time, LW, color=colour, lw=1.5, ls=':', alpha=0.95)
+        ax.axhline(0.0, color='k', lw=0.5, alpha=0.3)
+        ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
+        ax.set_title(title, fontsize=9.5, loc='left')
+        ax.legend(frameon=False, fontsize=7.6)
+
+    axes[0].set_ylabel(r'$P_{\rm RH}$ into the zonal flow')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)

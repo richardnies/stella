@@ -38,7 +38,7 @@ module rosenbluth_hinton
    public :: RH_U_parallel_fac
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
-   public :: RH_asym_even, RH_asym_odd
+   public :: RH_LW_even, RH_LW_odd
    public :: RH_pmom_weight, RH_pmom_inertia
    public :: get_RH_pmom, get_RH_pmom_fluxes_fluxtube
    public :: RH_drift_bounce_avg
@@ -56,7 +56,7 @@ module rosenbluth_hinton
 
    !> Long-wavelength approximations to the same weights, filled only when
    !> <write_RH_asymptotics> asks for them.
-   complex, dimension(:,:,:,:), allocatable :: RH_asym_even, RH_asym_odd
+   complex, dimension(:,:,:,:), allocatable :: RH_LW_even, RH_LW_odd
 
    !> The parallel-flow counterpart of the Rosenbluth-Hinton projection.
    !> <RH_pmom_weight> is V_sigma(z) = <vpa J0 exp(-Q)>_tau exp(Q(z)), the
@@ -146,7 +146,7 @@ contains
       real :: energyval, muval, bmag_max, drift_average
       real, dimension(:), allocatable :: Q_hat_z
       complex :: integrand_tmp_pls, integrand_tmp_min, integrand_tmp_v
-      complex :: asym_even_tmp, asym_odd_tmp
+      complex :: LW_even_tmp, LW_odd_tmp
       logical :: trapped, well_found
 
       integer :: ivmu, iv, imu, is, ia, iz, it, ikx
@@ -229,8 +229,8 @@ contains
       allocate (RH_pmom_weight(  nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_pmom_weight = 0.
       allocate (RH_pmom_inertia( nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_pmom_inertia = 0.
       if (write_RH_asymptotics) then
-         allocate (RH_asym_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_asym_even = 0.
-         allocate (RH_asym_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_asym_odd  = 0.
+         allocate (RH_LW_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_LW_even = 0.
+         allocate (RH_LW_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_LW_odd  = 0.
       end if
 
       ! Allocate array for RH_U_parallel_fac
@@ -303,10 +303,10 @@ contains
                   RH_pmom_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_drift_phase_fac(iz)
 
                   if (write_RH_asymptotics) then
-                     call get_RH_asymptotic_weights(energyval, muval, vpa(iv), akx(ikx), iz, is, &
-                                                    trapped, asym_even_tmp, asym_odd_tmp, Q_hat_z)
-                     RH_asym_even(ikx,iz,it,ivmu) = asym_even_tmp
-                     RH_asym_odd( ikx,iz,it,ivmu) = asym_odd_tmp
+                     call get_RH_LW_weights(energyval, muval, vpa(iv), akx(ikx), iz, is, &
+                                                    trapped, LW_even_tmp, LW_odd_tmp, Q_hat_z)
+                     RH_LW_even(ikx,iz,it,ivmu) = LW_even_tmp
+                     RH_LW_odd( ikx,iz,it,ivmu) = LW_odd_tmp
                   end if
 
                end do !ikx
@@ -349,8 +349,8 @@ contains
       if (allocated(RH_integrand_odd )) deallocate (RH_integrand_odd)
       if (allocated(RH_pmom_weight )) deallocate (RH_pmom_weight)
       if (allocated(RH_pmom_inertia)) deallocate (RH_pmom_inertia)
-      if (allocated(RH_asym_even)) deallocate (RH_asym_even)
-      if (allocated(RH_asym_odd )) deallocate (RH_asym_odd)
+      if (allocated(RH_LW_even)) deallocate (RH_LW_even)
+      if (allocated(RH_LW_odd )) deallocate (RH_LW_odd)
       if (allocated(RH_U_parallel_fac)) deallocate (RH_U_parallel_fac)
       if (allocated(RH_inertia))        deallocate (RH_inertia)
       if (allocated(RH_drift_bounce_avg)) deallocate (RH_drift_bounce_avg)
@@ -476,8 +476,8 @@ contains
                                         RH_fluxes_bpar_even, RH_fluxes_bpar_odd, &
                                         RH_fluxes_coll, RH_fluxes_drift_trapped, RH_fluxes_drift_passing, &
                                         RH_fluxes_coll_even, RH_fluxes_coll_odd, &
-                                        RH_fluxes_phi_even_asym, RH_fluxes_phi_odd_asym, &
-                                        RH_fluxes_coll_even_asym, RH_fluxes_coll_odd_asym)
+                                        RH_fluxes_phi_even_LW, RH_fluxes_phi_odd_LW, &
+                                        RH_fluxes_coll_even_LW, RH_fluxes_coll_odd_LW)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -535,10 +535,10 @@ contains
       !> exact ones.  Comparing the two is a test of the expansion that does not
       !> care what the turbulence looks like: both are driven by the same fields,
       !> so any difference is the weight and nothing else.
-      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_asym, RH_fluxes_phi_odd_asym
-      complex, dimension(   :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_coll_even_asym, RH_fluxes_coll_odd_asym
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_LW, RH_fluxes_phi_odd_LW
+      complex, dimension(   :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_coll_even_LW, RH_fluxes_coll_odd_LW
       complex, dimension(:, :, :, :, :), allocatable :: work_coll
-      complex, dimension(:, :, :, :, :), allocatable :: asym_int_even, asym_int_odd
+      complex, dimension(:, :, :, :, :), allocatable :: LW_int_even, LW_int_odd
 
       !> Drive from the transit-averaged radial magnetic drift, reported
       !> separately for the trapped and passing populations; their sum is the
@@ -557,11 +557,11 @@ contains
 
       !> Allocated here rather than lower down: the nonlinear block below is the
       !> first user, and allocating after it segfaults.
-      if (present(RH_fluxes_phi_even_asym)) then
-         RH_fluxes_phi_even_asym = 0.; RH_fluxes_phi_odd_asym = 0.
-         allocate (asym_int_even(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
-         allocate (asym_int_odd( naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
-         asym_int_even = 0.; asym_int_odd = 0.
+      if (present(RH_fluxes_phi_even_LW)) then
+         RH_fluxes_phi_even_LW = 0.; RH_fluxes_phi_odd_LW = 0.
+         allocate (LW_int_even(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+         allocate (LW_int_odd( naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+         LW_int_even = 0.; LW_int_odd = 0.
       end if
 
       ! Only compute RH fluxes for nonlinear run
@@ -610,9 +610,9 @@ contains
                    call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
                    integrand_even(:,:,iz,it,ivmu) = NL_term * spread(RH_integrand_even(:,iz,it,ivmu), 1, naky)
                    integrand_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_integrand_odd( :,iz,it,ivmu), 1, naky)
-                   if (present(RH_fluxes_phi_even_asym)) then
-                      asym_int_even(:,:,iz,it,ivmu) = NL_term * spread(RH_asym_even(:,iz,it,ivmu), 1, naky)
-                      asym_int_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_asym_odd( :,iz,it,ivmu), 1, naky)
+                   if (present(RH_fluxes_phi_even_LW)) then
+                      LW_int_even(:,:,iz,it,ivmu) = NL_term * spread(RH_LW_even(:,iz,it,ivmu), 1, naky)
+                      LW_int_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_LW_odd( :,iz,it,ivmu), 1, naky)
                    end if
                end do
             end do
@@ -621,9 +621,9 @@ contains
          ! Calculate <RH_fluxes>(even/odd)
          call integrate_vmu(integrand_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even)
          call integrate_vmu(integrand_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd)
-         if (present(RH_fluxes_phi_even_asym)) then
-            call integrate_vmu(asym_int_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even_asym)
-            call integrate_vmu(asym_int_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd_asym)
+         if (present(RH_fluxes_phi_even_LW)) then
+            call integrate_vmu(LW_int_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even_LW)
+            call integrate_vmu(LW_int_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd_LW)
          end if
 
          !!!!!!!!!!!!!!!!!!!!!!!!!
@@ -690,8 +690,8 @@ contains
          RH_fluxes_coll_even = 0.; RH_fluxes_coll_odd = 0.
          allocate (work_coll(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
       end if
-      if (present(RH_fluxes_coll_even_asym)) then
-         RH_fluxes_coll_even_asym = 0.; RH_fluxes_coll_odd_asym = 0.
+      if (present(RH_fluxes_coll_even_LW)) then
+         RH_fluxes_coll_even_LW = 0.; RH_fluxes_coll_odd_LW = 0.
       end if
 
 
@@ -748,13 +748,13 @@ contains
             work_coll = 1/code_dt * integrand_even * spread(RH_integrand_odd, 1, naky)
             call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
             RH_fluxes_coll_odd = RH_fluxes_coll_tmp(1,:,:,:,:)
-            if (present(RH_fluxes_coll_even_asym)) then
-               work_coll = 1/code_dt * integrand_even * spread(RH_asym_even, 1, naky)
+            if (present(RH_fluxes_coll_even_LW)) then
+               work_coll = 1/code_dt * integrand_even * spread(RH_LW_even, 1, naky)
                call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
-               RH_fluxes_coll_even_asym = RH_fluxes_coll_tmp(1,:,:,:,:)
-               work_coll = 1/code_dt * integrand_even * spread(RH_asym_odd, 1, naky)
+               RH_fluxes_coll_even_LW = RH_fluxes_coll_tmp(1,:,:,:,:)
+               work_coll = 1/code_dt * integrand_even * spread(RH_LW_odd, 1, naky)
                call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
-               RH_fluxes_coll_odd_asym = RH_fluxes_coll_tmp(1,:,:,:,:)
+               RH_fluxes_coll_odd_LW = RH_fluxes_coll_tmp(1,:,:,:,:)
             end if
          end if
 
@@ -775,17 +775,17 @@ contains
 
          !> The asymptotic versions need the same -1/(i kx) as the exact ones;
          !> without it they are short by exactly a factor of kx.
-         if (present(RH_fluxes_coll_even_asym)) then
+         if (present(RH_fluxes_coll_even_LW)) then
             if (abs(akx(1)) < epsilon(0.)) then
-               RH_fluxes_coll_even_asym(1,:,:,:) = 0.; RH_fluxes_coll_odd_asym(1,:,:,:) = 0.
-               RH_fluxes_coll_even_asym(2:,:,:,:) = -RH_fluxes_coll_even_asym(2:,:,:,:) &
+               RH_fluxes_coll_even_LW(1,:,:,:) = 0.; RH_fluxes_coll_odd_LW(1,:,:,:) = 0.
+               RH_fluxes_coll_even_LW(2:,:,:,:) = -RH_fluxes_coll_even_LW(2:,:,:,:) &
                   / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd_asym(2:,:,:,:) = -RH_fluxes_coll_odd_asym(2:,:,:,:) &
+               RH_fluxes_coll_odd_LW(2:,:,:,:) = -RH_fluxes_coll_odd_LW(2:,:,:,:) &
                   / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
             else
-               RH_fluxes_coll_even_asym = -RH_fluxes_coll_even_asym &
+               RH_fluxes_coll_even_LW = -RH_fluxes_coll_even_LW &
                   / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd_asym = -RH_fluxes_coll_odd_asym &
+               RH_fluxes_coll_odd_LW = -RH_fluxes_coll_odd_LW &
                   / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
             end if
          end if
@@ -898,7 +898,7 @@ contains
 
       deallocate (RH_fluxes_drift_tmp, drift_weight, boltzmann)
 
-      if (allocated(asym_int_even)) deallocate (asym_int_even, asym_int_odd)
+      if (allocated(LW_int_even)) deallocate (LW_int_even, LW_int_odd)
 
    end subroutine get_RH_fluxes_fluxtube
  
@@ -2007,8 +2007,8 @@ contains
    !> charge density being itself O(b)) and for the collisional flux (because
    !> the collision operator conserves particles).  Having both forms available
    !> in the same run is what lets such a claim be checked rather than asserted.
-   subroutine get_RH_asymptotic_weights(energyval, muval, vpaval, akxval, iz, is, trapped, &
-                                        even_asym, odd_asym, Q_hat_in)
+   subroutine get_RH_LW_weights(energyval, muval, vpaval, akxval, iz, is, trapped, &
+                                        even_LW, odd_LW, Q_hat_in)
 
       use species, only: spec
       use zgrid, only: nzgrid
@@ -2020,7 +2020,7 @@ contains
       real,    intent(in)  :: energyval, muval, vpaval, akxval
       integer, intent(in)  :: iz, is
       logical, intent(in)  :: trapped
-      complex, intent(out) :: even_asym, odd_asym
+      complex, intent(out) :: even_LW, odd_LW
       real, dimension(-nzgrid:), intent(in), optional :: Q_hat_in
 
       real,    dimension(-nzgrid:nzgrid) :: Q_hat
@@ -2030,7 +2030,7 @@ contains
       integer :: ia
 
       ia = 1
-      even_asym = 0.; odd_asym = 0.
+      even_LW = 0.; odd_LW = 0.
       if (abs(akxval) <= epsilon(0.)) return
 
       !> The excursion profile, from the same phase the exact weight uses.
@@ -2083,11 +2083,11 @@ contains
       kperp2 = max(kperp2, 0.)
       a2 = kperp2 * vperp2 * (spec(is)%smz_psi0 / bmag(ia, iz))**2
 
-      even_asym = 1. - 0.25 * a2 &
+      even_LW = 1. - 0.25 * a2 &
                 - 0.5 * akxval**2 * (dx2bar + dx_here**2 - 2.*dxbar*dx_here)
-      odd_asym  = zi * akxval * (dx_here - dxbar)
+      odd_LW  = zi * akxval * (dx_here - dxbar)
 
-   end subroutine get_RH_asymptotic_weights
+   end subroutine get_RH_LW_weights
 
 
    subroutine get_RH_transit_integrands(energyval, muval, vpaval, akxval, iz, is, trapped, &

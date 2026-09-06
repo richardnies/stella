@@ -88,7 +88,7 @@ contains
    subroutine write_RH_integrands_to_netcdf_file()
 
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd
-      use rosenbluth_hinton, only: RH_asym_even, RH_asym_odd
+      use rosenbluth_hinton, only: RH_LW_even, RH_LW_odd
 
       ! Dimensions
       use parameters_kxky_grids, only: naky, nakx
@@ -103,7 +103,7 @@ contains
       use parameters_physics, only: full_flux_surface
 
       ! Write to netcdf file 
-      use stella_io, only: write_RH_integrands_nc, write_RH_asymptotics_nc
+      use stella_io, only: write_RH_integrands_nc, write_RH_LW_weights_nc
       
       ! Routines
       use mp, only: proc0
@@ -119,8 +119,8 @@ contains
       ! Variables needed to write and calculate diagnostics 
       complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_even_vs_kxztsvpamu
       complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_odd_vs_kxztsvpamu
-      complex, dimension(:, :, :, :, :, :), allocatable :: asym_even_vs, asym_odd_vs
-      logical, save :: asym_written = .false.
+      complex, dimension(:, :, :, :, :, :), allocatable :: LW_even_vs, LW_odd_vs
+      logical, save :: LW_written = .false.
 
       !---------------------------------------------------------------------- 
 
@@ -149,19 +149,19 @@ contains
       end do
 
       !> The long-wavelength approximations, on the same grid, written once.
-      if (write_RH_asymptotics .and. .not. asym_written) then
-         allocate (asym_even_vs(nakx, nztot, ntubes, nspec, nvpa, nmu)); asym_even_vs = 0.
-         allocate (asym_odd_vs( nakx, nztot, ntubes, nspec, nvpa, nmu)); asym_odd_vs  = 0.
+      if (write_RH_asymptotics .and. .not. LW_written) then
+         allocate (LW_even_vs(nakx, nztot, ntubes, nspec, nvpa, nmu)); LW_even_vs = 0.
+         allocate (LW_odd_vs( nakx, nztot, ntubes, nspec, nvpa, nmu)); LW_odd_vs  = 0.
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             iv = iv_idx(vmu_lo, ivmu); imu = imu_idx(vmu_lo, ivmu); is = is_idx(vmu_lo, ivmu)
-            asym_even_vs(:,:,:,is,iv,imu) = RH_asym_even(:,:,:,ivmu)
-            asym_odd_vs( :,:,:,is,iv,imu) = RH_asym_odd( :,:,:,ivmu)
+            LW_even_vs(:,:,:,is,iv,imu) = RH_LW_even(:,:,:,ivmu)
+            LW_odd_vs( :,:,:,is,iv,imu) = RH_LW_odd( :,:,:,ivmu)
          end do
-         call sum_reduce(asym_even_vs, 0)
-         call sum_reduce(asym_odd_vs, 0)
-         if (proc0) call write_RH_asymptotics_nc(asym_even_vs, asym_odd_vs)
-         deallocate (asym_even_vs, asym_odd_vs)
-         asym_written = .true.
+         call sum_reduce(LW_even_vs, 0)
+         call sum_reduce(LW_odd_vs, 0)
+         if (proc0) call write_RH_LW_weights_nc(LW_even_vs, LW_odd_vs)
+         deallocate (LW_even_vs, LW_odd_vs)
+         LW_written = .true.
       end if
 
       !> Make sure proc0 has the full array.  This is the expensive diagnostic in
@@ -244,7 +244,7 @@ contains
 
       ! Write to netcdf file 
       use stella_io, only: write_RH_fluxes_phi_nc, write_RH_fluxes_apar_nc, write_RH_fluxes_bpar_nc, write_RH_fluxes_coll_nc
-      use stella_io, only: write_RH_fluxes_coll_split_nc, write_RH_fluxes_asym_nc
+      use stella_io, only: write_RH_fluxes_coll_split_nc, write_RH_fluxes_LW_nc
       use parameters_diagnostics, only: write_RH_asymptotics
       use stella_io, only: write_RH_fluxes_drift_nc
       
@@ -271,8 +271,8 @@ contains
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_vs_kxzts
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs
-      complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_asym_vs, RH_fluxes_phi_odd_asym_vs
-      complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_asym_vs, RH_fluxes_coll_odd_asym_vs
+      complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs
+      complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_drift_trapped_vs_kxzts
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_drift_passing_vs_kxzts
 
@@ -294,10 +294,10 @@ contains
       allocate (RH_fluxes_coll_vs_kxzts(                     nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_even_vs(nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_odd_vs( nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_phi_even_asym_vs(naky, nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_phi_odd_asym_vs( naky, nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_coll_even_asym_vs(nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_coll_odd_asym_vs( nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_phi_even_LW_vs(naky, nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_phi_odd_LW_vs( naky, nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_coll_even_LW_vs(nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_coll_odd_LW_vs( nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_drift_trapped_vs_kxzts(            nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_drift_passing_vs_kxzts(            nakx, nztot, ntubes, nspec))
 
@@ -314,8 +314,8 @@ contains
                 RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts, &
                 RH_fluxes_coll_vs_kxzts, RH_fluxes_drift_trapped_vs_kxzts, RH_fluxes_drift_passing_vs_kxzts, &
                 RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs, &
-                RH_fluxes_phi_even_asym_vs, RH_fluxes_phi_odd_asym_vs, &
-                RH_fluxes_coll_even_asym_vs, RH_fluxes_coll_odd_asym_vs)
+                RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs, &
+                RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs)
       end if
 
       ! Write the RH_fluxes to the netcdf file
@@ -325,9 +325,9 @@ contains
          if (include_bpar) call write_RH_fluxes_bpar_nc(nout, RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts)
          if (include_collisions) call write_RH_fluxes_coll_nc(nout, RH_fluxes_coll_vs_kxzts)
          if (include_collisions) call write_RH_fluxes_coll_split_nc(nout, RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs)
-         if (write_RH_asymptotics) call write_RH_fluxes_asym_nc(nout, &
-              RH_fluxes_phi_even_asym_vs, RH_fluxes_phi_odd_asym_vs, &
-              RH_fluxes_coll_even_asym_vs, RH_fluxes_coll_odd_asym_vs)
+         if (write_RH_asymptotics) call write_RH_fluxes_LW_nc(nout, &
+              RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs, &
+              RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs)
          call write_RH_fluxes_drift_nc(nout, RH_fluxes_drift_trapped_vs_kxzts, RH_fluxes_drift_passing_vs_kxzts)
 
       end if
@@ -337,8 +337,8 @@ contains
       deallocate (RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts)
       deallocate (RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts)
       deallocate (RH_fluxes_coll_vs_kxzts, RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs)
-      deallocate (RH_fluxes_phi_even_asym_vs, RH_fluxes_phi_odd_asym_vs)
-      deallocate (RH_fluxes_coll_even_asym_vs, RH_fluxes_coll_odd_asym_vs)
+      deallocate (RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs)
+      deallocate (RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs)
       deallocate (RH_fluxes_drift_trapped_vs_kxzts)
       deallocate (RH_fluxes_drift_passing_vs_kxzts)
 

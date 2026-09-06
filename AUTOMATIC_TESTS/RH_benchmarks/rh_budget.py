@@ -363,3 +363,88 @@ def get_rh_pmom_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     return (time[window], E_total[window], dE_dt[window],
             (P_nl + P_coll + P_dr)[window],
             P_nl[window], P_coll[window], P_dr[window])
+
+
+def get_rh_budget_LW(netcdf_file, time_min=None, time_max=None):
+    '''Return (time, channels) where channels maps a channel name to the pair
+    (P_RH exact, P_RH from the long-wavelength weights), summed over kx.
+
+    Runs with write_RH_asymptotics form every flux twice, once with the exact
+    transit-average weight and once with its order-kx^2 form, from the same
+    fields.  Both are turned into a power here with the same RH_phi_I and the
+    same prefactor, so the pair differs by the weight and by nothing else --
+    which is what makes the comparison independent of what is driving the flux.
+
+    Returns (None, None) if the run did not write the asymptotic fluxes.
+    '''
+    ncdata = Dataset(netcdf_file)
+    #> These were written as *_asym before the long-wavelength / short-wavelength
+    #> distinction was made explicit in the names; older output stays readable.
+    def _LW(stem):
+        return _first_present(ncdata, stem + '_LW', stem + '_asym')
+    if _LW('RH_fluxes_phi_even') not in ncdata.variables:
+        return None, None
+
+    time = np.array(ncdata.variables['t'][:])
+    kx = np.array(ncdata.variables['kx'][:])
+    zed = np.array(ncdata.variables['zed'][:])
+    jacobian = np.array(ncdata.variables['jacob'][:])[:, 0]
+    bmag = np.array(ncdata.variables['bmag'][:])[:, 0]
+    shat = float(np.array(ncdata.variables['shat'][...]))
+    gds22 = np.array(ncdata.variables['gds22'][:])[:, 0] / shat**2
+
+    weight = (zed[1] - zed[0]) * jacobian.copy()
+    weight[-1] = 0.0
+    weight = weight / weight.sum()
+
+    RH_phi_I = _field_line_average(ncdata, 'RH_phi_I', weight)
+    RH_inertia = _field_line_average(ncdata, 'RH_inertia', weight)
+
+    finite_kx = np.abs(kx) > 1e-12
+    kx_finite = kx[finite_kx]
+    RH_phi_I = RH_phi_I[:, finite_kx]
+    RH_inertia = RH_inertia[finite_kx]
+
+    charge = np.array(ncdata.variables['charge'][:])
+    mass = np.array(ncdata.variables['mass'][:])
+    temperature = np.array(ncdata.variables['temp'][:])
+    density = np.array(ncdata.variables['dens'][:])
+
+    b_reference = (kx_finite[:, None] / bmag[None, :])**2 * gds22[None, :]
+    polarisation = np.zeros_like(kx_finite)
+    for z_s, m_s, T_s, n_s in zip(charge, mass, temperature, density):
+        b_s = b_reference * (m_s * T_s / z_s**2)
+        Gamma0_s = (weight[None, :] * np.i0(b_s / 2) * np.exp(-b_s / 2)).sum(axis=1)
+        polarisation += z_s**2 * n_s / T_s * (1 - Gamma0_s)
+    prefactor = polarisation[None, :] / np.abs(RH_inertia)[None, :]**2
+
+    def power(name):
+        flux = _field_line_average(ncdata, name, weight)
+        if flux is None:
+            return None
+        flux = flux[:, finite_kx]
+        return -np.real(1j * kx_finite[None, :] * flux * np.conj(RH_phi_I)) * prefactor
+
+    pairs = {
+        r'nonlinear, even': ('RH_fluxes_phi_even', _LW('RH_fluxes_phi_even')),
+        r'nonlinear, odd': ('RH_fluxes_phi_odd', _LW('RH_fluxes_phi_odd')),
+        r'collisional, even': ('RH_fluxes_coll_even', _LW('RH_fluxes_coll_even')),
+        r'collisional, odd': ('RH_fluxes_coll_odd', _LW('RH_fluxes_coll_odd')),
+    }
+    channels = {}
+    for label, (exact_name, LW_name) in pairs.items():
+        exact, LW = power(exact_name), power(LW_name)
+        if exact is None or LW is None:
+            continue
+        if np.max(np.abs(exact)) <= 0.0:
+            continue
+        channels[label] = (exact.sum(axis=1), LW.sum(axis=1))
+
+    if time_min is not None or time_max is not None:
+        lo = time_min if time_min is not None else time[0]
+        hi = time_max if time_max is not None else time[-1]
+        window = (time >= lo) & (time <= hi)
+        time = time[window]
+        channels = {k: (a[window], b[window]) for k, (a, b) in channels.items()}
+
+    return time, channels
