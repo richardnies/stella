@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from rh_budget import (get_rh_budget, get_rh_pmom_budget, _complex, _first_present,
+from rh_budget import (get_rh_budget, get_rh_umom_budget, _complex, _first_present,
                        _field_line_average, _field_line_average_per_species,
                        get_rh_budget_LW)
 
@@ -86,9 +86,9 @@ def invariants(netcdf_file):
 
     phi = _field_line_average(ncdata, 'RH_phi_I', weight)
     inertia = _field_line_average(ncdata, 'RH_inertia', weight)
-    upar = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom', 'RH_upar'), weight)
+    upar = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_umom', 'RH_upar'), weight)
     upar_inertia = _field_line_average_per_species(
-        ncdata, _first_present(ncdata, 'RH_pmom_inertia', 'RH_upar_inertia'), weight)
+        ncdata, _first_present(ncdata, 'RH_umom_inertia', 'RH_upar_inertia'), weight)
 
     kx = np.array(ncdata.variables['kx'][:])
     keep = np.abs(kx) > 1e-12
@@ -150,7 +150,7 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
         t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_budget(netcdf_file, time_min, time_max)[:7]
         colour, energy_label = PHI, r'$E_{\rm RH}$'
     else:
-        t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_pmom_budget(netcdf_file, time_min, time_max)
+        t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_umom_budget(netcdf_file, time_min, time_max)
         colour, energy_label = UPA, r'$E_{p\rm RH}$'
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(6.6, 5.0), sharex=True,
@@ -237,10 +237,10 @@ def per_kx_residual(netcdf_file, which, time_min, time_max):
         P_nl = -np.real(1j * kx[None, :] * nonlinear * np.conj(signal)) * pref
         P_ot = -np.real(1j * kx[None, :] * other * np.conj(signal)) * pref
     else:
-        signal = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom', 'RH_upar'), weight).sum(axis=1)
-        inertia = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom_inertia', 'RH_upar_inertia'), weight)
+        signal = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_umom', 'RH_upar'), weight).sum(axis=1)
+        inertia = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_umom_inertia', 'RH_upar_inertia'), weight)
         mass = np.array(ncdata.variables['mass'][:]); dens = np.array(ncdata.variables['dens'][:])
-        u = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_pmom', 'RH_upar'), weight)
+        u = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_umom', 'RH_upar'), weight)
         ws = (mass * dens)[None, :, None]
         i2 = np.abs(inertia)[None, :, :]**2
         E = (0.5 * ws * np.abs(u)**2 / i2).sum(axis=1)
@@ -248,9 +248,9 @@ def per_kx_residual(netcdf_file, which, time_min, time_max):
             fl = _field_line_average_per_species(ncdata, name, weight)
             if fl is None: return np.zeros(E.shape)
             return (-ws * np.real(1j * kx[None, None, :] * fl * np.conj(u)) / i2).sum(axis=1)
-        P_nl = pw(_first_present(ncdata, 'RH_pmom_flux_nonlinear', 'RH_upar_flux_nonlinear'))
-        P_ot = (pw(_first_present(ncdata, 'RH_pmom_flux_collisional', 'RH_upar_flux_collisional'))
-                + pw(_first_present(ncdata, 'RH_pmom_flux_drift', 'RH_upar_flux_drift')))
+        P_nl = pw(_first_present(ncdata, 'RH_umom_flux_nonlinear', 'RH_upar_flux_nonlinear'))
+        P_ot = (pw(_first_present(ncdata, 'RH_umom_flux_collisional', 'RH_upar_flux_collisional'))
+                + pw(_first_present(ncdata, 'RH_umom_flux_drift', 'RH_upar_flux_drift')))
 
     dEdt = np.gradient(E, time, axis=0)
     interior = slice(1, -1)

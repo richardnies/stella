@@ -40,8 +40,8 @@ module rosenbluth_hinton
    public :: RH_integrand_even, RH_integrand_odd
    public :: RH_LW_even, RH_LW_odd
    public :: RH_SW_even, RH_SW_odd
-   public :: RH_pmom_weight, RH_pmom_inertia
-   public :: get_RH_pmom, get_RH_pmom_fluxes_fluxtube
+   public :: RH_umom_weight, RH_umom_inertia
+   public :: get_RH_umom, get_RH_umom_fluxes_fluxtube
    public :: RH_drift_bounce_avg
    public :: RH_drift_is_trapped
    public :: eval_bounce_averaged_drift
@@ -61,13 +61,13 @@ module rosenbluth_hinton
    complex, dimension(:,:,:,:), allocatable :: RH_SW_even, RH_SW_odd
 
    !> The parallel-flow counterpart of the Rosenbluth-Hinton projection.
-   !> <RH_pmom_weight> is V_sigma(z) = <vpa J0 exp(-Q)>_tau exp(Q(z)), the
+   !> <RH_umom_weight> is V_sigma(z) = <vpa J0 exp(-Q)>_tau exp(Q(z)), the
    !> sigma-odd member of the same family of weights the linear streaming and
-   !> radial drift annihilate; <RH_pmom_inertia> is the same projection applied
+   !> radial drift annihilate; <RH_umom_inertia> is the same projection applied
    !> to a unit-flow shifted Maxwellian, so that the ratio of their field-line
    !> averages is the parallel flow.  See DOCUMENTATION/RH_parallel_flow.
-   complex, dimension(:,:,:,:), allocatable :: RH_pmom_weight
-   complex, dimension(:,:,:,:), allocatable :: RH_pmom_inertia
+   complex, dimension(:,:,:,:), allocatable :: RH_umom_weight
+   complex, dimension(:,:,:,:), allocatable :: RH_umom_inertia
    ! (nakx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
 
    !> Transit-averaged radial magnetic drift: the bounce average over its own
@@ -141,7 +141,7 @@ contains
       use species, only: spec
       use constants, only: zi
 
-      use geometry, only: RH_pmom_geo_fac
+      use geometry, only: RH_umom_geo_fac
       use parameters_diagnostics, only: write_RH_asymptotics
       implicit none
 
@@ -229,8 +229,8 @@ contains
       ! Allocate the arrays for the Rosenbluth-Hinton integrand term
       allocate (RH_integrand_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_even = 0.
       allocate (RH_integrand_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_integrand_odd  = 0.
-      allocate (RH_pmom_weight(  nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_pmom_weight = 0.
-      allocate (RH_pmom_inertia( nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_pmom_inertia = 0.
+      allocate (RH_umom_weight(  nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_umom_weight = 0.
+      allocate (RH_umom_inertia( nakx, -nzgrid:nzgrid, ntubes, nspec)); RH_umom_inertia = 0.
       if (write_RH_asymptotics) then
          allocate (RH_LW_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_LW_even = 0.
          allocate (RH_LW_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_LW_odd  = 0.
@@ -305,7 +305,7 @@ contains
                   RH_integrand_odd( ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls-integrand_tmp_min)
                   !> Apply the geometric factor I; only the geometry knows it, and
                   !> for a quasisymmetric field it is (MG+NI)/(N-iota M).
-                  RH_pmom_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_pmom_geo_fac(iz)
+                  RH_umom_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_umom_geo_fac(iz)
 
                   if (write_RH_asymptotics) then
                      call get_RH_LW_weights(energyval, muval, vpa(iv), akx(ikx), iz, is, &
@@ -339,7 +339,7 @@ contains
       !> full_flux_surface and radial_variation, so this is reached only where
       !> the flux-tube form is the right one.
       call get_RH_inertia_fluxtube()
-      call get_RH_pmom_inertia_fluxtube()
+      call get_RH_umom_inertia_fluxtube()
 
    end subroutine init_rosenbluth_hinton
 
@@ -356,8 +356,8 @@ contains
       ! Deallocate the arrays for the Rosenbluth-Hinton integrand term
       if (allocated(RH_integrand_even)) deallocate (RH_integrand_even)
       if (allocated(RH_integrand_odd )) deallocate (RH_integrand_odd)
-      if (allocated(RH_pmom_weight )) deallocate (RH_pmom_weight)
-      if (allocated(RH_pmom_inertia)) deallocate (RH_pmom_inertia)
+      if (allocated(RH_umom_weight )) deallocate (RH_umom_weight)
+      if (allocated(RH_umom_inertia)) deallocate (RH_umom_inertia)
       if (allocated(RH_LW_even)) deallocate (RH_LW_even)
       if (allocated(RH_LW_odd )) deallocate (RH_LW_odd)
       if (allocated(RH_SW_even)) deallocate (RH_SW_even)
@@ -593,6 +593,7 @@ contains
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_drift_tmp
       real, dimension(:), allocatable :: drift_weight
       complex, dimension(:), allocatable :: boltzmann
+      complex, dimension(naky, nakx) :: gyro_chi
 
       ! Local variables
       integer :: ivmu, iv, imu, is, ia, iz, it
@@ -979,10 +980,21 @@ contains
          is = is_idx(vmu_lo, ivmu)
          do it = 1, ntubes
             do iz = -nzgrid, nzgrid
-               !> The Boltzmann part of the response, (Z/T) J_0 phi F_M.  Its
-               !> Maxwellian is dropped when the evolved pdf already carries
-               !> one, for the same reason as above.
+               !> The Boltzmann part of h.  By definition delta f = h - (Z e delta phi/T) F_M
+               !> with h a function of the guiding centre, so g = <delta f>_R gives
+               !>     h = g + (Z/T) <phi>_R F_M,
+               !> and with a compressional perturbation the equilibrium Maxwellian responds
+               !> to |B| as well, adding the bpar term.  There is deliberately no A_par
+               !> here: A_par enters the transformation to gbar that the parallel streaming
+               !> uses, not the relation between h and g, and stella's drift term carries
+               !> wdrift_phi and wdrift_bpar with no A_par counterpart.  The factors below
+               !> match those coefficients, wdrift_bpar = 4 mu (T/Z) wdrift_phi, the (Z/T)
+               !> of the Boltzmann response cancelling the (T/Z).
                boltzmann = fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt
+               if (include_bpar) then
+                  call gyro_average_j1(bpar(:, :, iz, it), iz, ivmu, gyro_chi)
+                  boltzmann = boltzmann + 4.0 * mu(imu) * gyro_chi(1, :)
+               end if
                if (.not. maxwellian_normalization) &
                   boltzmann = boltzmann * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
 
@@ -1020,9 +1032,9 @@ contains
    !> The toroidal-momentum inertia.  A rigid toroidal rotation of frequency
    !> omega has V_par = omega I/B, that is g = (m vpa/T)(omega I/B) F_M, so
    !> applying the projection to that state and dividing it out returns omega
-   !> itself: <RH_pmom>/<RH_pmom_inertia> is the residual toroidal rotation
+   !> itself: <RH_umom>/<RH_umom_inertia> is the residual toroidal rotation
    !> frequency.  Built once from the geometry and the equilibrium Maxwellian.
-   subroutine get_RH_pmom_inertia_fluxtube()
+   subroutine get_RH_umom_inertia_fluxtube()
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -1031,7 +1043,7 @@ contains
       use parameters_kxky_grids, only: naky, nakx
       use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
       use parameters_numerical, only: maxwellian_normalization
-      use geometry, only: RH_pmom_geo_fac, bmag
+      use geometry, only: RH_umom_geo_fac, bmag
       use arrays_dist_fn, only: integrand_vpamu => g1
 
       implicit none
@@ -1054,9 +1066,9 @@ contains
                !> The rotating state carries a further I/B, matching the one
                !> already inside the weight, so the inertia is quadratic in the
                !> geometric factor and the ratio returns a frequency.
-               integrand_vpamu(1, :, iz, it, ivmu) = RH_pmom_weight(:, iz, it, ivmu) &
+               integrand_vpamu(1, :, iz, it, ivmu) = RH_umom_weight(:, iz, it, ivmu) &
                     * vpa(iv) * spec(is)%mass / spec(is)%temp &
-                    * RH_pmom_geo_fac(iz) / bmag(ia, iz)
+                    * RH_umom_geo_fac(iz) / bmag(ia, iz)
                !> integrate_vmu folds the Maxwellian into its own weights when
                !> the evolved pdf is normalised by one.
                if (.not. maxwellian_normalization) &
@@ -1067,19 +1079,19 @@ contains
       end do
 
       call integrate_vmu(integrand_vpamu, spec%dens_psi0, inertia_tmp)
-      RH_pmom_inertia(:,:,:,:) = inertia_tmp(1,:,:,:,:)
+      RH_umom_inertia(:,:,:,:) = inertia_tmp(1,:,:,:,:)
 
       deallocate (inertia_tmp)
 
-   end subroutine get_RH_pmom_inertia_fluxtube
+   end subroutine get_RH_umom_inertia_fluxtube
 
 
    !> The parallel-flow Rosenbluth-Hinton invariant,
-   !>     RH_pmom = n_s * velocity_integral( V_sigma g_s ) ,
+   !>     RH_umom = n_s * velocity_integral( V_sigma g_s ) ,
    !> which the linear parallel streaming and the non-secular part of the radial
-   !> magnetic drift annihilate exactly.  Divided by RH_pmom_inertia it is the
+   !> magnetic drift annihilate exactly.  Divided by RH_umom_inertia it is the
    !> residual parallel flow.
-   subroutine get_RH_pmom(g, RH_pmom, RH_pmom_g)
+   subroutine get_RH_umom(g, RH_umom, RH_umom_g)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -1092,24 +1104,24 @@ contains
       use arrays_fields, only: apar
       use gyro_averages, only: gyro_average
 
-      use arrays_dist_fn, only: RH_pmom_tmp => g1
+      use arrays_dist_fn, only: RH_umom_tmp => g1
 
       implicit none
 
       complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
-      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_pmom
-      complex, dimension(:, -nzgrid:, :, :), intent(out), optional :: RH_pmom_g
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_umom
+      complex, dimension(:, -nzgrid:, :, :), intent(out), optional :: RH_umom_g
 
-      complex, dimension(:, :, :, :, :), allocatable :: pmom_tmp, pdf
+      complex, dimension(:, :, :, :, :), allocatable :: umom_tmp, pdf
       complex, dimension(naky, nakx) :: gyro_apar, correction
       integer :: ivmu, iv, imu, is, iz, it
 
-      allocate (pmom_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); pmom_tmp = 0.
-      if (.not. allocated(RH_pmom_tmp)) &
-         allocate (RH_pmom_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+      allocate (umom_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec)); umom_tmp = 0.
+      if (.not. allocated(RH_umom_tmp)) &
+         allocate (RH_umom_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
 
-      RH_pmom_tmp = 0.
-      RH_pmom_tmp(1,:,:,:,:) = RH_pmom_weight
+      RH_umom_tmp = 0.
+      RH_umom_tmp(1,:,:,:,:) = RH_umom_weight
 
       !> Electromagnetically it is gbar, not g, that the parallel streaming
       !> advects: stella carries gbar = g + 2 (Z/T) stm vpa <Apar> F_M and
@@ -1137,22 +1149,22 @@ contains
          end do
       end if
 
-      call integrate_vmu(pdf * RH_pmom_tmp, spec%dens_psi0, pmom_tmp)
-      RH_pmom = pmom_tmp(1,:,:,:,:)
+      call integrate_vmu(pdf * RH_umom_tmp, spec%dens_psi0, umom_tmp)
+      RH_umom = umom_tmp(1,:,:,:,:)
 
       !> The same projection taken of g alone.  The difference is the Apar
       !> part of gbar, and its time derivative is a source of the gbar
       !> projection that no flux channel carries; writing both is what lets
       !> that be separated from the fluxes rather than lumped into a residual.
-      if (present(RH_pmom_g)) then
-         call integrate_vmu(g * RH_pmom_tmp, spec%dens_psi0, pmom_tmp)
-         RH_pmom_g = pmom_tmp(1,:,:,:,:)
+      if (present(RH_umom_g)) then
+         call integrate_vmu(g * RH_umom_tmp, spec%dens_psi0, umom_tmp)
+         RH_umom_g = umom_tmp(1,:,:,:,:)
       end if
       deallocate (pdf)
 
-      deallocate (pmom_tmp)
+      deallocate (umom_tmp)
 
-   end subroutine get_RH_pmom
+   end subroutine get_RH_umom
 
 
    !> The fluxes driving the parallel-flow invariant.  Same three channels as the
@@ -1160,13 +1172,13 @@ contains
    !> radial drift -- and the same conventions, in particular the factor
    !> -1/(i kx) that turns a source term into a flux so that
    !>
-   !>     d<RH_pmom>/dt|_channel = -i kx <F_channel>.
+   !>     d<RH_umom>/dt|_channel = -i kx <F_channel>.
    !>
    !> The only differences from get_RH_fluxes_fluxtube are the weight, which is
    !> V_sigma rather than the sigma-even and sigma-odd pair, and the species
    !> factor, which is n_s alone because a flow carries no charge weighting.
    !> There is correspondingly no even/odd split: V_sigma is one array.
-   subroutine get_RH_pmom_fluxes_fluxtube(g, RH_pmom_flux_nl, RH_pmom_flux_coll, RH_pmom_flux_drift)
+   subroutine get_RH_umom_fluxes_fluxtube(g, RH_umom_flux_nl, RH_umom_flux_coll, RH_umom_flux_drift)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -1198,9 +1210,9 @@ contains
       !> ky beat, and vchix ~ i ky phi is identically zero on the ky = 0 row, so
       !> collapsing to that row would discard the whole term.  The consumer sums
       !> over ky, exactly as for the potential-like nonlinear fluxes.
-      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_pmom_flux_nl
-      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_pmom_flux_coll
-      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_pmom_flux_drift
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_umom_flux_nl
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_umom_flux_coll
+      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_umom_flux_drift
 
       complex, dimension(naky, nakx) :: vchix_gyro, vchix_part, NL_term
       complex, dimension(naky, nx)   :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
@@ -1209,6 +1221,7 @@ contains
       complex, dimension(:, :, :), allocatable :: gvmu_saved
       real,    dimension(:), allocatable :: drift_weight
       complex, dimension(:), allocatable :: boltzmann
+      complex, dimension(naky, nakx) :: gyro_chi
 
       integer :: ivmu, iv, imu, is, ia, iz, it
 
@@ -1216,7 +1229,7 @@ contains
       allocate (flux_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec))
 
       !----------------------------- nonlinear -------------------------------
-      RH_pmom_flux_nl = 0.
+      RH_umom_flux_nl = 0.
       if (nonlinear) then
          integrand = 0.
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
@@ -1247,15 +1260,15 @@ contains
                   call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
                   NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
                   call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
-                  integrand(:,:,iz,it,ivmu) = NL_term * spread(RH_pmom_weight(:,iz,it,ivmu), 1, naky)
+                  integrand(:,:,iz,it,ivmu) = NL_term * spread(RH_umom_weight(:,iz,it,ivmu), 1, naky)
                end do
             end do
          end do
-         call integrate_vmu(integrand, spec%dens_psi0, RH_pmom_flux_nl)
+         call integrate_vmu(integrand, spec%dens_psi0, RH_umom_flux_nl)
       end if
 
       !---------------------------- collisional ------------------------------
-      RH_pmom_flux_coll = 0.
+      RH_umom_flux_coll = 0.
       if (include_collisions) then
          !> advance_collisions_implicit is a time advance, not a side-effect-free
          !> evaluation of C[g]; hand it copies and restore gvmu, exactly as the
@@ -1278,18 +1291,18 @@ contains
          ! Zonal modes only
          integrand(2:,:,:,:,:) = 0.0
 
-         work = 1/code_dt * integrand * spread(RH_pmom_weight, 1, naky)
+         work = 1/code_dt * integrand * spread(RH_umom_weight, 1, naky)
          flux_tmp = 0.
          call integrate_vmu(work, spec%dens_psi0, flux_tmp)
-         RH_pmom_flux_coll = flux_tmp(1,:,:,:,:)
+         RH_umom_flux_coll = flux_tmp(1,:,:,:,:)
 
          !> -1/(i kx), matching the nonlinear flux convention.
          if (abs(akx(1)) < epsilon(0.)) then
-            RH_pmom_flux_coll(1, :,:,:) = 0.0
-            RH_pmom_flux_coll(2:,:,:,:) = -RH_pmom_flux_coll(2:,:,:,:) &
+            RH_umom_flux_coll(1, :,:,:) = 0.0
+            RH_umom_flux_coll(2:,:,:,:) = -RH_umom_flux_coll(2:,:,:,:) &
                / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
          else
-            RH_pmom_flux_coll(1:,:,:,:) = -RH_pmom_flux_coll(1:,:,:,:) &
+            RH_umom_flux_coll(1:,:,:,:) = -RH_umom_flux_coll(1:,:,:,:) &
                / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
          end if
       end if
@@ -1299,7 +1312,7 @@ contains
       !> what is left is a plain velocity integral; and it is only meaningful
       !> where Q was integrated along the field line, the closed form being
       !> derived on the assumption that the transit-averaged drift vanishes.
-      RH_pmom_flux_drift = 0.
+      RH_umom_flux_drift = 0.
       if (.not. use_analytic_drift_phase) then
          allocate (drift_weight(nspec))
          allocate (boltzmann(nakx))
@@ -1313,26 +1326,39 @@ contains
             is = is_idx(vmu_lo, ivmu)
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
-                  !> The drift acts on h = g + (Z/T) J0 phi F_M, not on g alone.
+                  !> The Boltzmann part of h.  By definition delta f = h - (Z e delta phi/T) F_M
+                  !> with h a function of the guiding centre, so g = <delta f>_R gives
+                  !>     h = g + (Z/T) <phi>_R F_M,
+                  !> and with a compressional perturbation the equilibrium Maxwellian responds
+                  !> to |B| as well, adding the bpar term.  There is deliberately no A_par
+                  !> here: A_par enters the transformation to gbar that the parallel streaming
+                  !> uses, not the relation between h and g, and stella's drift term carries
+                  !> wdrift_phi and wdrift_bpar with no A_par counterpart.  The factors below
+                  !> match those coefficients, wdrift_bpar = 4 mu (T/Z) wdrift_phi, the (Z/T)
+                  !> of the Boltzmann response cancelling the (T/Z).
                   boltzmann = fphi * aj0x(1, :, iz, ivmu) * phi(1, :, iz, it) * spec(is)%zt
+                  if (include_bpar) then
+                     call gyro_average_j1(bpar(:, :, iz, it), iz, ivmu, gyro_chi)
+                     boltzmann = boltzmann + 4.0 * mu(imu) * gyro_chi(1, :)
+                  end if
                   if (.not. maxwellian_normalization) &
                      boltzmann = boltzmann * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
                   integrand(1, :, iz, it, ivmu) = &
                      (g(1, :, iz, it, ivmu) + boltzmann) &
-                     * RH_pmom_weight(:, iz, it, ivmu) * RH_drift_bounce_avg(iz, ivmu)
+                     * RH_umom_weight(:, iz, it, ivmu) * RH_drift_bounce_avg(iz, ivmu)
                end do
             end do
          end do
 
          flux_tmp = 0.
          call integrate_vmu(integrand, drift_weight, flux_tmp)
-         RH_pmom_flux_drift = flux_tmp(1,:,:,:,:)
+         RH_umom_flux_drift = flux_tmp(1,:,:,:,:)
          deallocate (drift_weight, boltzmann)
       end if
 
       deallocate (flux_tmp)
 
-   end subroutine get_RH_pmom_fluxes_fluxtube
+   end subroutine get_RH_umom_fluxes_fluxtube
 
 
    subroutine get_RH_phi_I_fluxtube(g, RH_phi_I)
@@ -1346,7 +1372,10 @@ contains
       use calculations_kxky, only: multiply_by_rho
       use stella_layouts, only: vmu_lo
       use stella_layouts, only: iv_idx, imu_idx, is_idx
-      use arrays_fields, only: phi
+      use gyro_averages, only: gyro_average
+      use parameters_physics, only: include_apar
+      use parameters_numerical, only: maxwellian_normalization
+      use arrays_fields, only: phi, apar
       use parameters_numerical, only: maxwellian_normalization
       use constants, only: zi
 
@@ -1390,6 +1419,16 @@ contains
       !> exactly the kind of mismatch that stops RH_phi_I being the inertia times
       !> phi.  It cancels from the budget slope, appearing in dE_RH/dt and in
       !> P_RH alike, which is why the benchmarks never saw it.
+      !> NOTE: an unresolved defect lives here.  Electromagnetically the drive on
+      !> the right of the gyrokinetic equation is d<chi>/dt, and moving to g
+      !> cancels only its dphi/dt part, leaving a dApar/dt term that gbar is
+      !> meant to absorb.  Projecting gbar instead of g was tried: it improves
+      !> W7-X (1.18 -> 0.12) and QA (0.90 -> 0.17) and makes TJ-II far worse
+      !> (5.4 -> 22.8), and the TJ-II error then grows under refinement rather
+      !> than falling, which is the signature of a wrong formula and not of an
+      !> unresolved grid.  So it is not that, and g is kept until the right
+      !> statement is derived.  The defect only shows in runs that are both
+      !> electromagnetic and away from quasisymmetry.
       call integrate_vmu(g * RH_integrand_tmp, spec%dens_psi0 * spec%z, RH_phi_I_tmp)
       RH_phi_I = RH_phi_I_tmp(1,:,:,:,:)
 
@@ -2058,7 +2097,7 @@ contains
    !> points and a plain sum on the z grid is enough -- no singularity to
    !> subtract, and no need for the well quadrature.  A trapped particle is
    !> restricted to its own well; a passing one runs over the whole line.
-   subroutine eval_pmom_transit_int(energy, mu, sigma, akx, iz_ref, is, Q_profile, T_v)
+   subroutine eval_umom_transit_int(energy, mu, sigma, akx, iz_ref, is, Q_profile, T_v)
 
       use geometry, only: bmag, dl_over_b, gds22, geo_surf, q_as_x, gradpar
       use species, only: spec
@@ -2124,7 +2163,7 @@ contains
          T_v = T_v * measure_scale
       end if
 
-   end subroutine eval_pmom_transit_int
+   end subroutine eval_umom_transit_int
 
 
    !> The long-wavelength (order kx^2) approximation to the projection weight.
@@ -2641,9 +2680,9 @@ contains
       !> orbit invariant times exp(Q(z)) -- with the transit average taken of
       !> vpa*J0*exp(-Q) rather than J0*exp(-Q).
       if (present(integrand_v)) then
-         call eval_pmom_transit_int(energyval, muval, sign(1., vpaval), akxval, iz, is, &
+         call eval_umom_transit_int(energyval, muval, sign(1., vpaval), akxval, iz, is, &
                                      Q_profile, T_v_pls)
-         call eval_pmom_transit_int(energyval, muval, sign(1., -vpaval), akxval, iz, is, &
+         call eval_umom_transit_int(energyval, muval, sign(1., -vpaval), akxval, iz, is, &
                                      -Q_profile, T_v_min)
          !> A trapped particle traverses both legs within one bounce, so its
          !> bounce average is the mean of the two -- the same symmetrisation the

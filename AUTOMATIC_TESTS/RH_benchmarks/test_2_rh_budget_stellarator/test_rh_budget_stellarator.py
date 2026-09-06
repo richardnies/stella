@@ -229,7 +229,7 @@ def test_whether_rh_budget_closes_for_nonlinear_unmodified_adiabatic_electrons(c
 #> order of magnitude, and is resolution limited rather than wrong: refining
 #> nzed, nvgrid, nmu and delt together halves it, 4.98e-1 -> 2.06e-1.
 DRIFT_TOLERANCE_PHI = {'ITER': 0.05, 'W7X': 0.10, 'QA': 0.05, 'QH': 0.15, 'TJII': 0.60}
-DRIFT_TOLERANCE_PMOM = {'ITER': 0.01, 'W7X': 0.01, 'QA': 0.01, 'QH': 0.01, 'TJII': 0.01}
+DRIFT_TOLERANCE_UMOM = {'ITER': 0.01, 'W7X': 0.01, 'QA': 0.01, 'QH': 0.01, 'TJII': 0.01}
 
 
 def _accumulated(time, kx, flux):
@@ -281,9 +281,9 @@ def check_collisionless_drift(configuration, tmp_path, stella_version, error=Fal
                     for n in ('RH_fluxes_drift_trapped', 'RH_fluxes_drift_passing'))[:, keep]
     r_phi, s_phi = compare(phi, phi_drift, 'phi_RH', DRIFT_TOLERANCE_PHI[configuration])
 
-    pmom = _field_line_average_per_species(ncdata, 'RH_pmom', weight)[:, 0, keep]
-    pmom_drift = _field_line_average_per_species(ncdata, 'RH_pmom_flux_drift', weight)[:, 0, keep]
-    r_p, s_p = compare(pmom, pmom_drift, 'p_RH', DRIFT_TOLERANCE_PMOM[configuration])
+    umom = _field_line_average_per_species(ncdata, 'RH_umom', weight)[:, 0, keep]
+    umom_drift = _field_line_average_per_species(ncdata, 'RH_umom_flux_drift', weight)[:, 0, keep]
+    r_p, s_p = compare(umom, umom_drift, 'U_RH', DRIFT_TOLERANCE_UMOM[configuration])
 
     assert (not error), f'The drift channel is not verified in {configuration}.'
     print(f'  -->  {configuration}: drift channel accounts for the change in both '
@@ -314,10 +314,10 @@ def test_whether_the_drift_channel_alone_accounts_for_the_change(configuration, 
 #> a small-signal test that does not converge under refinement while its
 #> potential-like counterpart does.  The collisionless test above covers QA at
 #> 1.6e-3, which is the statement that matters for the invariant itself.
-PMOM_TOLERANCE = {'ITER': 0.06, 'W7X': 0.09, 'QH': 0.08, 'TJII': 0.08}
+UMOM_TOLERANCE = {'ITER': 0.06, 'W7X': 0.09, 'QH': 0.08, 'TJII': 0.08}
 
 
-def check_stellarator_pmom_budget(configuration, input_filename, tmp_path, stella_version,
+def check_stellarator_umom_budget(configuration, input_filename, tmp_path, stella_version,
                                   tolerance, error=False):
     '''Assert the toroidal-momentum budget closes in stellarator geometry.'''
     require_equilibrium(configuration)
@@ -325,7 +325,7 @@ def check_stellarator_pmom_budget(configuration, input_filename, tmp_path, stell
                                 vmec_file=VMEC_FILE[configuration])
     local_netcdf_file = tmp_path / input_filename.replace('.in', '.out.nc')
 
-    time, E, dE_dt, P, P_nl, P_coll, P_drift = get_rh_pmom_budget(local_netcdf_file)
+    time, E, dE_dt, P, P_nl, P_coll, P_drift = get_rh_umom_budget(local_netcdf_file)
     residual = np.linalg.norm(dE_dt - P) / np.linalg.norm(P)
 
     integrand = np.abs(dE_dt)
@@ -347,9 +347,9 @@ def check_stellarator_pmom_budget(configuration, input_filename, tmp_path, stell
 
 
 @pytest.mark.parametrize('configuration', ['ITER', 'W7X', 'QH', 'TJII'])
-def test_whether_pmom_budget_closes_in_stellarator_geometry(configuration, tmp_path, stella_version):
+def test_whether_umom_budget_closes_in_stellarator_geometry(configuration, tmp_path, stella_version):
     '''The toroidal-momentum budget, linear and collisional, in a stellarator.'''
-    check_stellarator_pmom_budget(configuration, f'{configuration}_linear_collisional.in',
+    check_stellarator_umom_budget(configuration, f'{configuration}_linear_collisional.in',
                                   tmp_path, stella_version,
-                                  tolerance=PMOM_TOLERANCE[configuration])
+                                  tolerance=UMOM_TOLERANCE[configuration])
     return

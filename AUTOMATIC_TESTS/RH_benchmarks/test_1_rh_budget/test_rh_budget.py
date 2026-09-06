@@ -343,7 +343,7 @@ def test_whether_analytic_and_numerical_drift_phase_agree(tmp_path, stella_versi
 #-------------------------------------------------------------------------------
 #              THE TOROIDAL-MOMENTUM BUDGET                                     #
 #-------------------------------------------------------------------------------
-def check_rh_pmom_budget(input_filename, tmp_path, stella_version, tolerance,
+def check_rh_umom_budget(input_filename, tmp_path, stella_version, tolerance,
                          time_min=None, time_max=None, channel='total',
                          kx_max=None, error=False):
     '''Run <input_filename> and assert that the toroidal-momentum budget closes.
@@ -355,7 +355,7 @@ def check_rh_pmom_budget(input_filename, tmp_path, stella_version, tolerance,
     run_local_stella_simulation(input_filename, tmp_path, stella_version)
     local_netcdf_file = tmp_path / input_filename.replace('.in', '.out.nc')
 
-    time, E, dE_dt, P, P_nl, P_coll, P_drift = get_rh_pmom_budget(
+    time, E, dE_dt, P, P_nl, P_coll, P_drift = get_rh_umom_budget(
         local_netcdf_file, time_min, time_max, kx_max)
 
     if channel == 'nonlinear':
@@ -385,19 +385,19 @@ def check_rh_pmom_budget(input_filename, tmp_path, stella_version, tolerance,
     return
 
 
-def test_whether_pmom_budget_closes_for_linear_collisional_zonal_flow(tmp_path, stella_version):
+def test_whether_umom_budget_closes_for_linear_collisional_zonal_flow(tmp_path, stella_version):
     '''The toroidal-momentum budget on the linear collisional case.
 
     This is the sharpest of the momentum tests: the flow decays by a factor of
     several thousand over the window, so both sides of the budget are large and
     the comparison has nowhere to hide.
     '''
-    check_rh_pmom_budget('rh_linear_collisional.in', tmp_path, stella_version,
+    check_rh_umom_budget('rh_linear_collisional.in', tmp_path, stella_version,
                          tolerance=0.05)
     return
 
 
-def test_whether_pmom_budget_closes_for_nonlinear_adiabatic_electrons(tmp_path, stella_version):
+def test_whether_umom_budget_closes_for_nonlinear_adiabatic_electrons(tmp_path, stella_version):
     '''The toroidal-momentum budget driven by the nonlinearity.
 
     Single species, so the momentum energy sits at the long wavelengths the
@@ -409,7 +409,7 @@ def test_whether_pmom_budget_closes_for_nonlinear_adiabatic_electrons(tmp_path, 
     is not available here because after that cut the momentum channel has no
     signal left to test.
     '''
-    check_rh_pmom_budget('rh_nl_adiabatic_electrons.in', tmp_path, stella_version,
+    check_rh_umom_budget('rh_nl_adiabatic_electrons.in', tmp_path, stella_version,
                          tolerance=0.06, time_min=20.0, time_max=30.0,
                          channel='nonlinear')
     return

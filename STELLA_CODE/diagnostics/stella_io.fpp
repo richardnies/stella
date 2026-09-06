@@ -75,9 +75,9 @@ module stella_io
    public :: write_RH_fluxes_stress_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
-   public :: write_RH_pmom_nc
-   public :: write_RH_pmom_fluxes_nc
-   public :: write_RH_pmom_inertia_nc
+   public :: write_RH_umom_nc
+   public :: write_RH_umom_fluxes_nc
+   public :: write_RH_umom_inertia_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
    public :: write_RH_LW_weights_nc
@@ -1043,33 +1043,33 @@ contains
    end subroutine write_RH_phi_I_nc
 
    !----------------------- RH inertia ----------------------
-   subroutine write_RH_pmom_nc(nout, pmom, pmom_g)
+   subroutine write_RH_umom_nc(nout, umom, umom_g)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :), intent(in) :: pmom
-      complex, dimension(:, :, :, :), intent(in), optional :: pmom_g
+      complex, dimension(:, :, :, :), intent(in) :: umom
+      complex, dimension(:, :, :, :), intent(in), optional :: umom_g
 
 #ifdef NETCDF
       character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
       integer, dimension(6) :: start
       start = [1, 1, 1, 1, 1, nout]
 
-      call netcdf_write_complex(ncid, "RH_pmom", pmom, &
+      call netcdf_write_complex(ncid, "RH_umom", umom, &
               dim_names=dims, start=start, &
               long_name="Rosenbluth-Hinton toroidal-momentum invariant (= omega*I_pRH in the RH limit)")
 
-      if (present(pmom_g)) then
-         call netcdf_write_complex(ncid, "RH_pmom_g", pmom_g, &
+      if (present(umom_g)) then
+         call netcdf_write_complex(ncid, "RH_umom_g", umom_g, &
                  dim_names=dims, start=start, &
                  long_name="RH toroidal-momentum projection of g alone, without the gbar Apar part")
       end if
 #endif
 
-   end subroutine write_RH_pmom_nc
+   end subroutine write_RH_umom_nc
 
 
-   subroutine write_RH_pmom_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
+   subroutine write_RH_umom_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
       implicit none
 
       integer, intent(in) :: nout
@@ -1084,31 +1084,31 @@ contains
       start = [1, 1, 1, 1, 1, nout]
       start_nl = [1, 1, 1, 1, 1, 1, nout]
 
-      call netcdf_write_complex(ncid, "RH_pmom_flux_nonlinear", flux_nl, dim_names=dims_nl, start=start_nl, &
+      call netcdf_write_complex(ncid, "RH_umom_flux_nonlinear", flux_nl, dim_names=dims_nl, start=start_nl, &
               long_name="Nonlinear flux driving the RH toroidal-momentum invariant")
-      call netcdf_write_complex(ncid, "RH_pmom_flux_collisional", flux_coll, dim_names=dims, start=start, &
+      call netcdf_write_complex(ncid, "RH_umom_flux_collisional", flux_coll, dim_names=dims, start=start, &
               long_name="Collisional flux driving the RH toroidal-momentum invariant")
-      call netcdf_write_complex(ncid, "RH_pmom_flux_drift", flux_drift, dim_names=dims, start=start, &
+      call netcdf_write_complex(ncid, "RH_umom_flux_drift", flux_drift, dim_names=dims, start=start, &
               long_name="Transit-averaged magnetic drift flux driving the RH toroidal-momentum invariant")
 #endif
 
-   end subroutine write_RH_pmom_fluxes_nc
+   end subroutine write_RH_umom_fluxes_nc
 
 
-   subroutine write_RH_pmom_inertia_nc(RH_pmom_inertia)
+   subroutine write_RH_umom_inertia_nc(RH_umom_inertia)
       implicit none
 
-      complex, dimension(:, :, :, :), intent(in) :: RH_pmom_inertia
+      complex, dimension(:, :, :, :), intent(in) :: RH_umom_inertia
 
 #ifdef NETCDF
       character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species"]
 
-      call netcdf_write_complex(ncid, "RH_pmom_inertia", RH_pmom_inertia, &
+      call netcdf_write_complex(ncid, "RH_umom_inertia", RH_umom_inertia, &
               dim_names=dims, &
               long_name="Rosenbluth-Hinton toroidal-momentum inertia (projection of a rigidly rotating Maxwellian)")
 #endif
 
-   end subroutine write_RH_pmom_inertia_nc
+   end subroutine write_RH_umom_inertia_nc
 
 
    subroutine write_RH_inertia_nc(RH_inertia)
