@@ -678,3 +678,186 @@ def figure_stress_channels(netcdf_file, outfile, time_min, time_max, title=''):
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+#> Convergence data measured in the runs recorded in the write-up.  Kept here so
+#> the figure and the text cannot drift apart, and so the point is made by a
+#> picture rather than by two eight-column tables.
+ONE_GRID_AT_A_TIME = {          # nzed only, others held fixed
+    'nzed': [48, 96, 192, 384],
+    'phi': {0.05: [8.3e-3, 5.6e-3, 4.7e-3, 4.0e-3],
+            0.5:  [1.0e-2, 1.5e-1, 2.4e-1, 2.6e-1],
+            2.0:  [1.1e-1, 5.4e-2, 4.7e-2, 4.7e-2]},
+    'U':   {0.05: [7.0e-3, 3.9e-3, 2.8e-3, 1.4e-3],
+            0.5:  [1.3e-3, 1.4e-3, 9.5e-4, 4.7e-4],
+            2.0:  [1.4e-2, 1.6e-2, 9.8e-3, 5.4e-3]},
+}
+ALL_GRIDS = {                   # nzed / nvpa / nmu / dt refined together
+    'level': [1, 2, 4, 8],
+    'phi': {0.05: [2.3e-2, 5.5e-3, 1.5e-3, 4.5e-4],
+            2.0:  [5.6e-1, 5.5e-2, 2.2e-2, 6.0e-3]},
+    'U':   {0.05: [4.4e-2, 6.3e-3, 1.1e-4, 1.8e-3],
+            2.0:  [2.6e-2, 1.6e-2, 9.4e-3, 5.0e-3]},
+}
+
+
+def figure_convergence(outfile):
+    """Does the construction converge?  Yes, if every grid is refined together.
+
+    Left: refining the parallel grid alone.  The flow invariant falls, the
+    potential-like one flattens and at k_x rho = 0.5 climbs -- which looks like a
+    defect and is not one.  Right: refining nzed, nvpa, nmu and dt together, the
+    same quantity falls by nearly two orders.  The weight depends on all four
+    grids, so refining one leaves the error floored by the other three.
+    """
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.4, 3.6))
+    colours = {0.05: PHI, 0.5: '#7d3c6b', 2.0: UPA}
+
+    n = ONE_GRID_AT_A_TIME['nzed']
+    for kx, c in colours.items():
+        ax.loglog(n, ONE_GRID_AT_A_TIME['phi'][kx], 'o-', color=c, lw=1.6, ms=5,
+                  label=rf'$\varphi_{{\rm RH}}$, $k_x\rho={kx}$')
+        ax.loglog(n, ONE_GRID_AT_A_TIME['U'][kx], 's--', color=c, lw=1.2, ms=4, alpha=0.75)
+    ax.set_xlabel(r'$n_{\rm zed}$  (other grids fixed)')
+    ax.set_ylabel('conservation error')
+    ax.set_title('Refining one grid: misleading', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=7.6, ncol=1)
+    ax.text(0.03, 0.05, 'solid $\\varphi_{\\rm RH}$,  dashed $U_{\\rm RH}$',
+            transform=ax.transAxes, fontsize=7.6, color='#444')
+
+    lv = ALL_GRIDS['level']
+    for kx, c in ((0.05, PHI), (2.0, UPA)):
+        ax2.loglog(lv, ALL_GRIDS['phi'][kx], 'o-', color=c, lw=1.6, ms=5,
+                   label=rf'$\varphi_{{\rm RH}}$, $k_x\rho={kx}$')
+        ax2.loglog(lv, ALL_GRIDS['U'][kx], 's--', color=c, lw=1.2, ms=4, alpha=0.75)
+    ref = np.array(lv, dtype=float)
+    ax2.loglog(ref, 5.6e-1 * (ref / ref[0])**-2, ':', color=GREY, lw=1.3, label=r'$\propto h^{2}$')
+    ax2.set_xlabel(r'refinement of $n_{\rm zed}$, $n_{v_\parallel}$, $n_\mu$, $\Delta t$ together')
+    ax2.set_title('Refining all four: it converges', fontsize=9.5, loc='left')
+    ax2.legend(frameon=False, fontsize=7.6)
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
+#> Stellarator benchmark results, as measured.  Held here so figure and text
+#> cannot drift apart.
+STELLARATOR = {
+    #                 collisionless drift            collisional budget
+    #            phi resid  U resid  drift share   phi resid  U resid
+    'ITER':  dict(dphi=4.1e-3, dU=1.5e-3, share=0.28, bphi=1.98e-2, bU=2.82e-2),
+    'W7-X':  dict(dphi=3.0e-2, dU=8.5e-4, share=0.49, bphi=3.75e-2, bU=5.14e-2),
+    'QA':    dict(dphi=9.5e-3, dU=1.6e-3, share=0.74, bphi=9.30e-2, bU=None),
+    'QH':    dict(dphi=6.9e-2, dU=1.1e-3, share=1.14, bphi=2.58e-2, bU=4.39e-2),
+    'TJ-II': dict(dphi=5.0e-1, dU=3.5e-3, share=2.15, bphi=6.99e-2, bU=4.09e-2),
+}
+TJII_DRIFT_REFINEMENT = ([1, 2, 4], [4.98e-1, 2.06e-1, 1.20e-1])
+
+
+def figure_stellarator_summary(outfile):
+    """The stellarator benchmarks, both invariants, on one page.
+
+    Left: the collisionless drift test, where that channel is the entire source
+    and nothing can absorb an error in it.  Right: the collisional budget.
+    """
+    names = list(STELLARATOR)
+    x = np.arange(len(names))
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.6, 3.5))
+
+    ax.semilogy(x, [STELLARATOR[n]['dphi'] for n in names], 'o-', color=PHI, lw=1.6, ms=6,
+                label=r'$\varphi_{\rm RH}$')
+    ax.semilogy(x, [STELLARATOR[n]['dU'] for n in names], 's-', color=UPA, lw=1.6, ms=6,
+                label=r'$U_{\rm RH}$')
+    ax.semilogy(x, [STELLARATOR[n]['share'] for n in names], '^:', color=GREY, lw=1.2, ms=5,
+                label='drift channel size')
+    ax.set_xticks(x); ax.set_xticklabels(names, fontsize=8)
+    ax.set_ylabel('unaccounted fraction')
+    ax.set_title('Drift channel alone (collisionless)', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=8, loc='lower left')
+
+    bphi = [STELLARATOR[n]['bphi'] for n in names]
+    bU = [STELLARATOR[n]['bU'] for n in names]
+    ax2.semilogy(x, bphi, 'o-', color=PHI, lw=1.6, ms=6, label=r'$\varphi_{\rm RH}$')
+    xs = [xi for xi, v in zip(x, bU) if v is not None]
+    ys = [v for v in bU if v is not None]
+    ax2.semilogy(xs, ys, 's-', color=UPA, lw=1.6, ms=6, label=r'$U_{\rm RH}$')
+    #> QA carries no U_RH point: its collisional momentum drive is a near
+    #> cancellation, leaving a small-signal test rather than a failing one.
+    ax2.annotate('QA: momentum drive\nnearly cancels', xy=(2, 9.3e-2), xytext=(1.5, 2.6e-1),
+                 fontsize=7, color='#444',
+                 arrowprops=dict(arrowstyle='-', color='#888', lw=0.8))
+    ax2.set_xticks(x); ax2.set_xticklabels(names, fontsize=8)
+    ax2.set_ylabel('budget residual')
+    ax2.set_title('Budget, linear collisional', fontsize=9.5, loc='left')
+    ax2.legend(frameon=False, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
+#> Asymptotic-weight verification, as measured.  Errors are per cent.
+LW_COLL = dict(kx=[0.01, 0.02, 0.05, 0.1, 0.2],
+               even=[0.00, 0.08, 1.79, 8.33, 24.04],
+               odd=[0.03, 0.04, 0.27, 1.74, 3.81])
+LW_NL_TOK = dict(kx=[0.1, 0.2, 0.3, 0.4, 0.5], even=[9.4, 38, 110, 184, 389],
+                 odd=[12, 45, 97, 139, 224])
+LW_NL_TJII = dict(kx=[0.4, 0.8], even=[35, 67], odd=[29, 92])
+SW_VS_KX = dict(kx=[0.5, 1, 2, 5, 10, 20], err=[28.7, 16.4, 8.9, 10.0, 19.6, 55.5])
+SW_REFINED = {10: ([128, 192, 384], [19.6, 15.0, 9.2]),
+              20: ([128, 192, 384, 768], [55.5, 46.6, 32.2, 21.5])}
+SW_BANDS = dict(names=['deeply\npassing', 'barely\npassing', 'barely\ntrapped', 'deeply\ntrapped'],
+                weight=[0.81, 0.11, 0.02, 0.05],
+                gaussian=[2.8, 22.2, 49.0, 28.8], uniform=[3.2, 6.1, 37.5, 28.8])
+
+
+def figure_asymptotic_weights(outfile):
+    """Both asymptotic limits measured against the exact weight in the same run.
+
+    Long wavelength falls as k_x^2 to one part in ten thousand; short wavelength
+    is limited by the quadrature it is compared against, not by the formula; and
+    the uniform treatment fixes the band it was built for.
+    """
+    fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(12.4, 3.4))
+
+    a1.loglog(LW_COLL['kx'], np.maximum(LW_COLL['even'], 1e-3), 'o-', color=PHI, lw=1.6, ms=5,
+              label='collisional, even')
+    a1.loglog(LW_COLL['kx'], LW_COLL['odd'], 's-', color=UPA, lw=1.6, ms=5, label='collisional, odd')
+    a1.loglog(LW_NL_TOK['kx'], LW_NL_TOK['even'], '^--', color='#7d3c6b', lw=1.3, ms=5,
+              label='nonlinear, tokamak')
+    a1.loglog(LW_NL_TJII['kx'], LW_NL_TJII['even'], 'v--', color='#2e7d6b', lw=1.3, ms=5,
+              label='nonlinear, TJ-II')
+    ref = np.array([0.01, 0.2])
+    a1.loglog(ref, 0.08 * (ref / 0.02)**2, ':', color=GREY, lw=1.3, label=r'$\propto k_x^2$')
+    a1.set_xlabel(r'$k_x\rho$'); a1.set_ylabel('error against the exact weight [%]')
+    a1.set_title('Long wavelength', fontsize=9.5, loc='left')
+    a1.legend(frameon=False, fontsize=7.2)
+
+    a2.loglog(SW_VS_KX['kx'], SW_VS_KX['err'], 'o-', color=PHI, lw=1.6, ms=5,
+              label=r'$n_{\rm zed}=128$')
+    for kx, (nz, err) in SW_REFINED.items():
+        a2.loglog([kx] * len(err), err, 'v', color=UPA, ms=5)
+        a2.annotate('', xy=(kx, err[-1]), xytext=(kx, err[0]),
+                    arrowprops=dict(arrowstyle='->', color=UPA, lw=1.3))
+    a2.plot([], [], 'v-', color=UPA, label='refining the grid')
+    a2.set_xlabel(r'$k_x\rho$')
+    a2.set_title('Short wavelength', fontsize=9.5, loc='left')
+    a2.legend(frameon=False, fontsize=7.6)
+    a2.text(0.97, 0.44, 'the rise is the quadrature\nit is compared against, not\nthe formula',
+            transform=a2.transAxes, fontsize=7, color='#444', ha='right')
+
+    x = np.arange(len(SW_BANDS['names'])); w = 0.36
+    a3.bar(x - w/2, SW_BANDS['gaussian'], w, color=GREY, label='stationary phase')
+    a3.bar(x + w/2, SW_BANDS['uniform'], w, color=UPA, label='uniform (Bessel)')
+    for xi, fr in zip(x, SW_BANDS['weight']):
+        a3.text(xi, 52, f'{fr:.0%}', ha='center', fontsize=7, color='#444')
+    a3.set_xticks(x); a3.set_xticklabels(SW_BANDS['names'], fontsize=7.5)
+    a3.set_ylabel('error [%]'); a3.set_ylim(0, 58)
+    a3.legend(frameon=False, fontsize=7.6)
+    a3.set_title(r'By pitch angle, $k_x\rho=10$  (share of weight above)',
+                 fontsize=9.5, loc='left')
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
