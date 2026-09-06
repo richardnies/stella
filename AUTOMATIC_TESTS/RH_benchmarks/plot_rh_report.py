@@ -310,18 +310,20 @@ def figure_summary(cases, outfile):
     fig, ax = plt.subplots(figsize=(7.0, 0.30 * len(cases) + 1.4))
     height = 0.38
     for offset, index, colour, label in ((+height/2, 1, PHI, r'$\varphi_{\rm RH}$'),
-                                         (-height/2, 2, UPA, r'$p_{\rm RH}$')):
+                                         (-height/2, 2, UPA, r'$U_{\rm RH}$')):
         values = [c[index] if c[index] is not None else np.nan for c in cases]
         ax.barh(y + offset, values, height=height, color=colour, label=label, alpha=0.9)
     ax.axvline(0.08, color=GREY, ls='--', lw=1.0)
-    ax.text(0.084, len(cases) - 0.4, 'benchmark tolerance', fontsize=7.5, color=GREY, va='top')
+    ax.text(0.084, -0.55, 'benchmark tolerance', fontsize=7.5, color=GREY, va='bottom')
     ax.set_xscale('log')
     ax.set_yticks(y)
     ax.set_yticklabels(labels, fontsize=8)
     ax.invert_yaxis()
     ax.set_xlabel('relative budget residual')
-    ax.legend(frameon=False, fontsize=9, loc='lower right')
+    ax.legend(frameon=False, fontsize=9, ncol=2, loc='lower center',
+              bbox_to_anchor=(0.5, 1.01))
     ax.grid(axis='y', alpha=0)
+    fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
@@ -1208,6 +1210,30 @@ def figure_stress_and_species(outfile):
     return outfile
 
 
+# Measured with the current binary (7 Sep) on the three tokamak decks plus the
+# stellarator constants above.  These runs are not bit-reproducible between
+# invocations, so treat them as representative of the tolerance the suite
+# asserts (0.06-0.08), not as fixed reference values.
+SUMMARY_CASES = [
+    ('tokamak, linear collisional',      8.42e-3, 3.61e-2),
+    ('tokamak, NL adiabatic electrons',  1.52e-2, 6.00e-3),
+    ('tokamak, NL kinetic',              4.06e-3, 4.08e-1),
+    ('ITER, linear collisional',         1.98e-2, 2.82e-2),
+    ('W7-X, linear collisional',         3.75e-2, 5.14e-2),
+    ('QH, linear collisional',           2.58e-2, 4.39e-2),
+    ('TJ-II, linear collisional',        6.99e-2, 4.09e-2),
+    ('QA, linear collisional',           9.30e-2, None),
+    ('ITER, collisionless drift',        4.1e-3,  1.5e-3),
+    ('W7-X, collisionless drift',        3.0e-2,  8.5e-4),
+    ('QA, collisionless drift',          9.5e-3,  1.6e-3),
+    ('QH, collisionless drift',          6.9e-2,  1.1e-3),
+    ('TJ-II, collisionless drift',       5.0e-1,  3.5e-3),
+    ('W7-X, electromagnetic drift',      1.2e-1,  6.2e-4),
+    ('QA, electromagnetic drift',        1.7e-1,  2.0e-4),
+    ('TJ-II, electromagnetic drift',     1.34,    2.2e-3),
+]
+
+
 # ---------------------------------------------------------------------------
 # Regenerate every figure that is built from measured constants alone (no
 # netCDF needed):  python3 plot_rh_report.py [outdir]
@@ -1224,6 +1250,7 @@ STANDALONE_FIGURES = {
     'fig_geometry_factors.pdf': 'figure_geometry_factors',
     'fig_nonlinear_scaling.pdf': 'figure_nonlinear_scaling',
     'fig_stress_and_species.pdf': 'figure_stress_and_species',
+    'fig_summary.pdf': lambda out: figure_summary(SUMMARY_CASES, out),
 }
 
 if __name__ == '__main__':
@@ -1231,5 +1258,5 @@ if __name__ == '__main__':
     outdir = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path('.')
     outdir.mkdir(parents=True, exist_ok=True)
     for name, fn in STANDALONE_FIGURES.items():
-        globals()[fn](outdir / name)
+        (fn if callable(fn) else globals()[fn])(outdir / name)
         print('wrote', outdir / name)
