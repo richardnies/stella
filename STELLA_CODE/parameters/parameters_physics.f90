@@ -29,6 +29,9 @@ module parameters_physics
    !> This can be either the classic adiabatic option, or the modified
    !> adiabatic option (i.e. modified Boltzmann electrons).
    public :: adiabatic_option_switch, adiabatic_option_fieldlineavg
+   public :: zonal_init_option_switch, zonal_closure_option_switch
+   public :: zonal_init_none, zonal_init_cosine, zonal_init_triangular
+   public :: zonal_closure_density, zonal_closure_rh, zonal_closure_flow
    
    !> Additional physics effects
    public :: prp_shear_enabled
@@ -69,6 +72,18 @@ module parameters_physics
    logical :: nonlinear
    real :: xdriftknob, ydriftknob, wstarknob
  
+   !> How the zonal profile is launched, and what distribution is put under it.
+   !> These replace the booleans triangular_ZF, cos_ZF, triangular_ZF_RH and
+   !> triangular_ZF_flow, which are still read but deprecated.
+   character(20) :: zonal_init_option, zonal_closure_option
+   integer :: zonal_init_option_switch, zonal_closure_option_switch
+   integer, parameter :: zonal_init_none = 1, &
+                         zonal_init_cosine = 2, &
+                         zonal_init_triangular = 3
+   integer, parameter :: zonal_closure_density = 1, &
+                         zonal_closure_rh = 2, &
+                         zonal_closure_flow = 3
+
    integer :: adiabatic_option_switch
    integer, parameter :: adiabatic_option_periodic = 1, &
                        adiabatic_option_zero = 2, &
@@ -100,6 +115,8 @@ module parameters_physics
    !> overriding the user.
    logical :: RH_analytic_drift_phase
    logical :: RH_analytic_drift_phase_specified
+   logical :: triangular_ZF_specified, cos_ZF_specified
+   logical :: triangular_ZF_RH_specified, triangular_ZF_flow_specified
    !> Initialise the zonal distribution as a Maxwellian carrying a parallel
    !> flow, u_par = triangular_ZF_flow_PS * PS_flow_fac
    !>             + triangular_ZF_flow_sym * sym_flow_fac,
@@ -192,6 +209,8 @@ contains
       freeze_zonal_factor = 1.0
       freeze_zonal_kmin = -1.0
       freeze_zonal_kmax = 1e10
+      zonal_init_option = 'default'
+      zonal_closure_option = 'default'
       triangular_ZF = .false.
       cos_ZF = .false.
       triangular_ZF_RH   = .true.
@@ -245,15 +264,30 @@ contains
       text_option('iphi00=1', adiabatic_option_periodic), &
       text_option('iphi00=2', adiabatic_option_fieldlineavg)/)
 
+      type(text_option), dimension(4), parameter :: zonalinitopts = &
+      (/text_option('default', zonal_init_none), &
+      text_option('none', zonal_init_none), &
+      text_option('cosine', zonal_init_cosine), &
+      text_option('triangular', zonal_init_triangular)/)
+
+      type(text_option), dimension(4), parameter :: zonalclosureopts = &
+      (/text_option('default', zonal_closure_rh), &
+      text_option('density', zonal_closure_density), &
+      text_option('rh', zonal_closure_rh), &
+      text_option('flow', zonal_closure_flow)/)
+
       integer :: ierr, in_file
       logical :: nml_exist
       logical :: probe_analytic_drift_phase
+      logical :: probe_triangular_ZF, probe_cos_ZF
+      logical :: probe_triangular_ZF_RH, probe_triangular_ZF_flow
 
       namelist /parameters_physics/ include_parallel_streaming, include_mirror, nonlinear, &
         xdriftknob, ydriftknob, wstarknob, adiabatic_option, prp_shear_enabled, &
         hammett_flow_shear, include_pressure_variation, include_geometric_variation, &
         include_parallel_nonlinearity, suppress_zonal_interaction, only_zonal_interaction, freeze_nonzonal, freeze_zonal, &
         freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
+        zonal_init_option, zonal_closure_option, &
         triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
         RH_analytic_drift_phase, &
         triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac, &
@@ -272,13 +306,26 @@ contains
      !> two different defaults.  Everything else keeps the value it already has,
      !> so the second read changes nothing but this.
      RH_analytic_drift_phase_specified = .false.
+     triangular_ZF_specified = .false.; cos_ZF_specified = .false.
+     triangular_ZF_RH_specified = .false.; triangular_ZF_flow_specified = .false.
      if (nml_exist) then
         probe_analytic_drift_phase = RH_analytic_drift_phase
+        probe_triangular_ZF = triangular_ZF; probe_cos_ZF = cos_ZF
+        probe_triangular_ZF_RH = triangular_ZF_RH; probe_triangular_ZF_flow = triangular_ZF_flow
         RH_analytic_drift_phase = .not. probe_analytic_drift_phase
+        triangular_ZF = .not. probe_triangular_ZF; cos_ZF = .not. probe_cos_ZF
+        triangular_ZF_RH = .not. probe_triangular_ZF_RH
+        triangular_ZF_flow = .not. probe_triangular_ZF_flow
         rewind (in_file)
         read (unit=in_file, nml=parameters_physics)
         RH_analytic_drift_phase_specified = (RH_analytic_drift_phase .eqv. probe_analytic_drift_phase)
+        triangular_ZF_specified = (triangular_ZF .eqv. probe_triangular_ZF)
+        cos_ZF_specified = (cos_ZF .eqv. probe_cos_ZF)
+        triangular_ZF_RH_specified = (triangular_ZF_RH .eqv. probe_triangular_ZF_RH)
+        triangular_ZF_flow_specified = (triangular_ZF_flow .eqv. probe_triangular_ZF_flow)
         RH_analytic_drift_phase = probe_analytic_drift_phase
+        triangular_ZF = probe_triangular_ZF; cos_ZF = probe_cos_ZF
+        triangular_ZF_RH = probe_triangular_ZF_RH; triangular_ZF_flow = probe_triangular_ZF_flow
      end if
 
      call check_backwards_compatability
@@ -292,8 +339,61 @@ contains
      call get_option_value &
        (adiabatic_option, adiabaticopts, adiabatic_option_switch, &
          ierr, "adiabatic_option in parameters_physics")
+     call get_option_value &
+       (zonal_init_option, zonalinitopts, zonal_init_option_switch, &
+         ierr, "zonal_init_option in parameters_physics")
+     call get_option_value &
+       (zonal_closure_option, zonalclosureopts, zonal_closure_option_switch, &
+         ierr, "zonal_closure_option in parameters_physics")
+     call map_deprecated_zonal_flags
 
    end subroutine
+
+   !**********************************************************************
+   !              DEPRECATED ZONAL-PROFILE BOOLEANS                      !
+   !**********************************************************************
+   !> The zonal profile used to be selected by four booleans.  They are still
+   !> read, so decks written against the old names keep running, but a run that
+   !> uses them says so.  Only flags the input file actually mentions are mapped:
+   !> triangular_ZF_RH defaulted to .true., so acting on its value
+   !> unconditionally would silently override an explicit zonal_closure_option.
+   !>
+   !> The precedence reproduces the old branch order in init_gxyz, where the
+   !> Rosenbluth-Hinton closure was tested before the parallel-flow one.
+   subroutine map_deprecated_zonal_flags
+
+      use mp, only: proc0
+
+      implicit none
+
+      if (.not. (triangular_ZF_specified .or. cos_ZF_specified &
+           .or. triangular_ZF_RH_specified .or. triangular_ZF_flow_specified)) return
+
+      if (triangular_ZF_specified .and. triangular_ZF) then
+         zonal_init_option_switch = zonal_init_triangular
+      else if (cos_ZF_specified .and. cos_ZF) then
+         zonal_init_option_switch = zonal_init_cosine
+      else if (triangular_ZF_specified .or. cos_ZF_specified) then
+         zonal_init_option_switch = zonal_init_none
+      end if
+
+      if (triangular_ZF_RH_specified .and. triangular_ZF_RH) then
+         zonal_closure_option_switch = zonal_closure_rh
+      else if (triangular_ZF_flow_specified .and. triangular_ZF_flow) then
+         zonal_closure_option_switch = zonal_closure_flow
+      else if (triangular_ZF_RH_specified) then
+         zonal_closure_option_switch = zonal_closure_density
+      end if
+
+      if (proc0) then
+         write (*, *) 'WARNING: triangular_ZF, cos_ZF, triangular_ZF_RH and'
+         write (*, *) 'triangular_ZF_flow are deprecated.  Use zonal_init_option'
+         write (*, *) "('none', 'cosine', 'triangular') and zonal_closure_option"
+         write (*, *) "('density', 'rh', 'flow') instead.  The old flags have been"
+         write (*, *) 'mapped onto them for this run.'
+      end if
+
+   end subroutine map_deprecated_zonal_flags
 
    !**********************************************************************
    !                    CHECK BACKWARDS COMPATIBILITY                    !
@@ -322,6 +422,7 @@ contains
          include_pressure_variation, include_geometric_variation, &
          adiabatic_option, const_alpha_geo, suppress_zonal_interaction, only_zonal_interaction, &
          freeze_nonzonal, freeze_zonal, freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
+         zonal_init_option, zonal_closure_option, &
          triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
          RH_analytic_drift_phase, &
          triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac
@@ -420,6 +521,8 @@ contains
      call broadcast(wstarknob)
 
      call broadcast(adiabatic_option_switch)
+     call broadcast(zonal_init_option_switch)
+     call broadcast(zonal_closure_option_switch)
 
      call broadcast(prp_shear_enabled)
      call broadcast(hammett_flow_shear) 

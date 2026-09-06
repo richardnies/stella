@@ -232,7 +232,7 @@ contains
       use arrays_dist_fn, only: gvmu
       use stella_layouts, only: kxkyz_lo, iz_idx, ikx_idx, iky_idx, is_idx
       use ran, only: ranf
-      use parameters_physics, only: triangular_ZF, triangular_ZF_g_exb
+      use parameters_physics, only: zonal_init_option_switch, zonal_init_triangular, triangular_ZF_g_exb
 
       implicit none
 
@@ -269,7 +269,7 @@ contains
 
       if (zonal_mode(1)) then
 
-         if (triangular_ZF) then
+         if (zonal_init_option_switch == zonal_init_triangular) then
 
             !Setup lowest kx of zonal flow profile
             phi(1, 2, :) = zi*0.5*triangular_ZF_g_exb
@@ -437,7 +437,7 @@ contains
       use mp, only: proc0, broadcast, max_allreduce
       use mp, only: scope, crossdomprocs, subprocs
       use file_utils, only: runtype_option_switch, runtype_multibox
-      use parameters_physics, only: nonlinear, triangular_ZF
+      use parameters_physics, only: nonlinear, zonal_init_option_switch, zonal_init_triangular
       use ran
 
       implicit none
@@ -447,7 +447,8 @@ contains
       integer :: ikxkyz, iz, it, iky, ikx, is, ie, iseg, ia
       integer :: itmod
 
-      if ((naky == 1 .and. nakx == 1) .or. (.not. nonlinear) .or. (triangular_ZF)) then
+      if ((naky == 1 .and. nakx == 1) .or. (.not. nonlinear) &
+          .or. (zonal_init_option_switch == zonal_init_triangular)) then
          if (proc0) then
             write (*, *) 'Noise initialization option is not suited for single mode simulations,'
             write (*, *) 'or linear simulations, or triangular ZF initialisation,'

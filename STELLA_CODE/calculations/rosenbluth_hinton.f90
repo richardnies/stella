@@ -384,14 +384,16 @@ contains
 
       use parameters_diagnostics, only: write_RH_inertia_fluxes, write_RH_bounce_drift
       use parameters_physics, only: omprimfac_RH
-      use parameters_physics, only: triangular_ZF, cos_ZF, triangular_ZF_RH
+      use parameters_physics, only: zonal_init_option_switch, zonal_init_none
+      use parameters_physics, only: zonal_closure_option_switch, zonal_closure_rh
 
       implicit none
 
       rosenbluth_hinton_needed = write_RH_inertia_fluxes &
                                  .or. write_RH_bounce_drift &
                                  .or. abs(omprimfac_RH) > epsilon(0.) &
-                                 .or. ((triangular_ZF .or. cos_ZF) .and. triangular_ZF_RH)
+                                 .or. (zonal_init_option_switch /= zonal_init_none &
+                                       .and. zonal_closure_option_switch == zonal_closure_rh)
 
    end function rosenbluth_hinton_needed
 

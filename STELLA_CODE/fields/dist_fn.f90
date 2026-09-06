@@ -42,9 +42,11 @@ contains
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
-      use parameters_physics, only: triangular_ZF, triangular_ZF_g_exb, triangular_ZF_RH
-      use parameters_physics, only: triangular_ZF_flow, triangular_ZF_flow_PS, triangular_ZF_flow_sym
-      use parameters_physics, only: triangular_ZF_upar_fac, cos_ZF
+      use parameters_physics, only: triangular_ZF_g_exb
+      use parameters_physics, only: triangular_ZF_flow_PS, triangular_ZF_flow_sym
+      use parameters_physics, only: triangular_ZF_upar_fac
+      use parameters_physics, only: zonal_init_option_switch, zonal_init_none, zonal_init_triangular
+      use parameters_physics, only: zonal_closure_option_switch, zonal_closure_rh, zonal_closure_flow
       use grids_kxky, only: akx
       use constants, only: zi
 
@@ -62,7 +64,7 @@ contains
       !> profiles are available in any geometry; geometry warns if the symmetry
       !> one is being used where quasisymmetry does not hold.
       u_parallel_ZF = 0.
-      if (triangular_ZF_flow) &
+      if (zonal_closure_option_switch == zonal_closure_flow) &
          u_parallel_ZF = triangular_ZF_flow_PS * PS_flow_fac &
                        + triangular_ZF_flow_sym * sym_flow_fac
 
@@ -107,7 +109,7 @@ contains
 
       ! Treat zonal g differently for triangular ZF case
       ! We put this here because ginit uses layout in xyz
-      if (triangular_ZF .or. cos_ZF) then
+      if (zonal_init_option_switch /= zonal_init_none) then
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             is = is_idx(vmu_lo, ivmu)
             imu = imu_idx(vmu_lo, ivmu)
@@ -118,7 +120,7 @@ contains
                   phi_ZF(:, :) = 0
                   phi_ZF(2, :) = zi*triangular_ZF_g_exb / akx(2)**2
 
-                  if (triangular_ZF) then
+                  if (zonal_init_option_switch == zonal_init_triangular) then
                      do ikx = 3, nakx / 2 + 1
                      ! Triangular v_ZF, adjust k > kmin modes accordingly
                         phi_ZF(ikx, :) = phi_ZF(2, :) / (akx(ikx)/akx(2))**3 * (1 - (-1)**(ikx-1))/2.0
@@ -137,7 +139,7 @@ contains
 
                      else
 
-                        if (triangular_ZF_RH) then
+                        if (zonal_closure_option_switch == zonal_closure_rh) then
                            ! Rosenbluth-Hinton profile, with <H> = F_M * I_RH to satisfy quasineutrality
                            gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) &
                               * (2*(1-aj0x(1,ikx,iz,ivmu)) + triangular_ZF_upar_fac*(aj0x(1,ikx,iz,ivmu)-2 &
@@ -145,7 +147,7 @@ contains
                                    + real(RH_inertia(ikx,iz,it,is))) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
-                        else if (triangular_ZF_flow) then
+                        else if (zonal_closure_option_switch == zonal_closure_flow) then
                            !> A Maxwellian carrying a parallel flow.  The two
                            !> profiles span every divergence-free parallel flow
                            !> that can accompany the ExB flow, so the two scalars

@@ -1,0 +1,19 @@
+# Outputs of test and benchmark runs.  The suites run stella in place, so these
+# appear next to the input decks; none of them is read by anything.
+*.out.nc
+*.geometry
+*.fluxes
+*.omega
+*.error
+*.final_fields
+*.species.input
+*.moments
+*.out
+.*.in
+.*.scratch
+geometry_miller.*.output
+wout_*.nc
+
+# Reference data the tests compare against is tracked, and must survive.
+!EXPECTED_OUTPUT.*
+!*EXPECTED*
