@@ -39,6 +39,7 @@ module rosenbluth_hinton
    public :: RH_inertia
    public :: RH_integrand_even, RH_integrand_odd
    public :: RH_LW_even, RH_LW_odd
+   public :: RH_SW_even, RH_SW_odd
    public :: RH_pmom_weight, RH_pmom_inertia
    public :: get_RH_pmom, get_RH_pmom_fluxes_fluxtube
    public :: RH_drift_bounce_avg
@@ -57,6 +58,7 @@ module rosenbluth_hinton
    !> Long-wavelength approximations to the same weights, filled only when
    !> <write_RH_asymptotics> asks for them.
    complex, dimension(:,:,:,:), allocatable :: RH_LW_even, RH_LW_odd
+   complex, dimension(:,:,:,:), allocatable :: RH_SW_even, RH_SW_odd
 
    !> The parallel-flow counterpart of the Rosenbluth-Hinton projection.
    !> <RH_pmom_weight> is V_sigma(z) = <vpa J0 exp(-Q)>_tau exp(Q(z)), the
@@ -147,6 +149,7 @@ contains
       real, dimension(:), allocatable :: Q_hat_z
       complex :: integrand_tmp_pls, integrand_tmp_min, integrand_tmp_v
       complex :: LW_even_tmp, LW_odd_tmp
+      complex :: SW_even_tmp, SW_odd_tmp
       logical :: trapped, well_found
 
       integer :: ivmu, iv, imu, is, ia, iz, it, ikx
@@ -231,6 +234,8 @@ contains
       if (write_RH_asymptotics) then
          allocate (RH_LW_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_LW_even = 0.
          allocate (RH_LW_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_LW_odd  = 0.
+         allocate (RH_SW_even(nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_SW_even = 0.
+         allocate (RH_SW_odd( nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc)); RH_SW_odd  = 0.
       end if
 
       ! Allocate array for RH_U_parallel_fac
@@ -307,6 +312,10 @@ contains
                                                     trapped, LW_even_tmp, LW_odd_tmp, Q_hat_z)
                      RH_LW_even(ikx,iz,it,ivmu) = LW_even_tmp
                      RH_LW_odd( ikx,iz,it,ivmu) = LW_odd_tmp
+                     call get_RH_SW_weights(energyval, muval, vpa(iv), akx(ikx), iz, is, &
+                                            trapped, SW_even_tmp, SW_odd_tmp, Q_hat_z)
+                     RH_SW_even(ikx,iz,it,ivmu) = SW_even_tmp
+                     RH_SW_odd( ikx,iz,it,ivmu) = SW_odd_tmp
                   end if
 
                end do !ikx
@@ -351,6 +360,8 @@ contains
       if (allocated(RH_pmom_inertia)) deallocate (RH_pmom_inertia)
       if (allocated(RH_LW_even)) deallocate (RH_LW_even)
       if (allocated(RH_LW_odd )) deallocate (RH_LW_odd)
+      if (allocated(RH_SW_even)) deallocate (RH_SW_even)
+      if (allocated(RH_SW_odd )) deallocate (RH_SW_odd)
       if (allocated(RH_U_parallel_fac)) deallocate (RH_U_parallel_fac)
       if (allocated(RH_inertia))        deallocate (RH_inertia)
       if (allocated(RH_drift_bounce_avg)) deallocate (RH_drift_bounce_avg)
@@ -478,6 +489,8 @@ contains
                                         RH_fluxes_coll_even, RH_fluxes_coll_odd, &
                                         RH_fluxes_phi_even_LW, RH_fluxes_phi_odd_LW, &
                                         RH_fluxes_coll_even_LW, RH_fluxes_coll_odd_LW, &
+                                        RH_fluxes_phi_even_SW, RH_fluxes_phi_odd_SW, &
+                                        RH_fluxes_coll_even_SW, RH_fluxes_coll_odd_SW, &
                                         RH_fluxes_phi_even_rey, RH_fluxes_phi_odd_rey, &
                                         RH_fluxes_phi_even_dia, RH_fluxes_phi_odd_dia)
 
@@ -539,8 +552,12 @@ contains
       !> so any difference is the weight and nothing else.
       complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_LW, RH_fluxes_phi_odd_LW
       complex, dimension(   :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_coll_even_LW, RH_fluxes_coll_odd_LW
+      !> The same again with the short-wavelength (stationary-phase) weights.
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_SW, RH_fluxes_phi_odd_SW
+      complex, dimension(   :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_coll_even_SW, RH_fluxes_coll_odd_SW
       complex, dimension(:, :, :, :, :), allocatable :: work_coll
       complex, dimension(:, :, :, :, :), allocatable :: LW_int_even, LW_int_odd
+      complex, dimension(:, :, :, :, :), allocatable :: SW_int_even, SW_int_odd
 
       !> The even nonlinear channel is a stress, and it is not the Reynolds
       !> stress alone.  The gyroaverage on the ExB velocity carries the FLR
@@ -599,6 +616,10 @@ contains
          rey_int_even = 0.; rey_int_odd = 0.
       end if
       if (do_LW) then
+         RH_fluxes_phi_even_SW = 0.; RH_fluxes_phi_odd_SW = 0.
+         allocate (SW_int_even(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+         allocate (SW_int_odd( naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+         SW_int_even = 0.; SW_int_odd = 0.
          RH_fluxes_phi_even_LW = 0.; RH_fluxes_phi_odd_LW = 0.
          allocate (LW_int_even(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
          allocate (LW_int_odd( naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
@@ -654,6 +675,8 @@ contains
                    if (do_LW) then
                       LW_int_even(:,:,iz,it,ivmu) = NL_term * spread(RH_LW_even(:,iz,it,ivmu), 1, naky)
                       LW_int_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_LW_odd( :,iz,it,ivmu), 1, naky)
+                      SW_int_even(:,:,iz,it,ivmu) = NL_term * spread(RH_SW_even(:,iz,it,ivmu), 1, naky)
+                      SW_int_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_SW_odd( :,iz,it,ivmu), 1, naky)
                    end if
                    if (do_stress) then
                       !> The same flux with the gyroaverage taken off the ExB
@@ -677,6 +700,8 @@ contains
          if (do_LW) then
             call integrate_vmu(LW_int_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even_LW)
             call integrate_vmu(LW_int_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd_LW)
+            call integrate_vmu(SW_int_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even_SW)
+            call integrate_vmu(SW_int_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd_SW)
          end if
          if (do_stress) then
             call integrate_vmu(rey_int_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even_rey)
@@ -820,6 +845,12 @@ contains
                work_coll = 1/code_dt * integrand_even * spread(RH_LW_odd, 1, naky)
                call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
                RH_fluxes_coll_odd_LW = RH_fluxes_coll_tmp(1,:,:,:,:)
+               work_coll = 1/code_dt * integrand_even * spread(RH_SW_even, 1, naky)
+               call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
+               RH_fluxes_coll_even_SW = RH_fluxes_coll_tmp(1,:,:,:,:)
+               work_coll = 1/code_dt * integrand_even * spread(RH_SW_odd, 1, naky)
+               call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
+               RH_fluxes_coll_odd_SW = RH_fluxes_coll_tmp(1,:,:,:,:)
             end if
          end if
 
@@ -851,6 +882,18 @@ contains
                RH_fluxes_coll_even_LW = -RH_fluxes_coll_even_LW &
                   / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
                RH_fluxes_coll_odd_LW = -RH_fluxes_coll_odd_LW &
+                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
+            end if
+            if (abs(akx(1)) < epsilon(0.)) then
+               RH_fluxes_coll_even_SW(1,:,:,:) = 0.; RH_fluxes_coll_odd_SW(1,:,:,:) = 0.
+               RH_fluxes_coll_even_SW(2:,:,:,:) = -RH_fluxes_coll_even_SW(2:,:,:,:) &
+                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
+               RH_fluxes_coll_odd_SW(2:,:,:,:) = -RH_fluxes_coll_odd_SW(2:,:,:,:) &
+                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
+            else
+               RH_fluxes_coll_even_SW = -RH_fluxes_coll_even_SW &
+                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
+               RH_fluxes_coll_odd_SW = -RH_fluxes_coll_odd_SW &
                   / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
             end if
          end if
@@ -964,6 +1007,7 @@ contains
       deallocate (RH_fluxes_drift_tmp, drift_weight, boltzmann)
 
       if (allocated(LW_int_even)) deallocate (LW_int_even, LW_int_odd)
+      if (allocated(SW_int_even)) deallocate (SW_int_even, SW_int_odd)
 
    end subroutine get_RH_fluxes_fluxtube
  
@@ -2154,6 +2198,212 @@ contains
 
    end subroutine get_RH_LW_weights
 
+
+   !**********************************************************************
+   !            SHORT-WAVELENGTH WEIGHTS -- STATIONARY PHASE             !
+   !**********************************************************************
+   !> Once the drift-orbit phase Q = kx*dx is large, the transit average
+   !>
+   !>     W0 = <J0 exp(-i kx dx)>_tau
+   !>        = (1/tau_b) Int dz  J0 exp(-i kx dx) / (|vpa| |gradpar|)
+   !>
+   !> is dominated by the neighbourhoods of the stationary points of dx(z),
+   !> everywhere else cancelling against itself.  Ordinary stationary phase then
+   !> gives, for each stationary point z_s,
+   !>
+   !>     W0 = (1/tau_b) Sum_s  A(z_s) sqrt( 2 pi / (|kx| |dx''(z_s)|) )
+   !>                           exp[ -i kx dx(z_s) - i sgn(kx dx''_s) pi/4 ],
+   !>     A(z) = J0(z) / |vpa(z)|  times the parallel measure,
+   !>
+   !> so each stationary point contributes at order kx^(-1/2), and the whole
+   !> weight follows from the annihilation lemma as W(z) = W0 exp(i kx dx(z)).
+   !>
+   !> Three things are worth saying about this.
+   !>
+   !> The sum is kept coherent.  The modulus quoted in the write-up drops the
+   !> interference between stationary points, which is what survives averaging
+   !> over a Maxwellian -- but that averaging happens afterwards, in the
+   !> velocity integral, so a single particle's weight must keep its phases.
+   !>
+   !> The stationary points are located from dx itself rather than from B.
+   !> Where dx ~ vpa/B the two coincide, since
+   !>     d(vpa/B)/dz = -B' (2E - mu B) / (vpa B^2)
+   !> vanishes only where B' does (2E = mu B would need vpa^2 < 0), so they are
+   !> the extrema of B.  That relation needs quasisymmetry, though, and the
+   !> numerically integrated drift phase does not assume it, so working from dx
+   !> keeps the two paths on the same footing.
+   !>
+   !> Turning points are not stationary points and are not summed.  There
+   !> dx ~ vpa vanishes linearly in vpa while the measure dz/|vpa| becomes
+   !> regular in vpa, so the endpoint behaves as a plain Fourier integral with a
+   !> linear phase and contributes at O(1/kx) -- down by kx^(-1/2) on the terms
+   !> kept here.
+   subroutine get_RH_SW_weights(energyval, muval, vpaval, akxval, iz, is, trapped, &
+                                even_SW, odd_SW, Q_hat_in)
+
+      use species, only: spec
+      use zgrid, only: nzgrid, zed
+      use geometry, only: bmag, gradpar, dl_over_b, gds22, geo_surf, q_as_x
+      use spfunc, only: j0
+      use constants, only: zi, pi
+
+      implicit none
+
+      real,    intent(in)  :: energyval, muval, vpaval, akxval
+      integer, intent(in)  :: iz, is
+      logical, intent(in)  :: trapped
+      complex, intent(out) :: even_SW, odd_SW
+      real, dimension(-nzgrid:), intent(in), optional :: Q_hat_in
+
+      real,    dimension(-nzgrid:nzgrid) :: Q_hat, dx_prof
+      complex, dimension(-nzgrid:nzgrid) :: Q_profile
+      complex :: W0, W, tmp
+      real    :: tau_b, B_c, dz, sigma
+      real    :: dm, d0, dp, curv, shift, dx_s, frac
+      real    :: bmag_s, vpa2_s, vperp2_s, kperp2_s, aj0_s, measure_s, amp
+      integer :: ia, izz, izm, izp, iznb, izz_start, izz_end, iz_lo, iz_hi, nstat
+      logical :: well_found, is_trapped
+
+      ia = 1
+      even_SW = 0.; odd_SW = 0.
+      if (abs(akxval) <= epsilon(0.)) return
+      sigma = sign(1., vpaval)
+      dz = zed(1) - zed(0)
+      if (abs(dz) <= epsilon(0.)) return
+
+      !> The excursion profile, from the same phase the exact weight uses.
+      if (use_analytic_drift_phase) then
+         do izz = -nzgrid, nzgrid
+            call eval_Q_fac(sigma * sqrt(max(energyval - 2.*muval*bmag(ia, izz), 0.)), &
+                            akxval, izz, is, Q_profile(izz))
+         end do
+      else
+         if (present(Q_hat_in)) then
+            Q_hat = Q_hat_in
+         else if (energyval > epsilon(0.)) then
+            call eval_Q_profile_hat(muval / energyval, iz, Q_hat)
+         else
+            Q_hat = 0.
+         end if
+         Q_profile = zi * akxval * sqrt(max(energyval, 0.)) * spec(is)%smz_psi0 &
+                   * sigma * Q_hat
+      end if
+      dx_prof = aimag(Q_profile) / akxval
+
+      !> The stretch of field line the orbit actually covers, and the bounce time
+      !> in whichever normalisation that branch uses -- the trapped branch
+      !> weights by 1/|gradpar| and the circulating one by B*dl_over_b, which
+      !> differ by a constant, so the measure below has to match branch for
+      !> branch or the ratio W0 = numerator/tau_b comes out rescaled.
+      is_trapped = .false.
+      if (muval > epsilon(0.)) then
+         B_c = energyval / (2.*muval)
+         is_trapped = B_c < maxval(bmag(ia, :))
+      end if
+      iz_lo = -nzgrid; iz_hi = nzgrid
+      if (is_trapped) then
+         call find_well(B_c, iz, iz_lo, iz_hi, well_found)
+         if (.not. well_found) return
+      end if
+
+      call eval_transit_ints(energyval, muval, sigma, akxval, iz, is, tmp, tau_b, Q_profile)
+      if (tau_b <= 0.) return
+
+      !> Walk the interior of the orbit looking for sign changes of dx', and fit
+      !> a parabola through each bracket to place the stationary point and to
+      !> read off dx'' there.
+      !> A circulating orbit runs right round the line, so its stationary points
+      !> have to be looked for periodically: for an axisymmetric tube the maximum
+      !> of B sits at z = +-pi, which is the domain edge, and an interior-only
+      !> scan finds the minimum at z = 0 and misses it -- half the sum, and the
+      !> wrong phase.  The grid duplicates the endpoint, so the distinct points
+      !> are -nzgrid .. nzgrid-1 and the neighbours wrap between them.
+      W0 = 0.; nstat = 0
+      if (is_trapped) then
+         izz_start = max(iz_lo, -nzgrid) + 1; izz_end = min(iz_hi, nzgrid) - 1
+      else
+         izz_start = -nzgrid; izz_end = nzgrid - 1
+      end if
+      do izz = izz_start, izz_end
+         izm = izz - 1; izp = izz + 1
+         if (.not. is_trapped) then
+            if (izm < -nzgrid) izm = nzgrid - 1
+            if (izp > nzgrid - 1) izp = -nzgrid
+         end if
+         dm = dx_prof(izm); d0 = dx_prof(izz); dp = dx_prof(izp)
+         if ((dp - d0) * (d0 - dm) > 0.) cycle          ! no turning point bracketed
+         curv = (dm - 2.*d0 + dp)
+         if (abs(curv) <= epsilon(0.)) cycle            ! degenerate: dx'' vanishes too
+         shift = 0.5 * (dm - dp) / curv                 ! vertex offset in grid cells
+         if (abs(shift) > 1.) cycle
+         dx_s = d0 - 0.125 * (dm - dp)**2 / curv        ! dx at the stationary point
+         curv = curv / dz**2                            ! dx'' in z units
+
+         !> Amplitude and measure interpolated to the stationary point.  These
+         !> vary on the equilibrium scale while the phase turns on the much
+         !> shorter scale 1/(kx dx'), which is what makes the expansion work, so
+         !> linear interpolation is enough for them.
+         frac = abs(shift)
+         iznb = izp
+         if (shift < 0.) iznb = izm
+         bmag_s = (1. - frac) * bmag(ia, izz) + frac * bmag(ia, iznb)
+         measure_s = (1. - frac) * parallel_measure(izz, is_trapped) &
+                   + frac * parallel_measure(iznb, is_trapped)
+         kperp2_s = (1. - frac) * gds22(ia, izz) + frac * gds22(ia, iznb)
+
+         vpa2_s = energyval - 2.*muval*bmag_s
+         if (vpa2_s <= epsilon(0.)) cycle               ! stationary point outside the orbit
+         vperp2_s = 2.*muval*bmag_s
+         if (.not. q_as_x) kperp2_s = kperp2_s / (geo_surf%shat**2)
+         kperp2_s = max(akxval**2 * kperp2_s, 0.)
+         aj0_s = j0(sqrt(kperp2_s * vperp2_s) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag_s)
+
+         amp = aj0_s * measure_s / sqrt(vpa2_s)
+         W0 = W0 + amp * sqrt(2.*pi / (abs(akxval) * abs(curv))) &
+                 * exp(-zi * akxval * dx_s - zi * sign(1., akxval * curv) * 0.25 * pi)
+         nstat = nstat + 1
+      end do
+
+      !> No stationary point on this orbit: the transit average is then smaller
+      !> than anything this expansion describes, and zero is the right answer to
+      !> the order kept.
+      if (nstat == 0) return
+
+      W0 = W0 / tau_b
+
+      !> A trapped particle covers both signs of vpa within one bounce, so the
+      !> exact weight averages the +vpa and -vpa transit integrals, leaving W0
+      !> even in sigma.  Do the same here, or the trapped population carries a
+      !> spurious odd part.
+      if (trapped) W0 = cmplx(real(W0), 0.)
+      W = W0 * exp(zi * akxval * dx_prof(iz))
+
+      !> dx flips sign with sigma while the measure does not, so W(-sigma) is the
+      !> conjugate of W(sigma): the even part is its real part and the odd part
+      !> its imaginary one.
+      even_SW = real(W)
+      odd_SW = zi * aimag(W)
+
+   contains
+
+      !> The parallel measure per unit z, in the normalisation of whichever
+      !> branch of eval_transit_ints will supply tau_b.
+      real function parallel_measure(izloc, in_well)
+         integer, intent(in) :: izloc
+         logical, intent(in) :: in_well
+         integer :: izuse
+         if (in_well) then
+            parallel_measure = 1.0 / max(abs(gradpar(izloc)), epsilon(0.))
+         else
+            !> dl_over_b drops the duplicated endpoint, so read the other end of
+            !> the line for it -- the same physical point.
+            izuse = izloc
+            if (izloc == nzgrid) izuse = -nzgrid
+            parallel_measure = bmag(ia, izuse) * dl_over_b(ia, izuse) / abs(dz)
+         end if
+      end function parallel_measure
+
+   end subroutine get_RH_SW_weights
 
    subroutine get_RH_transit_integrands(energyval, muval, vpaval, akxval, iz, is, trapped, &
                                         integrand_pls, integrand_min, Q_hat_in, integrand_v)

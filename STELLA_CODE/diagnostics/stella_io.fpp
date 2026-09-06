@@ -904,12 +904,15 @@ contains
 
    end subroutine write_RH_fluxes_stress_nc
 
-   subroutine write_RH_fluxes_LW_nc(nout, phi_even, phi_odd, coll_even, coll_odd)
+   subroutine write_RH_fluxes_LW_nc(nout, phi_even, phi_odd, coll_even, coll_odd, &
+                                    phi_even_SW, phi_odd_SW, coll_even_SW, coll_odd_SW)
       implicit none
 
       integer, intent(in) :: nout
       complex, dimension(:, :, :, :, :), intent(in) :: phi_even, phi_odd
       complex, dimension(:, :, :, :), intent(in) :: coll_even, coll_odd
+      complex, dimension(:, :, :, :, :), intent(in), optional :: phi_even_SW, phi_odd_SW
+      complex, dimension(:, :, :, :), intent(in), optional :: coll_even_SW, coll_odd_SW
 
 #ifdef NETCDF
       character(*), dimension(*), parameter :: dphi = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
@@ -927,6 +930,17 @@ contains
               long_name="Collisional RH flux, even weight, long-wavelength form")
       call netcdf_write_complex(ncid, "RH_fluxes_coll_odd_LW", coll_odd, dim_names=dcol, start=scol, &
               long_name="Collisional RH flux, odd weight, long-wavelength form")
+
+      if (present(phi_even_SW)) then
+         call netcdf_write_complex(ncid, "RH_fluxes_phi_even_SW", phi_even_SW, dim_names=dphi, start=sphi, &
+                 long_name="Nonlinear RH flux, even weight, short-wavelength form")
+         call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_SW", phi_odd_SW, dim_names=dphi, start=sphi, &
+                 long_name="Nonlinear RH flux, odd weight, short-wavelength form")
+         call netcdf_write_complex(ncid, "RH_fluxes_coll_even_SW", coll_even_SW, dim_names=dcol, start=scol, &
+                 long_name="Collisional RH flux, even weight, short-wavelength form")
+         call netcdf_write_complex(ncid, "RH_fluxes_coll_odd_SW", coll_odd_SW, dim_names=dcol, start=scol, &
+                 long_name="Collisional RH flux, odd weight, short-wavelength form")
+      end if
 #endif
 
    end subroutine write_RH_fluxes_LW_nc
@@ -1133,10 +1147,11 @@ contains
 
    end subroutine write_RH_bounce_drift_nc
 
-   subroutine write_RH_LW_weights_nc(LW_even, LW_odd)
+   subroutine write_RH_LW_weights_nc(LW_even, LW_odd, SW_even, SW_odd)
       implicit none
 
       complex, dimension(:, :, :, :, :, :), intent(in) :: LW_even, LW_odd
+      complex, dimension(:, :, :, :, :, :), intent(in), optional :: SW_even, SW_odd
 
 #ifdef NETCDF
       !> Same layout as the exact integrands, so the two can be compared
@@ -1149,6 +1164,12 @@ contains
               long_name="Long-wavelength (order kx^2) approximation to the even projection weight")
       call netcdf_write_complex(ncid, "RH_LW_odd", LW_odd, dim_names=dims, start=start, &
               long_name="Long-wavelength (order kx) approximation to the odd projection weight")
+      if (present(SW_even)) then
+         call netcdf_write_complex(ncid, "RH_SW_even", SW_even, dim_names=dims, start=start, &
+                 long_name="RH transit-average weight, even, short-wavelength (stationary phase) form")
+         call netcdf_write_complex(ncid, "RH_SW_odd", SW_odd, dim_names=dims, start=start, &
+                 long_name="RH transit-average weight, odd, short-wavelength (stationary phase) form")
+      end if
 #endif
 
    end subroutine write_RH_LW_weights_nc

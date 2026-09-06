@@ -89,6 +89,7 @@ contains
 
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd
       use rosenbluth_hinton, only: RH_LW_even, RH_LW_odd
+      use rosenbluth_hinton, only: RH_SW_even, RH_SW_odd
 
       ! Dimensions
       use parameters_kxky_grids, only: naky, nakx
@@ -120,6 +121,7 @@ contains
       complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_even_vs_kxztsvpamu
       complex, dimension(:, :, :, :, :, :), allocatable :: RH_integrand_odd_vs_kxztsvpamu
       complex, dimension(:, :, :, :, :, :), allocatable :: LW_even_vs, LW_odd_vs
+      complex, dimension(:, :, :, :, :, :), allocatable :: SW_even_vs, SW_odd_vs
       logical, save :: LW_written = .false.
 
       !---------------------------------------------------------------------- 
@@ -152,15 +154,21 @@ contains
       if (write_RH_asymptotics .and. .not. LW_written) then
          allocate (LW_even_vs(nakx, nztot, ntubes, nspec, nvpa, nmu)); LW_even_vs = 0.
          allocate (LW_odd_vs( nakx, nztot, ntubes, nspec, nvpa, nmu)); LW_odd_vs  = 0.
+         allocate (SW_even_vs(nakx, nztot, ntubes, nspec, nvpa, nmu)); SW_even_vs = 0.
+         allocate (SW_odd_vs( nakx, nztot, ntubes, nspec, nvpa, nmu)); SW_odd_vs  = 0.
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             iv = iv_idx(vmu_lo, ivmu); imu = imu_idx(vmu_lo, ivmu); is = is_idx(vmu_lo, ivmu)
             LW_even_vs(:,:,:,is,iv,imu) = RH_LW_even(:,:,:,ivmu)
             LW_odd_vs( :,:,:,is,iv,imu) = RH_LW_odd( :,:,:,ivmu)
+            SW_even_vs(:,:,:,is,iv,imu) = RH_SW_even(:,:,:,ivmu)
+            SW_odd_vs( :,:,:,is,iv,imu) = RH_SW_odd( :,:,:,ivmu)
          end do
          call sum_reduce(LW_even_vs, 0)
          call sum_reduce(LW_odd_vs, 0)
-         if (proc0) call write_RH_LW_weights_nc(LW_even_vs, LW_odd_vs)
-         deallocate (LW_even_vs, LW_odd_vs)
+         call sum_reduce(SW_even_vs, 0)
+         call sum_reduce(SW_odd_vs, 0)
+         if (proc0) call write_RH_LW_weights_nc(LW_even_vs, LW_odd_vs, SW_even_vs, SW_odd_vs)
+         deallocate (LW_even_vs, LW_odd_vs, SW_even_vs, SW_odd_vs)
          LW_written = .true.
       end if
 
@@ -275,6 +283,8 @@ contains
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs
+      complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs
+      complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_drift_trapped_vs_kxzts
@@ -302,6 +312,10 @@ contains
       allocate (RH_fluxes_phi_odd_LW_vs( naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_even_LW_vs(nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_odd_LW_vs( nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_phi_even_SW_vs(naky, nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_phi_odd_SW_vs( naky, nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_coll_even_SW_vs(nakx, nztot, ntubes, nspec))
+      allocate (RH_fluxes_coll_odd_SW_vs( nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_phi_even_rey_vs(naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_phi_odd_rey_vs( naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_phi_even_dia_vs(naky, nakx, nztot, ntubes, nspec))
@@ -324,6 +338,8 @@ contains
                 RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs, &
                 RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs, &
                 RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs, &
+                RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs, &
+                RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs, &
                 RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs, &
                 RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs)
       end if
@@ -337,7 +353,9 @@ contains
          if (include_collisions) call write_RH_fluxes_coll_split_nc(nout, RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs)
          if (write_RH_asymptotics) call write_RH_fluxes_LW_nc(nout, &
               RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs, &
-              RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs)
+              RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs, &
+              RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs, &
+              RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs)
          if (write_RH_stress_split) call write_RH_fluxes_stress_nc(nout, &
               RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs, &
               RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs)
@@ -352,6 +370,8 @@ contains
       deallocate (RH_fluxes_coll_vs_kxzts, RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs)
       deallocate (RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs)
       deallocate (RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs)
+      deallocate (RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs)
+      deallocate (RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs)
       deallocate (RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs)
       deallocate (RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs)
       deallocate (RH_fluxes_drift_trapped_vs_kxzts)
