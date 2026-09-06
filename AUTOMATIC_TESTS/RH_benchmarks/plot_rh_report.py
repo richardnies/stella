@@ -728,9 +728,8 @@ def figure_convergence(outfile):
     ax.set_xlabel(r'$n_{\rm zed}$  (other grids fixed)')
     ax.set_ylabel('conservation error')
     ax.set_title('Refining one grid: misleading', fontsize=9.5, loc='left')
-    ax.legend(frameon=False, fontsize=7.6, ncol=1)
-    ax.text(0.03, 0.05, 'solid $\\varphi_{\\rm RH}$,  dashed $U_{\\rm RH}$',
-            transform=ax.transAxes, fontsize=7.6, color='#444')
+    ax.legend(frameon=True, framealpha=0.92, edgecolor='none',
+              fontsize=7.4, ncol=1, loc='lower left')
 
     lv = ALL_GRIDS['level']
     for kx, c in ((0.05, PHI), (2.0, UPA)):
@@ -754,9 +753,6 @@ def figure_convergence(outfile):
     ax3.set_ylabel('conservation error')
     ax3.set_title('Both projections, falling together', fontsize=9.5, loc='left')
     ax3.legend(frameon=False, fontsize=8)
-    ax3.text(0.04, 0.06, 'two exactly conserved quantities\nlimited by the same discretisation\n'
-             'error look like this; a weight not of\nthe right form would plateau',
-             transform=ax3.transAxes, fontsize=6.8, color='#444')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -931,9 +927,11 @@ def figure_closed_forms(outfile):
     a2.set_xlabel(r'$k_x\rho$'); a2.set_ylabel(r'$|\langle e^{-ik_x\delta x}\rangle_\tau|$')
     a2.set_title('Short wavelength: the amplitude', fontsize=9.5, loc='left')
     a2.legend(frameon=False, fontsize=7.6)
-    for kx, q, s in zip(STATPHASE['kx'], STATPHASE['quad'], STATPHASE['sp']):
-        a2.annotate(f'{s/q:.3f}', xy=(kx, s), xytext=(0, -13),
-                    textcoords='offset points', ha='center', fontsize=7, color='#444')
+    for kx, q, sp in zip(STATPHASE['kx'], STATPHASE['quad'], STATPHASE['sp']):
+        a2.annotate(f'{sp/q:.3f}', xy=(kx, q), xytext=(0, 9),
+                    textcoords='offset points', ha='center', fontsize=7.2, color='#444')
+    a2.set_xlim(3.6, 28)
+    a2.set_ylim(8.2e-2, 2.35e-1)
     a2.text(0.03, 0.06, 'labels: closed form / quadrature\n' +
             r'$c=\langle|W|\rangle\Delta\theta_{\rm rms}$ = ' +
             ', '.join(f'{c:.2f}' for c in C_CONST['c']) + r' at $k_x\rho=5,10,20$',
@@ -948,11 +946,11 @@ def figure_closed_forms(outfile):
     a3.set_xscale('log'); a3.set_ylim(0.6, 1.15)
     a3.set_xlabel(r'$k_x\rho$')
     a3.set_ylabel(r'measured $\varphi(\infty)$ / predicted')
-    a3.set_title('The residual identity, first equality', fontsize=9.5, loc='left')
     sec = a3.secondary_xaxis('top')
     sec.set_xticks(RESID1['kx'])
     sec.set_xticklabels([f'{q:g}' for q in RESID1['Q']], fontsize=7.5)
-    sec.set_xlabel(r'$\mathcal{Q}$', fontsize=8.5)
+    sec.set_xlabel(r'$\mathcal{Q}$', fontsize=8.5, labelpad=1.5)
+    a3.set_title('The residual identity, first equality', fontsize=9.5, loc='left', pad=26)
     a3.text(0.5, 0.08, 'open marker: flow barely moves,\nso the ratio is poorly determined',
             transform=a3.transAxes, fontsize=6.9, color='#444', ha='center')
 
@@ -980,8 +978,9 @@ def figure_energy_and_parity(outfile):
     a1.loglog(ECL_LW['kx'], np.array(ECL_LW['val']) / np.array(ECL_LW['kx'])**2,
               'o-', color=PHI, lw=1.6, ms=5, label='measured')
     a1.loglog(ECL_SW['kx'], ECL_SW['val'], 'o-', color=PHI, lw=1.6, ms=5)
-    ref = np.array([0.002, 0.02])
-    a1.loglog(ref, 0.0112 / ref**2, ':', color=GREY, lw=1.4, label=r'$\propto k_x^{-2}$')
+    ref = np.array([0.0016, 0.032])
+    a1.loglog(ref, 0.0112 / ref**2, ':', color=GREY, lw=2.0, zorder=0,
+              label=r'$\propto k_x^{-2}$')
     a1.axhline(0.5, color=UPA, ls='--', lw=1.4, label=r'saturation at $1/2$')
     a1.set_xlabel(r'$k_x\rho$')
     a1.set_ylabel(r'$E_{\rm RH}/|\langle\varphi_{\rm RH}\rangle|^2 = \Gamma_{\rm cl}/2\langle I\rangle^2$')
@@ -992,10 +991,10 @@ def figure_energy_and_parity(outfile):
     a2.axhline(1.0, color=GREY, ls=':', lw=1.3)
     a2.set_xlabel(r'$k_x\rho$')
     a2.set_ylabel(r'$|F^{\rm coll}_{\rm even}|/|F^{\rm coll}_{\rm odd}|$')
-    a2.set_ylim(0, 2.5)
+    a2.set_ylim(0, 3.1)
     a2.set_title('Collisional drive: the two parities stay comparable',
                  fontsize=9.5, loc='left')
-    a2.text(0.04, 0.86, 'no clean $k_x^2$ suppression of the even part:\n'
+    a2.text(0.04, 0.97, 'no clean $k_x^2$ suppression of the even part:\n'
             'collisions move no particles radially, so the\n'
             'ordering argument bounds it but does not\n'
             'make it small over this range',
@@ -1089,17 +1088,18 @@ def figure_geometry_factors(outfile):
     """Three closed-form geometry factors, each measured at two aspect ratios."""
     fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(12.4, 3.4))
 
-    x = np.arange(len(UPAR_RATIO['kx'])); w = 0.34
-    a1.bar(x - w/2, UPAR_RATIO['measured'], w, color=UPA, label='measured')
+    x = np.arange(len(UPAR_RATIO['kx'])); w = 0.42
+    a1.bar(x, UPAR_RATIO['measured'], w, color=UPA, label='measured')
     a1.axhline(UPAR_RATIO['predicted'], color=PHI, ls='--', lw=1.6,
-               label=r'closed form, eq.~(uparratio)')
+               label='closed form')
     for xi, m in zip(x, UPAR_RATIO['measured']):
-        a1.text(xi - w/2, m + 0.08, f'{m/UPAR_RATIO["predicted"]:.3f}',
-                ha='center', fontsize=7.4, color='#333')
+        a1.text(xi, m - 0.28, f'{m/UPAR_RATIO["predicted"]:.3f}',
+                ha='center', fontsize=8, color='white', weight='bold')
     a1.set_xticks(x); a1.set_xticklabels([rf'$k_x\rho={k}$' for k in UPAR_RATIO['kx']],
-                                         fontsize=8)
-    a1.set_ylim(0, 4.6); a1.set_ylabel(r'$|u_\parallel|\,/\,|U_{\rm RH}/I_U|$')
-    a1.legend(frameon=False, fontsize=7.4, loc='lower left')
+                                         fontsize=8.5)
+    a1.set_xlim(-0.62, len(x) - 0.38)
+    a1.set_ylim(0, 5.0); a1.set_ylabel(r'$|u_\parallel|\,/\,|U_{\rm RH}/I_U|$')
+    a1.legend(frameon=False, fontsize=7.8, loc='upper left')
     a1.set_title('The flow ratio (labels: measured/predicted)', fontsize=9.2, loc='left')
 
     x = np.arange(len(TAU_GEOM['eps'])); w = 0.34
@@ -1162,11 +1162,11 @@ def figure_nonlinear_scaling(outfile):
                     color=cols[name])
     a2.axhline(0.0, color=GREY, ls=':', lw=1.4)
     a2.set_xlabel(r'$q$'); a2.set_ylabel('fitted power of $k_x$')
-    a2.set_ylim(-0.95, 0.22); a2.set_xlim(0.3, 2.8)
+    a2.set_ylim(-1.42, 0.22); a2.set_xlim(0.3, 2.8)
     a2.set_title('Agreement in sign, not in exponent', fontsize=9.5, loc='left')
-    a2.text(0.5, 0.10, 'all negative, ruling out the $O(k_x^2)$ of the\n'
-            'naive cancellation argument; two points\nspanning a factor of two is thin\n'
-            'evidence for a power',
+    a2.text(0.5, 0.035, 'all negative, ruling out the $O(k_x^2)$ of the naive\n'
+            'cancellation argument; two points spanning a factor\n'
+            'of two is thin evidence for a power',
             transform=a2.transAxes, fontsize=6.9, color='#444', ha='center')
 
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
@@ -1203,9 +1203,6 @@ def figure_stress_and_species(outfile):
     a2.legend(frameon=False, fontsize=7.6)
     a2.set_title(r'Electrons carry the parallel flow ($j_\parallel$: $100\%$)',
                  fontsize=9.5, loc='left')
-    a2.text(0.5, 0.06, 'which is why $U_{\\rm RH}$, a parallel projection, is not\n'
-            'ion-dominated: the ion rotation is $E\\times B$ and\nlives in $\\varphi_{\\rm RH}$',
-            transform=a2.transAxes, fontsize=6.9, color='#444', ha='center')
 
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
