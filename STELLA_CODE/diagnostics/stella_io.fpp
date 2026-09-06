@@ -72,6 +72,7 @@ module stella_io
    public :: write_RH_fluxes_coll_nc
    public :: write_RH_fluxes_coll_split_nc
    public :: write_RH_fluxes_LW_nc
+   public :: write_RH_fluxes_stress_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
    public :: write_RH_pmom_nc
@@ -880,6 +881,29 @@ contains
    !> The same fluxes formed with the long-wavelength weights.  Comparing them
    !> with the exact ones tests the expansion independently of the turbulence:
    !> both are driven by identical fields, so the difference is the weight alone.
+   subroutine write_RH_fluxes_stress_nc(nout, even_rey, odd_rey, even_dia, odd_dia)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: even_rey, odd_rey, even_dia, odd_dia
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dphi = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: sphi
+      sphi = [1, 1, 1, 1, 1, 1, nout]
+
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_even_reynolds", even_rey, dim_names=dphi, start=sphi, &
+              long_name="Nonlinear RH flux, even weight, Reynolds (adiabatic) half")
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_reynolds", odd_rey, dim_names=dphi, start=sphi, &
+              long_name="Nonlinear RH flux, odd weight, Reynolds (adiabatic) half")
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_even_diamagnetic", even_dia, dim_names=dphi, start=sphi, &
+              long_name="Nonlinear RH flux, even weight, diamagnetic (non-adiabatic) half")
+      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd_diamagnetic", odd_dia, dim_names=dphi, start=sphi, &
+              long_name="Nonlinear RH flux, odd weight, diamagnetic (non-adiabatic) half")
+#endif
+
+   end subroutine write_RH_fluxes_stress_nc
+
    subroutine write_RH_fluxes_LW_nc(nout, phi_even, phi_odd, coll_even, coll_odd)
       implicit none
 

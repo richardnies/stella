@@ -618,3 +618,63 @@ def figure_stress_split(netcdf_file, outfile, time_min, time_max, title=''):
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
+
+
+def figure_stress_channels(netcdf_file, outfile, time_min, time_max, title=''):
+    """The Reynolds and diamagnetic halves of the even nonlinear channel.
+
+    Reads the split stella now forms directly (write_RH_stress_split), so there
+    is no fitting here and total = Reynolds + diamagnetic is exact.  The split
+    is by the gyroaverage on the ExB velocity: J0 -> 1 leaves a density moment,
+    which quasineutrality slaves to phi and which is the Reynolds channel, and
+    the remainder carries (J0 - 1) ~ -kperp^2 vperp^2 / 4 Omega^2, i.e. the
+    vperp^2 moment, and is the diamagnetic channel.
+    """
+    ncdata = Dataset(netcdf_file)
+    t = np.array(ncdata.variables['t'][:])
+    kx = np.array(ncdata.variables['kx'][:])
+    w = _weights(ncdata)
+
+    def fla(name):
+        a = _complex(ncdata, name)[0][:, 0, 0]
+        return np.einsum('z,tzky->tky', w, a).sum(axis=2)
+
+    T = fla('RH_fluxes_phi_even')
+    R = fla('RH_fluxes_phi_even_reynolds')
+    D = fla('RH_fluxes_phi_even_diamagnetic')
+
+    window = (t >= time_min) & (t <= time_max)
+    positive = kx > 1e-12
+    j = int(np.where(positive)[0][int(np.argmin(kx[positive]))])
+
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.2))
+    ax.plot(t, T[:, j].real, color=PHI, lw=2.0, label='total')
+    ax.plot(t, R[:, j].real, color=GREY, lw=1.4, ls='--', label=r'Reynolds  $\Pi_\varphi$')
+    ax.plot(t, D[:, j].real, color=UPA, lw=1.4, ls='-.', label=r'diamagnetic  $\Pi_T$')
+    ax.axhline(0.0, color='k', lw=0.5, alpha=0.3)
+    ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
+    ax.set_ylabel(r'$F^{\rm NL}_{\rm even}$')
+    ax.set_title(f'{title}  $k_x\\rho = {kx[j]:.2f}$', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=8)
+
+    ratio, align = [], []
+    for jj in np.where(positive)[0]:
+        r, dd = R[window][:, jj], D[window][:, jj]
+        ratio.append(np.linalg.norm(dd) / np.linalg.norm(r))
+        align.append(np.vdot(r, dd).real / (np.linalg.norm(r) * np.linalg.norm(dd)))
+    ax2.semilogy(kx[positive], ratio, 'o-', color=UPA, lw=1.6, ms=5)
+    ax2.axhline(1.0, color=GREY, ls=':', lw=1.1)
+    ax2.set_xlabel(r'$k_x\rho$')
+    ax2.set_ylabel(r'$|\Pi_T| / |\Pi_\varphi|$')
+    ax2.set_title('Diamagnetic against Reynolds', fontsize=9.5, loc='left')
+    axr = ax2.twinx()
+    axr.plot(kx[positive], align, 's--', color=PHI, lw=1.2, ms=4, alpha=0.8)
+    axr.axhline(0.0, color=PHI, lw=0.5, alpha=0.3)
+    axr.set_ylabel(r'$\cos(\Pi_\varphi, \Pi_T)$', color=PHI)
+    axr.tick_params(axis='y', labelcolor=PHI)
+    axr.set_ylim(-1.05, 1.05)
+    axr.grid(False)
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile

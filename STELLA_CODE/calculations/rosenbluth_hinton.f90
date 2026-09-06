@@ -477,7 +477,9 @@ contains
                                         RH_fluxes_coll, RH_fluxes_drift_trapped, RH_fluxes_drift_passing, &
                                         RH_fluxes_coll_even, RH_fluxes_coll_odd, &
                                         RH_fluxes_phi_even_LW, RH_fluxes_phi_odd_LW, &
-                                        RH_fluxes_coll_even_LW, RH_fluxes_coll_odd_LW)
+                                        RH_fluxes_coll_even_LW, RH_fluxes_coll_odd_LW, &
+                                        RH_fluxes_phi_even_rey, RH_fluxes_phi_odd_rey, &
+                                        RH_fluxes_phi_even_dia, RH_fluxes_phi_odd_dia)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -505,7 +507,7 @@ contains
       use arrays_dist_fn, only: gvmu
       use arrays_dist_fn, only: integrand_even   => g0
       use arrays_dist_fn, only: integrand_odd    => g1
-      use parameters_diagnostics, only: write_RH_asymptotics
+      use parameters_diagnostics, only: write_RH_asymptotics, write_RH_stress_split
 
       implicit none
 
@@ -540,6 +542,30 @@ contains
       complex, dimension(:, :, :, :, :), allocatable :: work_coll
       complex, dimension(:, :, :, :, :), allocatable :: LW_int_even, LW_int_odd
 
+      !> The even nonlinear channel is a stress, and it is not the Reynolds
+      !> stress alone.  The gyroaverage on the ExB velocity carries the FLR
+      !> weight, and splitting it as J0 = 1 + (J0 - 1) splits the flux by
+      !> velocity moment: the J0 -> 1 half is a density moment, which
+      !> quasineutrality slaves to phi and which is therefore the Reynolds
+      !> channel; the remainder carries (J0 - 1) ~ -kperp^2 vperp^2 / 4 Omega^2,
+      !> so it is the vperp^2 moment -- the perpendicular pressure -- and is the
+      !> diamagnetic channel.  Both are the same order in kperp*rho, so neither
+      !> is a correction to the other, and the sign of their sum decides whether
+      !> the zonal flow is driven or damped.
+      !>
+      !> Note this cannot instead be split into the adiabatic and non-adiabatic
+      !> parts of g.  stella evolves g = h - (Z/T)<phi>F_M, so the adiabatic
+      !> piece is -(Z/T)<phi>F_M, and advecting it gives identically zero: both
+      !> factors of the beat then carry the same J0, the summand
+      !> (k' x k'') J0(k') J0(k'') phi phi is antisymmetric, and it cancels.
+      !> That is {<phi>,<phi>} = 0.  The whole flux comes from h, and the
+      !> Reynolds/diamagnetic distinction lives in which moment of h is taken.
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_rey, RH_fluxes_phi_odd_rey
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_dia, RH_fluxes_phi_odd_dia
+      complex, dimension(:, :, :, :, :), allocatable :: rey_int_even, rey_int_odd
+      complex, dimension(naky, nakx) :: vchix_bare, NL_term_rey
+      complex, dimension(naky, nx) :: vchix_bare_ky_x
+
       !> Drive from the transit-averaged radial magnetic drift, reported
       !> separately for the trapped and passing populations; their sum is the
       !> whole drive.  See RH_drift_is_trapped for why they are kept apart.
@@ -552,12 +578,27 @@ contains
       ! Local variables
       integer :: ivmu, iv, imu, is, ia, iz, it
 
+      !> The caller passes these arrays whether or not it means to write them,
+      !> so present() alone is always true and the extra work would be done on
+      !> every step regardless.  Gate on the diagnostic flags as well.
+      logical :: do_LW, do_stress
+
       ! We only have one field line because <full_flux_surface> = .false.
       ia = 1
 
+      do_LW = write_RH_asymptotics .and. present(RH_fluxes_phi_even_LW)
+      do_stress = write_RH_stress_split .and. present(RH_fluxes_phi_even_rey)
+
       !> Allocated here rather than lower down: the nonlinear block below is the
       !> first user, and allocating after it segfaults.
-      if (present(RH_fluxes_phi_even_LW)) then
+      if (do_stress) then
+         RH_fluxes_phi_even_rey = 0.; RH_fluxes_phi_odd_rey = 0.
+         RH_fluxes_phi_even_dia = 0.; RH_fluxes_phi_odd_dia = 0.
+         allocate (rey_int_even(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+         allocate (rey_int_odd( naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+         rey_int_even = 0.; rey_int_odd = 0.
+      end if
+      if (do_LW) then
          RH_fluxes_phi_even_LW = 0.; RH_fluxes_phi_odd_LW = 0.
          allocate (LW_int_even(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
          allocate (LW_int_odd( naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
@@ -610,9 +651,21 @@ contains
                    call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
                    integrand_even(:,:,iz,it,ivmu) = NL_term * spread(RH_integrand_even(:,iz,it,ivmu), 1, naky)
                    integrand_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_integrand_odd( :,iz,it,ivmu), 1, naky)
-                   if (present(RH_fluxes_phi_even_LW)) then
+                   if (do_LW) then
                       LW_int_even(:,:,iz,it,ivmu) = NL_term * spread(RH_LW_even(:,iz,it,ivmu), 1, naky)
                       LW_int_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_LW_odd( :,iz,it,ivmu), 1, naky)
+                   end if
+                   if (do_stress) then
+                      !> The same flux with the gyroaverage taken off the ExB
+                      !> velocity.  This is the density-moment (Reynolds) half;
+                      !> the difference from the full flux carries (J0 - 1) and
+                      !> so is the vperp^2, or pressure, half.
+                      vchix_bare = zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it)
+                      call transform_kx2x_xfirst(vchix_bare, vchix_bare_ky_x)
+                      NL_term_ky_x = 2*real(vchix_bare_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
+                      call transform_x2kx_xfirst(NL_term_ky_x, NL_term_rey)
+                      rey_int_even(:,:,iz,it,ivmu) = NL_term_rey * spread(RH_integrand_even(:,iz,it,ivmu), 1, naky)
+                      rey_int_odd( :,:,iz,it,ivmu) = NL_term_rey * spread(RH_integrand_odd( :,iz,it,ivmu), 1, naky)
                    end if
                end do
             end do
@@ -621,9 +674,21 @@ contains
          ! Calculate <RH_fluxes>(even/odd)
          call integrate_vmu(integrand_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even)
          call integrate_vmu(integrand_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd)
-         if (present(RH_fluxes_phi_even_LW)) then
+         if (do_LW) then
             call integrate_vmu(LW_int_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even_LW)
             call integrate_vmu(LW_int_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd_LW)
+         end if
+         if (do_stress) then
+            call integrate_vmu(rey_int_even, spec%dens_psi0*spec%z, RH_fluxes_phi_even_rey)
+            call integrate_vmu(rey_int_odd,  spec%dens_psi0*spec%z, RH_fluxes_phi_odd_rey)
+            !> Every step is linear in the velocity, so the pressure half is
+            !> exactly the remainder.  Taking it by difference rather than by a
+            !> second convolution makes total = Reynolds + diamagnetic an
+            !> identity rather than a check that could drift, and costs one
+            !> transform instead of two.
+            RH_fluxes_phi_even_dia = RH_fluxes_phi_even - RH_fluxes_phi_even_rey
+            RH_fluxes_phi_odd_dia  = RH_fluxes_phi_odd  - RH_fluxes_phi_odd_rey
+            deallocate (rey_int_even, rey_int_odd)
          end if
 
          !!!!!!!!!!!!!!!!!!!!!!!!!

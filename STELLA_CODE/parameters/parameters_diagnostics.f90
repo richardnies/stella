@@ -55,6 +55,7 @@ module parameters_diagnostics
    public :: write_RH_bounce_drift
    public :: write_RH_integrands
    public :: write_RH_asymptotics
+   public :: write_RH_stress_split
 
    private
 
@@ -116,6 +117,11 @@ module parameters_diagnostics
    !> weights alongside the exact ones, so that an asymptotic claim can be
    !> checked in the run that motivates it rather than argued about.  Off by
    !> default: it costs a second pass over the transit averages.
+   !> Split the even/odd nonlinear channels into their Reynolds and
+   !> diamagnetic halves, by rebuilding the flux with the adiabatic part of g
+   !> in place of g.  Costs one extra transform per point in the nonlinear
+   !> loop, so it is off unless asked for.
+   logical :: write_RH_stress_split
    logical :: write_RH_asymptotics
 
 
@@ -251,6 +257,7 @@ contains
          write_RH_bounce_drift = .false.
          write_RH_integrands = .true.
          write_RH_asymptotics = .false.
+         write_RH_stress_split = .false.
          
          !------------------------------
          !      Radial variation       !
@@ -304,7 +311,7 @@ contains
             write_phi2_vs_kxky, write_apar2_vs_kxky, write_bpar2_vs_kxky, &
             write_omega_vs_kxky, write_omega_avg_vs_kxky, write_moments, write_radial_fluxes, &
             write_RH_inertia_fluxes, write_RH_bounce_drift, write_RH_integrands, &
-            write_RH_asymptotics, &
+            write_RH_asymptotics, write_RH_stress_split, &
             write_radial_moments, write_fluxes_kxkyz, write_fluxes_kxky, write_all, flux_norm, nc_mult, &
             ! Backwards compatibility for old stella code
             write_omega, write_phi_vs_time, write_apar_vs_time, write_bpar_vs_time, &
@@ -414,6 +421,7 @@ contains
          call broadcast(write_RH_bounce_drift)
          call broadcast(write_RH_integrands)
          call broadcast(write_RH_asymptotics)
+         call broadcast(write_RH_stress_split)
          call broadcast(write_g2_vs_vpamus)
          call broadcast(write_g2_vs_zvpas)
          call broadcast(write_g2_vs_zmus)
