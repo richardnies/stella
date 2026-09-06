@@ -151,7 +151,7 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
         colour, energy_label = PHI, r'$E_{\rm RH}$'
     else:
         t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_umom_budget(netcdf_file, time_min, time_max)
-        colour, energy_label = UPA, r'$E_{p\rm RH}$'
+        colour, energy_label = UPA, r'$E_{U\rm RH}$'
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(6.6, 5.0), sharex=True,
                                      gridspec_kw=dict(height_ratios=[1, 1.3], hspace=0.12))
@@ -185,14 +185,14 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
     ax_p.axhline(0.0, color='k', lw=0.5, alpha=0.3)
     ax_p.set_xlabel(r'time  $[a/v_{\rm th}]$')
     ax_p.set_ylabel('power into the zonal flow')
-    ax_p.legend(frameon=False, fontsize=8.5, ncol=2)
+    ax_p.legend(frameon=False, fontsize=8.5, ncol=2, loc='upper right')
 
     nonlinear = np.any(P_nl != 0)
     measured, expected = (dEdt - P_coll - P_dr, P_nl) if nonlinear else (dEdt, P)
     residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)
-    ax_p.text(0.985, 0.92, f'residual {residual:.2e}'
-                           f'  ({"nonlinear channel" if nonlinear else "total budget"})',
-              transform=ax_p.transAxes, ha='right', va='top', fontsize=8.5, color='#444')
+    ax_p.text(0.015, 0.035, f'residual {residual:.2e}'
+                            f'  ({"nonlinear channel" if nonlinear else "total budget"})',
+              transform=ax_p.transAxes, ha='left', va='bottom', fontsize=8.5, color='#444')
 
     fig.savefig(outfile)
     plt.close(fig)
