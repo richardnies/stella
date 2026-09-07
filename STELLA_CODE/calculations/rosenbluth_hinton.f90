@@ -583,8 +583,8 @@ contains
       complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_rey, RH_fluxes_phi_odd_rey
       complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_phi_even_dia, RH_fluxes_phi_odd_dia
       complex, dimension(:, :, :, :, :), allocatable :: rey_int_even, rey_int_odd
-      complex, dimension(naky, nakx) :: vchix_bare, NL_term_rey
-      complex, dimension(naky, nx) :: vchix_bare_ky_x
+      complex, dimension(naky, nakx) :: vchix_bare, NL_term_rey, h_gyro
+      complex, dimension(naky, nx) :: vchix_bare_ky_x, h_gyro_ky_x
 
       !> Drive from the transit-averaged radial magnetic drift, reported
       !> separately for the trapped and passing populations; their sum is the
@@ -685,13 +685,41 @@ contains
                       SW_int_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_SW_odd( :,iz,it,ivmu), 1, naky)
                    end if
                    if (do_stress) then
-                      !> The same flux with the gyroaverage taken off the ExB
-                      !> velocity.  This is the density-moment (Reynolds) half;
-                      !> the difference from the full flux carries (J0 - 1) and
-                      !> so is the vperp^2, or pressure, half.
+                      !> The Reynolds half: the BARE velocity against the
+                      !> GYROAVERAGED distribution.
+                      !>
+                      !> Not the bare velocity against the bare distribution,
+                      !> which is what this used to be.  The full flux carries
+                      !> J0 at the ADVECTING mode's wavenumber k', while
+                      !> quasineutrality relates a moment of h to dphi only when
+                      !> the J0 sits at h's own wavenumber, the beat q.  Removing
+                      !> the gyroaverage entirely therefore does not leave the
+                      !> polarisation-charge flux; it leaves that plus an O(b)
+                      !> piece of the pressure moment, and the remainder called
+                      !> "diamagnetic" carried minus the same piece.  The two
+                      !> halves then cancelled: measured at kx = 0, where the
+                      !> total is 1.3e-20 by ambipolarity, each half was 4.4e-05
+                      !> -- nine times the largest value the total reaches at any
+                      !> kx.  They were two halves of one object cut in a place
+                      !> with no physical meaning, and the ratio and the
+                      !> anti-alignment measured from them were properties of the
+                      !> cut.
+                      !>
+                      !> Splitting the Bessel ARGUMENT instead of removing the
+                      !> Bessel fixes it.  gyro_average applies J0 at the
+                      !> wavenumber of the array it is handed, so gyroaveraging
+                      !> h_slice puts J0 at the beat, and the real-space product
+                      !> with the bare velocity is then exactly the flux of
+                      !> polarisation charge -- the Reynolds stress, with no
+                      !> expansion.  The remainder carries
+                      !> J0(k') - J0(q) = O(kx) and is a genuine FLR pressure
+                      !> stress.  Both halves now vanish separately at kx = 0, as
+                      !> a stress must.
                       vchix_bare = zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it)
                       call transform_kx2x_xfirst(vchix_bare, vchix_bare_ky_x)
-                      NL_term_ky_x = 2*real(vchix_bare_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
+                      call gyro_average(h_slice, iz, ivmu, h_gyro)
+                      call transform_kx2x_xfirst(h_gyro, h_gyro_ky_x)
+                      NL_term_ky_x = 2*real(vchix_bare_ky_x * conjg(h_gyro_ky_x)) * exb_nonlin_fac
                       call transform_x2kx_xfirst(NL_term_ky_x, NL_term_rey)
                       rey_int_even(:,:,iz,it,ivmu) = NL_term_rey * spread(RH_integrand_even(:,iz,it,ivmu), 1, naky)
                       rey_int_odd( :,:,iz,it,ivmu) = NL_term_rey * spread(RH_integrand_odd( :,iz,it,ivmu), 1, naky)
