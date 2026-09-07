@@ -3099,6 +3099,31 @@ contains
    !> nfp = 6 rejects 9%, the least, and is four times worse than nfp = 9 which
    !> rejects 21%.  So the fallback is not what this is either.
    !>
+   !> The defining relation has also been checked numerically against this
+   !> implementation, which is the strongest single statement available about
+   !> the construction.  Q is built so that
+   !>
+   !>     vMx = <vMx>_tau + vpar grad_par Q,
+   !>
+   !> and that holds here to roundoff in both branches: for passing orbits
+   !> Q(+L) - Q(-L) comes out at 1e-16 relative over lambda = 0 to 0.39, and for
+   !> trapped ones Psi at the far turning point comes out at 5e-17 relative.  It
+   !> is algebraic rather than accidental -- the passing average uses the same
+   !> trapezoid weights dz/(|gradpar| sqrt(vpa2)) that the cumulative Q integral
+   !> uses, and the trapped average is formed on the very theta nodes Psi is
+   !> integrated on -- which is what the comments beside each of them claim, now
+   !> confirmed rather than asserted.
+   !>
+   !> Checked with it: RH_drift_bounce_avg = energyval * drift_average is right
+   !> because the drift is linear in energy at fixed lambda; drift_norm matches
+   !> time_advance's fac, with tz in drift_weight and not in Q because the phase
+   !> needs v_drift/v_par and tz/stm is smz, which the caller applies; and the
+   !> Maxwellian weighting on the Boltzmann term matches wdriftx_phi's factor for
+   !> factor.  The annihilation then follows algebraically, since
+   !> <J0 exp(-Q)>_tau is constant along the orbit.
+   !>
+   !> So the drift-orbit phase and its consistency with <vMx> are excluded too.
+   !>
    !> So no candidate currently stands.  What is known is narrow but real: the
    !> trapped channel converges at order 1.28 and the circulating channel beside
    !> it at 1.93, in the same runs, so whatever this is distinguishes trapped
