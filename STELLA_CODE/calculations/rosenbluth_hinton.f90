@@ -528,6 +528,7 @@ contains
 
       ! Gyroaveraged ExB and NL term in k-space
       complex, dimension(naky, nakx) :: vchix_gyro, NL_term, coll_term
+      complex, dimension(naky, nakx) :: h_slice
 
       ! Gyroaveraged ExB term, distribution function, and integrand in x and ky
       complex, dimension(naky, nx) :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
@@ -670,7 +671,9 @@ contains
                do iz = -nzgrid, nzgrid
                    call gyro_average(zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_gyro)
                    call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
-                   call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
+                   !> h_s, not g_s: the bracket is with the non-Boltzmann part.
+                   call rh_g_to_h_slice(iz, it, ivmu, g, h_slice)
+                   call transform_kx2x_xfirst(h_slice, g_ky_x)
                    NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) *exb_nonlin_fac
                    call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
                    integrand_even(:,:,iz,it,ivmu) = NL_term * spread(RH_integrand_even(:,iz,it,ivmu), 1, naky)
@@ -732,7 +735,9 @@ contains
                          call gyro_average(-2.0 * vpa(iv)*spec(is)%stm_psi0 &
                                       * zi*spread(aky,2,nakx)*apar(:,:,iz,it), iz, ivmu, vchix_gyro)
                          call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
-                         call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
+                         !> h_s, not g_s: the bracket is with the non-Boltzmann part.
+                         call rh_g_to_h_slice(iz, it, ivmu, g, h_slice)
+                         call transform_kx2x_xfirst(h_slice, g_ky_x)
                          NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) *exb_nonlin_fac
                          call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
                          ! Note odd/even swap because of v_parallel factor in vchi_x
@@ -762,7 +767,9 @@ contains
                                       * zi*spread(aky,2,nakx)*bpar(:,:,iz,it), iz, ivmu, vchix_gyro)
 
                          call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
-                         call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
+                         !> h_s, not g_s: the bracket is with the non-Boltzmann part.
+                         call rh_g_to_h_slice(iz, it, ivmu, g, h_slice)
+                         call transform_kx2x_xfirst(h_slice, g_ky_x)
                          NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) *exb_nonlin_fac
                          call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
                          integrand_even(:,:,iz,it,ivmu) = NL_term *  spread(RH_integrand_even(:,iz,it,ivmu), 1, naky)
@@ -1215,6 +1222,7 @@ contains
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_umom_flux_drift
 
       complex, dimension(naky, nakx) :: vchix_gyro, vchix_part, NL_term
+      complex, dimension(naky, nakx) :: h_slice
       complex, dimension(naky, nx)   :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
       complex, dimension(:, :, :, :, :), allocatable :: flux_tmp
       complex, dimension(:, :, :, :), allocatable :: phi_copy, apar_copy, bpar_copy
@@ -1253,11 +1261,15 @@ contains
                      vchix_gyro = vchix_gyro + vchix_part
                   end if
                   call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
-                  !> g, not gbar, here.  The nonlinearity advects g by the ExB
-                  !> velocity; it is the conserved projection, not the flux, that
-                  !> carries the Apar term.  Substituting gbar here was tried and
-                  !> makes the electromagnetic budget worse (0.29 -> 0.44).
-                  call transform_kx2x_xfirst(g(:,:,iz,it,ivmu), g_ky_x)
+                  !> h_s, not g_s and not gbar_s.  The gyrokinetic nonlinearity
+                  !> is {<chi_s>_R, h_s}; see rh_g_to_h_slice.  gbar is a
+                  !> different object again -- it belongs to the parallel
+                  !> streaming solve and to the conserved projection, and
+                  !> substituting it here was tried and makes the
+                  !> electromagnetic budget worse (0.29 -> 0.44).
+                  !> h_s, not g_s: the bracket is with the non-Boltzmann part.
+                  call rh_g_to_h_slice(iz, it, ivmu, g, h_slice)
+                  call transform_kx2x_xfirst(h_slice, g_ky_x)
                   NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
                   call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
                   integrand(:,:,iz,it,ivmu) = NL_term * spread(RH_umom_weight(:,iz,it,ivmu), 1, naky)
@@ -3174,5 +3186,76 @@ contains
       Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 * RH_drift_phase_fac(iz) * xdriftknob
 
    end subroutine eval_Q_fac
+
+   !======================================================================
+   !====== THE NON-BOLTZMANN DISTRIBUTION ON ONE (iz, it, ivmu) SLICE ====
+   !======================================================================
+   !> The gyrokinetic nonlinearity is the Poisson bracket of the gyroaveraged
+   !> gyrokinetic potential with h_s, not with g_s:
+   !>
+   !>     N_s = (c/B) { <chi_s>_R , h_s } ,
+   !>     h_s = g_s + (Z_s/T_s) [ J_0s dphi + (2 J_1s / a_s)(mu_s/Z_s) dBpar ] F_Ms .
+   !>
+   !> Electrostatically the distinction does not matter: <chi_s>_R = J_0s dphi
+   !> there, and { J_0s dphi , J_0s dphi F_Ms } vanishes identically because
+   !> F_Ms carries no perpendicular dependence.  So the flux may be formed from
+   !> g_s and the answer is the same.  Electromagnetically <chi_s>_R also
+   !> carries -vpa J_0s dApar and the dBpar term, whose brackets with the
+   !> Boltzmann part of h_s do NOT vanish, and forming the flux from g_s drops
+   !> them.  stella itself makes exactly this conversion around its own
+   !> nonlinearity -- see the g_to_h/h_to_g pair bracketing the Poisson bracket
+   !> in advance_ExB_nonlinearity -- and this routine reproduces it for the
+   !> diagnostic, on one slice at a time so that no copy of the whole
+   !> distribution is needed.
+   !>
+   !> The conversion is applied only when the run is electromagnetic, which
+   !> keeps every electrostatic result bit-identical.
+   subroutine rh_g_to_h_slice(iz, it, ivmu, g, h_slice)
+
+      use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
+      use parameters_physics, only: include_apar, include_bpar
+      use parameters_numerical, only: fphi
+      use parameters_kxky_grids, only: naky, nakx
+      use zgrid, only: nzgrid
+      use species, only: spec
+      use vpamu_grids, only: mu, maxwell_vpa, maxwell_mu, maxwell_fac
+      use arrays_fields, only: phi, bpar
+      use gyro_averages, only: gyro_average, gyro_average_j1
+      use parameters_numerical, only: maxwellian_normalization
+
+      implicit none
+
+      integer, intent(in) :: iz, it, ivmu
+      complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(in) :: g
+      complex, dimension(:, :), intent(out) :: h_slice
+
+      complex, dimension(naky, nakx) :: field, adjust
+      integer :: iv, imu, is, ia
+
+      ia = 1
+      iv = iv_idx(vmu_lo, ivmu)
+      imu = imu_idx(vmu_lo, ivmu)
+      is = is_idx(vmu_lo, ivmu)
+
+      h_slice = g(:, :, iz, it, ivmu)
+
+      !> Electrostatic runs are left exactly as they were.
+      if (.not. (include_apar .or. include_bpar)) return
+
+      field = spec(is)%zt * fphi * phi(:, :, iz, it)
+      if (.not. maxwellian_normalization) &
+         field = field * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
+      call gyro_average(field, iz, ivmu, adjust)
+      h_slice = h_slice + adjust
+
+      if (include_bpar) then
+         field = 4.0 * mu(imu) * fphi * bpar(:, :, iz, it)
+         if (.not. maxwellian_normalization) &
+            field = field * maxwell_vpa(iv, is) * maxwell_mu(ia, iz, imu, is) * maxwell_fac(is)
+         call gyro_average_j1(field, iz, ivmu, adjust)
+         h_slice = h_slice + adjust
+      end if
+
+   end subroutine rh_g_to_h_slice
 
 end module rosenbluth_hinton

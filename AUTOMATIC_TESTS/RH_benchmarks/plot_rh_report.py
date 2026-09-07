@@ -151,7 +151,7 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
         colour, energy_label = PHI, r'$E_{\rm RH}$'
     else:
         t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_umom_budget(netcdf_file, time_min, time_max)
-        colour, energy_label = UPA, r'$E_{U\rm RH}$'
+        colour, energy_label = UPA, r'$E_{\Omega\rm RH}$'
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(6.6, 5.0), sharex=True,
                                      gridspec_kw=dict(height_ratios=[1, 1.3], hspace=0.12))
@@ -310,7 +310,7 @@ def figure_summary(cases, outfile):
     fig, ax = plt.subplots(figsize=(7.0, 0.30 * len(cases) + 1.4))
     height = 0.38
     for offset, index, colour, label in ((+height/2, 1, PHI, r'$\varphi_{\rm RH}$'),
-                                         (-height/2, 2, UPA, r'$U_{\rm RH}$')):
+                                         (-height/2, 2, UPA, r'$\Omega_{\rm RH}$')):
         values = [c[index] if c[index] is not None else np.nan for c in cases]
         ax.barh(y + offset, values, height=height, color=colour, label=label, alpha=0.9)
     ax.axvline(0.08, color=GREY, ls='--', lw=1.0)
@@ -748,7 +748,7 @@ def figure_convergence(outfile):
     ax3.plot(x, CONSERVATION_REFINE['phi'], 'o-', color=PHI, lw=1.6, ms=6,
              label=r'$\avgfl{\varphi_{\rm RH}}$'.replace('\\avgfl', ''))
     ax3.plot(x, CONSERVATION_REFINE['U'], 's--', color=UPA, lw=1.6, ms=6,
-             label=r'$U_{\rm RH}$')
+             label=r'$\Omega_{\rm RH}$')
     ax3.set_yscale('log')
     ax3.set_xticks(x); ax3.set_xticklabels(CONSERVATION_REFINE['label'], fontsize=7.5)
     ax3.set_xlabel(r'$n_{\rm zed}$ / $\Delta t$')
@@ -788,7 +788,7 @@ def figure_stellarator_summary(outfile):
     ax.semilogy(x, [STELLARATOR[n]['dphi'] for n in names], 'o-', color=PHI, lw=1.6, ms=6,
                 label=r'$\varphi_{\rm RH}$')
     ax.semilogy(x, [STELLARATOR[n]['dU'] for n in names], 's-', color=UPA, lw=1.6, ms=6,
-                label=r'$U_{\rm RH}$')
+                label=r'$\Omega_{\rm RH}$')
     ax.semilogy(x, [STELLARATOR[n]['share'] for n in names], '^:', color=GREY, lw=1.2, ms=5,
                 label='drift channel size')
     ax.set_xticks(x); ax.set_xticklabels(names, fontsize=8)
@@ -801,7 +801,7 @@ def figure_stellarator_summary(outfile):
     ax2.semilogy(x, bphi, 'o-', color=PHI, lw=1.6, ms=6, label=r'$\varphi_{\rm RH}$')
     xs = [xi for xi, v in zip(x, bU) if v is not None]
     ys = [v for v in bU if v is not None]
-    ax2.semilogy(xs, ys, 's-', color=UPA, lw=1.6, ms=6, label=r'$U_{\rm RH}$')
+    ax2.semilogy(xs, ys, 's-', color=UPA, lw=1.6, ms=6, label=r'$\Omega_{\rm RH}$')
     #> QA carries no U_RH point: its collisional momentum drive is a near
     #> cancellation, leaving a small-signal test rather than a failing one.
     ax2.annotate('QA: momentum drive\nnearly cancels', xy=(2, 9.3e-2), xytext=(1.5, 2.6e-1),
@@ -1008,230 +1008,73 @@ def figure_energy_and_parity(outfile):
     return outfile
 
 
+#> Re-measured 7 Sep with the flux formed from h_s, all three on the same
+#> nonlinear channel and the same windows the tests use.
+#> One run, one window, conversion disabled then enabled.
+AB_TEST = dict(phi_before=6.460e-2, phi_after=4.408e-2,
+               U_before=1.269, U_after=2.451e-1)
 CONTROLS = dict(
     names=['adiabatic electrons,\none species', 'kinetic electrons,\nelectrostatic',
            'electromagnetic'],
-    U=[1.8e-2, 3.0e-1, 2.9e-1],
-    phi=[1.5e-2, 3.6e-1, 6.4e-1],
+    U=[6.00e-3, 4.08e-1, 2.45e-1],
+    phi=[1.52e-2, 4.06e-3, 4.41e-2],
 )
 
 
 def figure_controls(outfile):
-    """The controls that show the residual is not electromagnetic.
+    """Why the electromagnetic residual is what it is.
 
-    The electrostatic kinetic-electron case gives the same 3e-1 with no A_par
-    anywhere, so the residual is the second kinetic species, not the field.
+    Left: forming the nonlinear flux from h_s rather than g_s, measured on one
+    run with the conversion disabled and then enabled.  Right: the three
+    controls, which show the cost is a second kinetic species and not the field.
     """
-    fig, ax = plt.subplots(figsize=(6.4, 3.5))
-    x = np.arange(len(CONTROLS['names'])); w = 0.36
-    ax.bar(x - w/2, CONTROLS['phi'], w, color=PHI, label=r'$\varphi_{\rm RH}$')
-    ax.bar(x + w/2, CONTROLS['U'], w, color=UPA, label=r'$U_{\rm RH}$')
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(10.4, 3.6),
+                                 gridspec_kw=dict(width_ratios=[1, 1.45]))
+
+    x = np.arange(2); w = 0.34
+    a1.bar(x - w/2, [AB_TEST['phi_before'], AB_TEST['phi_after']], w, color=PHI,
+           label=r'$\varphi_{\rm RH}$')
+    a1.bar(x + w/2, [AB_TEST['U_before'], AB_TEST['U_after']], w, color=UPA,
+           label=r'$\Omega_{\rm RH}$')
+    for xi, (a, b) in enumerate(zip([AB_TEST['phi_before'], AB_TEST['phi_after']],
+                                    [AB_TEST['U_before'], AB_TEST['U_after']])):
+        a1.text(xi - w/2, a * 1.15, f'{a:.3f}', ha='center', fontsize=7, color='#333')
+        a1.text(xi + w/2, b * 1.15, f'{b:.3f}', ha='center', fontsize=7, color='#333')
+    a1.annotate('', xy=(1 + w/2, AB_TEST['U_after'] * 1.9),
+                xytext=(0 + w/2, AB_TEST['U_before'] * 1.05),
+                arrowprops=dict(arrowstyle='->', color=UPA, lw=1.5))
+    a1.text(0.5, 0.62, r'$\times 5.2$', transform=a1.transAxes, fontsize=9,
+            color=UPA, ha='center')
+    a1.set_yscale('log'); a1.set_ylim(1e-2, 6.0)
+    a1.set_xticks(x)
+    a1.set_xticklabels(['flux from $g_s$', 'flux from $h_s$'], fontsize=8.5)
+    a1.set_ylabel('nonlinear-channel residual')
+    a1.legend(frameon=False, fontsize=8)
+    a1.set_title('Advecting the right distribution', fontsize=9.5, loc='left')
+
+    x = np.arange(len(CONTROLS['names'])); w = 0.34
+    a2.bar(x - w/2, CONTROLS['phi'], w, color=PHI, label=r'$\varphi_{\rm RH}$')
+    a2.bar(x + w/2, CONTROLS['U'], w, color=UPA, label=r'$\Omega_{\rm RH}$')
     for xi, (a, b) in enumerate(zip(CONTROLS['phi'], CONTROLS['U'])):
-        ax.text(xi - w/2, a * 1.12, f'{a:.1g}', ha='center', fontsize=7.4, color='#333')
-        ax.text(xi + w/2, b * 1.12, f'{b:.1g}', ha='center', fontsize=7.4, color='#333')
-    ax.set_yscale('log'); ax.set_ylim(5e-3, 2.0)
-    ax.set_xticks(x); ax.set_xticklabels(CONTROLS['names'], fontsize=7.8)
-    ax.set_ylabel('budget residual')
-    ax.legend(frameon=False, fontsize=8.4)
-    ax.set_title('Adding a kinetic species, not adding the field, is what costs',
+        a2.text(xi - w/2, a * 1.15, f'{a:.3f}', ha='center', fontsize=7, color='#333')
+        a2.text(xi + w/2, b * 1.15, f'{b:.3f}', ha='center', fontsize=7, color='#333')
+    a2.axhline(0.08, color=GREY, ls='--', lw=1.1)
+    a2.text(-0.46, 0.092, 'benchmark tolerance', fontsize=7, color=GREY, ha='left')
+    a2.annotate('', xy=(1 - w/2 + 0.02, CONTROLS['U'][1] * 0.9),
+                xytext=(0 + w/2, CONTROLS['U'][0] * 1.15),
+                arrowprops=dict(arrowstyle='->', color=UPA, lw=1.5))
+    a2.text(0.36, 0.30, r'$\times 68$', transform=a2.transAxes, fontsize=9,
+            color=UPA, ha='center')
+    a2.set_yscale('log'); a2.set_ylim(2e-3, 2.0)
+    a2.set_xticks(x); a2.set_xticklabels(CONTROLS['names'], fontsize=8)
+    a2.legend(frameon=False, fontsize=8, loc='upper left')
+    a2.set_title('A second kinetic species costs; the field does not',
                  fontsize=9.5, loc='left')
+
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
-
-
-# ---------------------------------------------------------------------------
-# The field locking onto its projection, the geometry factors, the nonlinear
-# scaling, and the two decompositions.
-# ---------------------------------------------------------------------------
-
-LOCK_U = dict(t=[0, 0.8, 1.6, 2.4, 3.2, 4.0],
-              r=[3.548, 3.547, 3.544, 3.540, 3.533, 3.525])
-LOCK_PHI = dict(t=[0, 160, 320, 480, 640, 800],
-                r=[9.15, 1.51, 1.04, 0.998, 1.04, 0.996])
-
-
-def figure_projection_lock(outfile):
-    """The two invariants seen directly in the fields they predict."""
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.2, 3.4))
-
-    a1.plot(LOCK_U['t'], LOCK_U['r'], 'o-', color=UPA, lw=1.7, ms=6)
-    a1.set_ylim(3.50, 3.57)
-    a1.set_xlabel(r'$t$')
-    a1.set_ylabel(r'$|u_\parallel|\,/\,|U_{\rm RH}/I_U|$')
-    a1.set_title(r'The flow stays locked to its projection', fontsize=9.5, loc='left')
-    a1.text(0.04, 0.10, 'drifts by $0.6\\%$ over the run:\nthe ratio is a property of the\n'
-            'weight, not of the initial state',
-            transform=a1.transAxes, fontsize=7, color='#444')
-
-    a2.plot(LOCK_PHI['t'], LOCK_PHI['r'], 'o-', color=PHI, lw=1.7, ms=6)
-    a2.axhline(1.0, color=GREY, ls=':', lw=1.4)
-    a2.set_yscale('log')
-    a2.set_xlabel(r'$t$')
-    a2.set_ylabel(r'$|\varphi|\,/\,|\varphi_{\rm RH}/\langle I\rangle|$')
-    a2.set_title(r'The potential relaxes onto its projection', fontsize=9.5, loc='left')
-    a2.text(0.35, 0.72, 'the GAM rings down and $\\varphi$ settles\n'
-            'onto the conserved projection, to $0.4\\%$',
-            transform=a2.transAxes, fontsize=7, color='#444')
-
-    fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
-    return outfile
-
-
-UPAR_RATIO = dict(kx=[0.500, 0.167], measured=[3.540, 3.852], predicted=3.919)
-TAU_GEOM = dict(eps=[0.18, 0.025],
-                vpar2=[0.902, 0.994], vparB=[0.983, 0.9997])
-INERTIA_GEOM = dict(eps=[0.18, 0.025], predicted=[8.39, 20.83],
-                    measured=[9.16, 22.32], IU=[0.451, 0.497])
-
-
-def figure_geometry_factors(outfile):
-    """Three closed-form geometry factors, each measured at two aspect ratios."""
-    fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(12.4, 3.4))
-
-    x = np.arange(len(UPAR_RATIO['kx'])); w = 0.42
-    a1.bar(x, UPAR_RATIO['measured'], w, color=UPA, label='measured')
-    a1.axhline(UPAR_RATIO['predicted'], color=PHI, ls='--', lw=1.6,
-               label='closed form')
-    for xi, m in zip(x, UPAR_RATIO['measured']):
-        a1.text(xi, m - 0.28, f'{m/UPAR_RATIO["predicted"]:.3f}',
-                ha='center', fontsize=8, color='white', weight='bold')
-    a1.set_xticks(x); a1.set_xticklabels([rf'$k_x\rho={k}$' for k in UPAR_RATIO['kx']],
-                                         fontsize=8.5)
-    a1.set_xlim(-0.62, len(x) - 0.38)
-    a1.set_ylim(0, 5.0); a1.set_ylabel(r'$|u_\parallel|\,/\,|U_{\rm RH}/I_U|$')
-    a1.legend(frameon=False, fontsize=7.8, loc='upper left')
-    a1.set_title('The flow ratio (labels: measured/predicted)', fontsize=9.2, loc='left')
-
-    x = np.arange(len(TAU_GEOM['eps'])); w = 0.34
-    a2.bar(x - w/2, TAU_GEOM['vpar2'], w, color=PHI,
-           label=r'$\langle\langle v_\parallel\rangle_\tau^2\rangle/\langle v_\parallel^2\rangle$')
-    a2.bar(x + w/2, TAU_GEOM['vparB'], w, color=UPA,
-           label=r'$\langle\langle v_\parallel/B\rangle_\tau^2\rangle/\langle\langle v_\parallel\rangle_\tau^2\rangle$')
-    a2.axhline(1.0, color=GREY, ls=':', lw=1.3)
-    a2.set_ylim(0.85, 1.03)
-    a2.set_xticks(x); a2.set_xticklabels([rf'$\epsilon={e}$' for e in TAU_GEOM['eps']], fontsize=8)
-    a2.legend(frameon=False, fontsize=7.0)
-    a2.set_title(r'Both $\to 1$ as $\epsilon\to 0$, as the closed form assumes',
-                 fontsize=9.2, loc='left')
-
-    x = np.arange(len(INERTIA_GEOM['eps'])); w = 0.34
-    a3.bar(x - w/2, INERTIA_GEOM['predicted'], w, color=GREY,
-           label=r'$1+1.6q^2/\sqrt{\epsilon}$')
-    a3.bar(x + w/2, INERTIA_GEOM['measured'], w, color=PHI, label='measured')
-    for xi, (pr, me) in enumerate(zip(INERTIA_GEOM['predicted'], INERTIA_GEOM['measured'])):
-        a3.text(xi, max(pr, me) + 0.9, f'{100*(me/pr-1):.0f}%', ha='center',
-                fontsize=7.4, color='#333')
-    a3.set_xticks(x); a3.set_xticklabels([rf'$\epsilon={e}$' for e in INERTIA_GEOM['eps']],
-                                         fontsize=8)
-    a3.set_ylim(0, 27); a3.set_ylabel('neoclassical polarisation')
-    a3.legend(frameon=False, fontsize=7.4, loc='upper left')
-    a3.set_title(r'The inertia, to $7$--$9\%$  ($I_U$: $0.451$, $0.497 \to 1/2$)',
-                 fontsize=9.2, loc='left')
-
-    fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
-    return outfile
-
-
-NL_SCALING = {
-    'tokamak': dict(q=1.40, ratios=[6.03, 2.92, 2.78, 1.96, 1.88], power=-0.72),
-    'TJ-II':   dict(q=0.63, ratios=[3.11, 2.60], power=-0.26),
-    'QH':      dict(q=0.80, ratios=[3.37, 2.92], power=-0.21),
-    'QA':      dict(q=2.39, ratios=[7.87, 6.93], power=-0.18),
-}
-
-
-def figure_nonlinear_scaling(outfile):
-    """The even/odd ratio of the nonlinear drive falls with k_x everywhere."""
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.4, 3.4))
-    cols = {'tokamak': PHI, 'TJ-II': UPA, 'QH': '#2e7d6b', 'QA': '#7d3c6b'}
-
-    for name, d in NL_SCALING.items():
-        a1.plot(np.arange(1, len(d['ratios']) + 1), d['ratios'], 'o-',
-                color=cols[name], lw=1.6, ms=5.5, label=name)
-    a1.set_yscale('log')
-    a1.set_xlabel('successive resolved zonal mode (increasing $k_x$)')
-    a1.set_ylabel(r'$|F^{\rm NL}_{\rm even}|/|F^{\rm NL}_{\rm odd}|$')
-    a1.set_xticks([1, 2, 3, 4, 5])
-    a1.legend(frameon=False, fontsize=7.6)
-    a1.set_title(r'Falls with $k_x$ in every configuration', fontsize=9.5, loc='left')
-
-    for name, d in NL_SCALING.items():
-        a2.plot(d['q'], d['power'], 'o', color=cols[name], ms=9)
-        a2.annotate(name, xy=(d['q'], d['power']), xytext=(0, 9),
-                    textcoords='offset points', ha='center', fontsize=7.6,
-                    color=cols[name])
-    a2.axhline(0.0, color=GREY, ls=':', lw=1.4)
-    a2.set_xlabel(r'$q$'); a2.set_ylabel('fitted power of $k_x$')
-    a2.set_ylim(-1.42, 0.22); a2.set_xlim(0.3, 2.8)
-    a2.set_title('Agreement in sign, not in exponent', fontsize=9.5, loc='left')
-    a2.text(0.5, 0.035, 'all negative, ruling out the $O(k_x^2)$ of the naive\n'
-            'cancellation argument; two points spanning a factor\n'
-            'of two is thin evidence for a power',
-            transform=a2.transAxes, fontsize=6.9, color='#444', ha='center')
-
-    fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
-    return outfile
-
-
-STRESS_TABLE = dict(names=[r'$k_x\rho = 0.1$', r'summed over $k_x$'],
-                    rey=[5.32e-4, 1.07e-3], dia=[1.93e-3, 2.73e-3])
-SPECIES_SPLIT = dict(names=['electrostatic,\nkinetic electrons', 'electromagnetic'],
-                     upar=[5.6e2, 5.1e4], mom=[9.2, 845.0])
-
-
-def figure_stress_and_species(outfile):
-    """Where the stress sits, and where the parallel flow sits."""
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.4, 3.4))
-
-    x = np.arange(len(STRESS_TABLE['names'])); w = 0.34
-    a1.bar(x - w/2, STRESS_TABLE['rey'], w, color=PHI, label=r'$|\Pi_\varphi|$  (Reynolds)')
-    a1.bar(x + w/2, STRESS_TABLE['dia'], w, color=UPA, label=r'$|\Pi_T|$  (diamagnetic)')
-    for xi, (r, d) in enumerate(zip(STRESS_TABLE['rey'], STRESS_TABLE['dia'])):
-        a1.text(xi, max(r, d) * 1.08, f'ratio {d/r:.2f}', ha='center',
-                fontsize=7.4, color='#333')
-    a1.set_xticks(x); a1.set_xticklabels(STRESS_TABLE['names'], fontsize=8)
-    a1.set_ylabel('stress'); a1.set_ylim(0, 3.4e-3)
-    a1.legend(frameon=False, fontsize=7.6)
-    a1.set_title('The diamagnetic stress is the larger of the two',
-                 fontsize=9.5, loc='left')
-
-    x = np.arange(len(SPECIES_SPLIT['names'])); w = 0.34
-    a2.bar(x - w/2, SPECIES_SPLIT['upar'], w, color=PHI, label=r'$u_{\parallel e}/u_{\parallel i}$')
-    a2.bar(x + w/2, SPECIES_SPLIT['mom'], w, color=UPA, label='momentum, $e/i$')
-    a2.set_yscale('log'); a2.set_ylim(1, 3e5)
-    a2.set_xticks(x); a2.set_xticklabels(SPECIES_SPLIT['names'], fontsize=8)
-    a2.legend(frameon=False, fontsize=7.6)
-    a2.set_title(r'Electrons carry the parallel flow ($j_\parallel$: $100\%$)',
-                 fontsize=9.5, loc='left')
-
-    fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
-    return outfile
-
-
-# Measured with the current binary (7 Sep) on the three tokamak decks plus the
-# stellarator constants above.  These runs are not bit-reproducible between
-# invocations, so treat them as representative of the tolerance the suite
-# asserts (0.06-0.08), not as fixed reference values.
-SUMMARY_CASES = [
-    ('tokamak, linear collisional',      8.42e-3, 3.61e-2),
-    ('tokamak, NL adiabatic electrons',  1.52e-2, 6.00e-3),
-    ('tokamak, NL kinetic',              4.06e-3, 4.08e-1),
-    ('ITER, linear collisional',         1.98e-2, 2.82e-2),
-    ('W7-X, linear collisional',         3.75e-2, 5.14e-2),
-    ('QH, linear collisional',           2.58e-2, 4.39e-2),
-    ('TJ-II, linear collisional',        6.99e-2, 4.09e-2),
-    ('QA, linear collisional',           9.30e-2, None),
-    ('ITER, collisionless drift',        4.1e-3,  1.5e-3),
-    ('W7-X, collisionless drift',        3.0e-2,  8.5e-4),
-    ('QA, collisionless drift',          9.5e-3,  1.6e-3),
-    ('QH, collisionless drift',          6.9e-2,  1.1e-3),
-    ('TJ-II, collisionless drift',       5.0e-1,  3.5e-3),
-    ('W7-X, electromagnetic drift',      1.2e-1,  6.2e-4),
-    ('QA, electromagnetic drift',        1.7e-1,  2.0e-4),
-    ('TJ-II, electromagnetic drift',     1.34,    2.2e-3),
-]
 
 
 # ---------------------------------------------------------------------------
