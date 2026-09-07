@@ -3081,6 +3081,24 @@ contains
    !> no geometric property above 0.51.  Look for a missing or mis-derived term
    !> in the drift flux, not for a better quadrature.
    !>
+   !> Two components of that flux have since been checked and are right.  The
+   !> Boltzmann part of h: the diagnostic does not feed back, so a run with the
+   !> term and one without have bit-identical dynamics and the flux is linear in
+   !> it, which makes its coefficient scannable exactly and offline.  Removing it
+   !> takes nfp = 9 from 1.6e-02 to 4.3e-01, and the optimum coefficient is
+   !> 1.000 there -- the coded value, with no improvement available -- against
+   !> 1.110 at nfp = 8.  A real coefficient error sits in the same place in both,
+   !> as the momentum inertia did; this does not.
+   !>
+   !> And the fallback for wells find_well rejects, which gives those orbits
+   !> Q = 0 while reporting a pointwise drift average -- a weight and a residual
+   !> from different orbits, and the most obvious remaining inconsistency in the
+   !> chain.  Across the nfield_periods scan the rejected fraction runs from 9%
+   !> to 52% while the residual runs from 1.5e-02 to 2.7e-01, and they correlate
+   !> at +0.12.  nfp = 5 rejects 52%, the most of any, and is second best;
+   !> nfp = 6 rejects 9%, the least, and is four times worse than nfp = 9 which
+   !> rejects 21%.  So the fallback is not what this is either.
+   !>
    !> So no candidate currently stands.  What is known is narrow but real: the
    !> trapped channel converges at order 1.28 and the circulating channel beside
    !> it at 1.93, in the same runs, so whatever this is distinguishes trapped
