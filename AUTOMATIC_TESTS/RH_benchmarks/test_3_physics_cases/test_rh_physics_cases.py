@@ -208,12 +208,41 @@ KNOWN_PHI_FAILURES = {
     #> -0.11.  Nor does it track wells (+0.45), mirror ratio (+0.25), trapped
     #> fraction (+0.43) or points per well (-0.51).
     #>
+    #> What the residual DOES track is the turnover, and strongly:
+    #>
+    #>    corr(log resid, log turnover)   -0.947      resid ~ turnover^-1.44
+    #>    corr(log resid, points/well)    -0.51
+    #>    corr(log resid, wells)          +0.45
+    #>    corr(log resid, trapped frac)   +0.43
+    #>    corr(log resid, trapped share)  +0.15
+    #>    corr(log resid, join jump)      -0.11
+    #>
+    #> Multiplying the residual by the turnover collapses an 18.5x spread across
+    #> the scan to 3.5x.  So this statistic is a roughly fixed absolute
+    #> non-conservation divided by the strength of the drive, and the drive
+    #> varies sixfold with tube length.  The 1.2e-01 at nfp = 8 is a statement
+    #> about how weakly the drift channel drives in this deck, not about the
+    #> drift flux being 12% wrong.
+    #>
+    #> That also explains the alpha0 results quantitatively, which had been read
+    #> the other way round.  Going to alpha0 = 0 collapses the turnover, and the
+    #> residual rises by about what turnover^-1.44 predicts:
+    #>
+    #>    QH   turnover 0.83 -> 0.11   predicted 18x   measured 23x
+    #>    W7-X turnover 0.96 -> 0.63   predicted 1.8x  measured 3.1x
+    #>
+    #> so "alpha0 = 0 is worse" was the denominator collapsing, not the physics
+    #> degrading.  alpha0 = 0 is the stellarator-symmetry point: the tube closes
+    #> exactly there AND the bounce-averaged drift largely cancels, which are the
+    #> same symmetry, so it cannot be used to test the one without removing the
+    #> other.
+    #>
     #> The tolerance is left calibrated on nfp = 8 because that is what the deck
-    #> runs and a two-sided bound on a known failure is still worth having.  But
-    #> a fix should be judged on the scan, not on this one number, and the fact
-    #> that the same diagnostic closes to 1.5e-02 two field periods away is the
-    #> strongest evidence in this file that what fails here is not the
-    #> formulation.
+    #> runs.  But the statistic itself is the thing to fix here: a residual
+    #> normalised by |P| is unstable when |P| is small, and either driving this
+    #> case harder (nfp = 9 reaches turnover 4.4 and closes to 1.5e-02) or
+    #> dividing by something better conditioned would make it measure the drift
+    #> channel rather than the drive.
     ('w7x', 1): (0.06, 0.40),
     #> Cases 3 and 6 are the electromagnetic multi-species pair, and they do not
     #> close.  Cases 2 and 5 were added to say why: they are the same runs with
