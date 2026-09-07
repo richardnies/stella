@@ -1381,26 +1381,27 @@ def figure_case_budget(runs, outfile, case_title=''):
 
 
 
-#> The seven cases, both configurations, as measured on 7 Sep.  A `False` in the
+#> The seven cases, both configurations, as reported by the run of
+#> test_rh_physics_cases.py that asserts them (14 passed, 35 min).  A `False` in the
 #> last two slots marks a panel whose energy turnover is below 0.5: the budget is
 #> then satisfied by a correct diagnostic and a broken one alike, so the number
 #> is drawn hollow and is not a result.
 CASE_SUMMARY = [
     #  label                                        phi      Om     phi ok  Om ok
     ('1  linear collisionless / Miller',          9.20e-3, 9.12e-3, False, False),
-    ('1  linear collisionless / W7-X',            1.81e-1, 6.68e+1, False, False),
-    ('2  linear collisional / Miller',            9.16e-3, 3.48e-2, True,  False),
-    ('2  linear collisional / W7-X',              2.23e-3, 2.35e-2, True,  True),
+    ('1  linear collisionless / W7-X',            2.35e-1, 2.34e+1, False, False),
+    ('2  linear collisional / Miller',            5.70e-3, 1.81e-2, True,  False),
+    ('2  linear collisional / W7-X',              2.51e-3, 2.43e-2, True,  False),
     ('3  NL modified-adiabatic / Miller',         2.27e-2, 4.62e-2, True,  True),
     ('3  NL modified-adiabatic / W7-X',           1.35e-2, 1.12e-1, False, False),
     ('4  NL adiabatic / Miller',                  1.10e-2, 3.10e-2, True,  True),
     ('4  NL adiabatic / W7-X',                    7.25e-3, 1.56e-1, False, False),
     ('5  NL kinetic / Miller',                    1.28e-2, 2.65e-1, True,  True),
     ('5  NL kinetic / W7-X',                      8.47e-4, 1.77e-2, True,  True),
-    ('6  NL electromagnetic, dApar / Miller',     4.77e-2, 1.16e+0, True,  True),
+    ('6  NL electromagnetic, dApar / Miller',     4.80e-2, 1.14e+0, True,  True),
     ('6  NL electromagnetic, dApar / W7-X',       6.78e-2, 5.23e+0, True,  True),
-    ('7  NL electromagnetic, both / Miller',      4.05e-2, 1.33e-2, True,  True),
-    ('7  NL electromagnetic, both / W7-X',        3.14e-2, 9.58e-2, True,  True),
+    ('7  NL electromagnetic, both / Miller',      3.98e-2, 1.33e-2, True,  True),
+    ('7  NL electromagnetic, both / W7-X',        2.86e-2, 1.03e-1, True,  True),
 ]
 
 
@@ -1425,7 +1426,7 @@ def figure_case_summary(cases, outfile):
                 edgecolor=colour, linewidth=1.1,
                 hatch=[None if o else '///' for o in oks])
     ax.axvline(0.08, color=GREY, ls='--', lw=1.1)
-    ax.text(0.088, len(cases) - 0.4, 'benchmark tolerance', fontsize=7.3, color=GREY, va='bottom')
+    ax.text(0.088, -0.72, 'benchmark tolerance', fontsize=7.3, color=GREY, va='top')
     ax.set_xscale('log')
     ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=7.8)
     ax.invert_yaxis()
