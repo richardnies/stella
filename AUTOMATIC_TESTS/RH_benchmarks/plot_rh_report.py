@@ -1286,8 +1286,8 @@ def figure_case_budget(runs, outfile, case_title=''):
     rows = len(runs)
     fig, axes = plt.subplots(rows, 2, figsize=(10.2, 2.9 * rows), squeeze=False)
     for r, (label, path, kw) in enumerate(runs):
-        for c, (which, colour, name) in enumerate((('phi', PHI, r'$\varphi_{\rm RH}$'),
-                                                   ('omega', UPA, r'$\Omega_{\rm RH}$'))):
+        for c, (which, name) in enumerate((('phi', r'$\varphi_{\rm RH}$'),
+                                           ('omega', r'$\Omega_{\rm RH}$'))):
             ax = axes[r][c]
             try:
                 t, dEdt, P, chans, resid, turn, conserved = _budget_series(
@@ -1304,11 +1304,22 @@ def figure_case_budget(runs, outfile, case_title=''):
             #> unit is flat against the spike.  Where the two curves lie on top
             #> of one another the budget closes; the gap between them IS the
             #> residual, visible directly rather than only in the annotation.
-            floor = max(np.nanmax(np.abs(P)), 1e-300) * 1e-6
-            ax.semilogy(t, np.maximum(np.abs(dEdt), floor), color=colour, lw=1.9,
+            #> The same colours in both columns: the legend is drawn once and has
+            #> to mean the same thing in the phi panel and the Omega panel.
+            #>
+            #> The vertical range is set from the DRIVEN part of the signal, not
+            #> from its full extent.  A run that starts at round-off and grows
+            #> through fifteen decades otherwise spends most of its axis showing
+            #> the noise floor, and the part that carries the budget is squeezed
+            #> into the top centimetre.  Everything below a millionth of the peak
+            #> is clipped away.
+            curves = [np.abs(dEdt), np.abs(P)] + [np.abs(v) for v in chans.values()
+                                                  if np.any(v != 0)]
+            peak = max(np.nanmax(c) for c in curves)
+            floor = peak * 1e-6
+            ax.semilogy(t, np.maximum(np.abs(dEdt), floor), color=PHI, lw=1.9,
                         label=r'$|dE/dt|$  (measured)')
-            ax.semilogy(t, np.maximum(np.abs(P), floor),
-                        color='#c2703a' if which == 'phi' else '#2e6f8e',
+            ax.semilogy(t, np.maximum(np.abs(P), floor), color=UPA,
                         lw=1.3, ls='--', label=r'$|\sum P|$  (predicted)')
             for series, ccol, cname in ((chans['nonlinear'], '#7d3c6b', 'nonlinear'),
                                         (chans['collisional'], '#8a6d1f', 'collisional'),
@@ -1316,7 +1327,12 @@ def figure_case_budget(runs, outfile, case_title=''):
                 if np.any(series != 0):
                     ax.semilogy(t, np.maximum(np.abs(series), floor), color=ccol,
                                 lw=0.8, alpha=0.75, label=cname)
-            ax.set_ylim(floor * 5, None)
+            ax.set_ylim(floor, peak * 3.0)
+            if conserved:
+                #> sum P is identically zero here; scale to the measured side.
+                m = np.nanmax(np.abs(dEdt))
+                if m > 0:
+                    ax.set_ylim(m * 1e-3, m * 3.0)
             note = (f'no drive: invariant flat to {resid:.1e}' if conserved
                     else f'median residual {resid:.1e}   turnover {turn:.1f}')
             ax.text(0.015, 0.035, note, transform=ax.transAxes,
@@ -1341,6 +1357,69 @@ def figure_case_budget(runs, outfile, case_title=''):
     return outfile
 
 
+
+
+#> The seven cases, both configurations, as measured on 7 Sep.  A `False` in the
+#> last two slots marks a panel whose energy turnover is below 0.5: the budget is
+#> then satisfied by a correct diagnostic and a broken one alike, so the number
+#> is drawn hollow and is not a result.
+CASE_SUMMARY = [
+    #  label                                        phi      Om     phi ok  Om ok
+    ('1  linear collisionless / Miller',          9.20e-3, 9.12e-3, False, False),
+    ('1  linear collisionless / W7-X',            1.81e-1, 6.68e+1, False, False),
+    ('2  linear collisional / Miller',            9.16e-3, 3.48e-2, True,  False),
+    ('2  linear collisional / W7-X',              2.23e-3, 2.35e-2, True,  True),
+    ('3  NL modified-adiabatic / Miller',         2.27e-2, 4.62e-2, True,  True),
+    ('3  NL modified-adiabatic / W7-X',           1.35e-2, 1.12e-1, False, False),
+    ('4  NL adiabatic / Miller',                  1.10e-2, 3.10e-2, True,  True),
+    ('4  NL adiabatic / W7-X',                    7.25e-3, 1.56e-1, False, False),
+    ('5  NL kinetic / Miller',                    1.28e-2, 2.65e-1, True,  True),
+    ('5  NL kinetic / W7-X',                      8.47e-4, 1.77e-2, True,  True),
+    ('6  NL electromagnetic, dApar / Miller',     4.77e-2, 1.16e+0, True,  True),
+    ('6  NL electromagnetic, dApar / W7-X',       6.78e-2, 5.23e+0, True,  True),
+    ('7  NL electromagnetic, both / Miller',      4.05e-2, 1.33e-2, True,  True),
+    ('7  NL electromagnetic, both / W7-X',        3.14e-2, 9.58e-2, True,  True),
+]
+
+
+def figure_case_summary(cases, outfile):
+    """Every case and configuration on one axis, with the vacuous ones marked.
+
+    Hollow bars are panels whose energy turnover is below 0.5.  They are shown
+    rather than dropped, because which cases fail to drive the flow is itself
+    information -- W7-X without the flux-surface-average term, and a
+    momentum-conserving collision operator acting on a momentum invariant.
+    """
+    labels = [c[0] for c in cases]
+    y = np.arange(len(cases))
+    fig, ax = plt.subplots(figsize=(8.2, 0.34 * len(cases) + 1.5))
+    h = 0.38
+    for off, idx, ok_idx, colour, name in ((+h/2, 1, 3, PHI, r'$\varphi_{\rm RH}$'),
+                                           (-h/2, 2, 4, UPA, r'$\Omega_{\rm RH}$')):
+        vals = [c[idx] for c in cases]
+        oks = [c[ok_idx] for c in cases]
+        ax.barh(y + off, vals, height=h, label=name,
+                color=[colour if o else 'none' for o in oks],
+                edgecolor=colour, linewidth=1.1,
+                hatch=[None if o else '///' for o in oks])
+    ax.axvline(0.08, color=GREY, ls='--', lw=1.1)
+    ax.text(0.088, len(cases) - 0.4, 'benchmark tolerance', fontsize=7.3, color=GREY, va='bottom')
+    ax.set_xscale('log')
+    ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=7.8)
+    ax.invert_yaxis()
+    ax.set_xlabel('median relative residual of the budget')
+    ax.legend(frameon=False, fontsize=9, ncol=2, loc='lower center',
+              bbox_to_anchor=(0.5, 1.01))
+    ax.grid(axis='y', alpha=0)
+    ax.text(0.99, 0.015, 'hollow: energy turnover below 0.5, so the budget is\n'
+                         'satisfied whether the diagnostic is right or not',
+            transform=ax.transAxes, fontsize=6.9, color='#555', ha='right')
+    fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
 # ---------------------------------------------------------------------------
 # Regenerate every figure that is built from measured constants alone (no
 # netCDF needed):  python3 plot_rh_report.py [outdir]
@@ -1356,7 +1435,7 @@ STANDALONE_FIGURES = {
     'fig_projection_lock.pdf': 'figure_projection_lock',
     'fig_geometry_factors.pdf': 'figure_geometry_factors',
     'fig_stress_and_species.pdf': 'figure_stress_and_species',
-    'fig_summary.pdf': lambda out: figure_summary(SUMMARY_CASES, out),
+    'fig_case_summary.pdf': lambda out: figure_case_summary(CASE_SUMMARY, out),
 }
 
 if __name__ == '__main__':
