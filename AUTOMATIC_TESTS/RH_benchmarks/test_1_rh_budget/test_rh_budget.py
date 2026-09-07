@@ -169,7 +169,7 @@ def test_whether_rh_budget_closes_for_linear_collisional_zonal_flow(tmp_path, st
 def test_whether_rh_budget_closes_for_nonlinear_modified_adiabatic_electrons(tmp_path, stella_version):
     '''Zonal flow driven nonlinearly by an ITG mode, with the flux-surface-average
     term retained in the adiabatic electron response.'''
-    check_rh_budget('rh_nl_adiabatic_electrons.in', tmp_path, stella_version,
+    check_rh_budget('rh_nl_modified_adiabatic.in', tmp_path, stella_version,
                     tolerance=0.08, time_min=20.0, time_max=28.0, channel='nonlinear')
     return
 
@@ -177,7 +177,7 @@ def test_whether_rh_budget_closes_for_nonlinear_modified_adiabatic_electrons(tmp
 def test_whether_rh_budget_closes_for_nonlinear_unmodified_adiabatic_electrons(tmp_path, stella_version):
     '''As above, but with a plain Boltzmann electron response (no
     flux-surface-average term), which is the opposite adiabatic closure.'''
-    check_rh_budget('rh_nl_adiabatic_ions.in', tmp_path, stella_version,
+    check_rh_budget('rh_nl_adiabatic.in', tmp_path, stella_version,
                     tolerance=0.08, time_min=20.0, time_max=28.0, channel='nonlinear')
     return
 
@@ -409,7 +409,7 @@ def test_whether_umom_budget_closes_for_nonlinear_adiabatic_electrons(tmp_path, 
     is not available here because after that cut the momentum channel has no
     signal left to test.
     '''
-    check_rh_omega_budget('rh_nl_adiabatic_electrons.in', tmp_path, stella_version,
+    check_rh_omega_budget('rh_nl_modified_adiabatic.in', tmp_path, stella_version,
                          tolerance=0.06, time_min=20.0, time_max=30.0,
                          channel='nonlinear')
     return

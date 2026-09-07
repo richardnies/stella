@@ -42,8 +42,8 @@ Cases
 | deck | what it covers | window | residual |
 |------|----------------|--------|----------|
 | `rh_linear_collisional.in`     | linear, collisional damping of one zonal mode; the only source is `RH_fluxes_collisional` | whole run | 8.6e-3 |
-| `rh_nl_adiabatic_electrons.in` | nonlinear, modified adiabatic electrons (flux-surface-average term kept) | t = 15..27 | 6.5e-3 |
-| `rh_nl_adiabatic_ions.in`      | nonlinear, unmodified adiabatic electrons (plain Boltzmann) | t = 15..27 | 3.9e-3 |
+| `rh_nl_modified_adiabatic.in` | nonlinear, modified adiabatic electrons (flux-surface-average term kept) | t = 15..27 | 6.5e-3 |
+| `rh_nl_adiabatic.in`      | nonlinear, unmodified adiabatic electrons (plain Boltzmann) | t = 15..27 | 3.9e-3 |
 | `rh_nl_kinetic.in`             | nonlinear, kinetic ions and kinetic electrons | t = 10..20, kx <= 1.1 | 4.0e-3 |
 | `rh_nl_electromagnetic.in`     | nonlinear electromagnetic, apar and bpar channels | t = 6..16, kx <= 1.1 | 5.9e-2 |
 

@@ -1,0 +1,92 @@
+! Case 4: nonlinear, adiabatic electrons.
+! Miller tokamak, zonal mode at kx rho = 0.2, turbulence at ky rho = 0.2.
+! Rosenbluth-Hinton energy budget: minimal nonlinear electrostatic run with
+! MODIFIED adiabatic electrons (the flux-surface-average term is retained).
+! CBC-like gradients make the non-zonal ky ITG unstable, so the mode grows and
+! saturates and a genuine nonlinearly driven zonal flow appears -- without that
+! the budget just measures numerical noise.
+&parameters_physics
+  adiabatic_option = 'no-field-line-average-term'
+  nonlinear = .true.
+  vnew_ref = 0.01
+/
+&kt_grids_knobs
+  grid_option = 'box'
+/
+&kt_grids_box_parameters
+
+
+
+
+  ny = 12
+  nx = 12
+  y0 = 5.0
+  jtwist = 5
+/
+&init_g_knobs
+  ginit_option = 'noise'
+  phiinit = 0.01
+  width0 = 1.0
+/
+&species_knobs
+  nspec = 1
+/
+&species_parameters_1
+  dens = 1.0
+  fprim = 2.2
+  mass = 1.0
+  temp = 1.0
+  tprim = 8.0
+  type = 'ion'
+  z = 1.0
+/
+&zgrid_parameters
+  boundary_option = 'linked'
+  nperiod = 1
+  nzed = 24
+/
+&vpamu_grids_parameters
+  nmu = 8
+  nvgrid = 18
+/
+&knobs
+  ! Fix the seed: ginit_option='noise' otherwise draws a different initial
+  ! condition each run, and these runs grow exponentially, so the residual would not
+  ! be reproducible between invocations of the same deck.
+  rng_seed = 1
+  delt = 0.02
+  nstep = 1400
+  print_extra_info_to_terminal = .false.
+  drifts_implicit = .true.
+/
+&stella_diagnostics_knobs
+  nsave = -1
+  nwrite = 2
+  save_for_restart = .false.
+  write_RH_inertia_fluxes = .true.
+/
+&geo_knobs
+  geo_option = 'miller'
+/
+&millergeo_parameters
+  nzed_local = 128
+  rhoc = 0.5
+  shat = 0.796
+  qinp = 1.4
+  rmaj = 2.77778
+  rgeo = 2.77778
+  shift = 0.0
+  kappa = 1.0
+  kapprim = 0.0
+  tri = 0.0
+  triprim = 0.0
+  betaprim = 0.0
+  d2qdr2 = 0.0
+  d2psidr2 = 0.0
+  betadbprim = 0.0
+/
+&dissipation
+  include_collisions = .true.
+  collision_model = 'dougherty'
+  hyper_dissipation = .false.
+/

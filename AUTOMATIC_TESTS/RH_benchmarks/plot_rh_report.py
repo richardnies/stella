@@ -1217,6 +1217,130 @@ SUMMARY_CASES = [
     ('TJ-II, electromagnetic drift',     1.34,    2.2e-3),
 ]
 
+
+
+# ---------------------------------------------------------------------------
+# One figure per physics case: the budget for both invariants, in every
+# configuration the case has been run in.  This is the shape of figure 14,
+# repeated systematically.
+# ---------------------------------------------------------------------------
+
+def _budget_series(netcdf_file, which, window=None, **kw):
+    """(time, dE/dt, sum P, channels, residual, turnover, conserved?).
+
+    `window` is a fraction of the available time to keep, measured from the end,
+    so that a run cut short by the CFL condition is still windowed sensibly.  A
+    fixed time_min cannot do that: the electromagnetic cases here reach t = 9.6
+    where the electrostatic ones reach 28.
+
+    A linear collisionless run in Miller geometry has no drive at all -- no
+    collisions, and the analytic drift phase makes the drift channel identically
+    zero -- so both sides of the budget are zero and their ratio is meaningless.
+    That case is flagged `conserved`, and what is reported for it is the drift of
+    the invariant itself rather than a residual.
+    """
+    fn = get_rh_budget if which == 'phi' else get_rh_omega_budget
+    out = fn(netcdf_file, kw.get('time_min'), kw.get('time_max'), kw.get('kx_max'))
+    t, E, dEdt, P, P_nl, P_coll, P_dr = out[0], out[1], out[2], out[3], out[4], out[5], out[6]
+    if window is not None and len(t) > 4:
+        keep = t >= t[0] + (1.0 - window) * (t[-1] - t[0])
+        t, E, dEdt, P = t[keep], E[keep], dEdt[keep], P[keep]
+        P_nl, P_coll, P_dr = P_nl[keep], P_coll[keep], P_dr[keep]
+    chans = dict(nonlinear=P_nl, collisional=P_coll, drift=P_dr)
+
+    scale = E.mean() / max(t[-1] - t[0], 1e-30)
+    conserved = np.linalg.norm(P) < 1e-6 * np.sqrt(len(P)) * abs(scale)
+    if conserved:
+        resid = (E.max() - E.min()) / max(abs(E.mean()), 1e-300)
+    else:
+        #> The median pointwise relative error, over the points where the signal
+        #> is within two decades of its peak.
+        #>
+        #> The obvious statistic, ||dE/dt - sum P|| / ||sum P||, is not usable on
+        #> these runs.  The electromagnetic cases grow through six decades before
+        #> the CFL condition stops them, so an L2 norm is set almost entirely by
+        #> the largest few points: for the Miller case 7 momentum budget it reads
+        #> 0.99, of which a single time step contributes 86%, while the budget
+        #> closes to 1.3e-2 at the median point.  That one step sits at the peak
+        #> of the blow-up, where dE/dt changes by orders of magnitude between
+        #> consecutive outputs and the centred difference that estimates it stops
+        #> being accurate.  The median is insensitive to that and still reports a
+        #> genuine, distributed failure as one: the electrostatic kinetic case in
+        #> Miller geometry reads 2.7e-1 by this measure, and is a real defect.
+        mag = np.abs(P)
+        big = mag > mag.max() / 100.0
+        resid = float(np.median(np.abs(dEdt - P)[big] / mag[big])) if big.any() else np.nan
+    integ = np.abs(dEdt)
+    turn = np.sum(0.5 * (integ[1:] + integ[:-1]) * np.diff(t)) / E.mean()
+    return t, dEdt, P, chans, resid, turn, conserved
+
+
+def figure_case_budget(runs, outfile, case_title=''):
+    """The budget for one physics case, across configurations.
+
+    `runs` is a list of (configuration label, netcdf path, window kwargs).
+    Rows are configurations, columns are the two invariants.  A closed budget
+    puts the measured derivative on top of the predicted total; the faint lines
+    are the individual channels, so it is visible which one carries the budget.
+    """
+    rows = len(runs)
+    fig, axes = plt.subplots(rows, 2, figsize=(10.2, 2.9 * rows), squeeze=False)
+    for r, (label, path, kw) in enumerate(runs):
+        for c, (which, colour, name) in enumerate((('phi', PHI, r'$\varphi_{\rm RH}$'),
+                                                   ('omega', UPA, r'$\Omega_{\rm RH}$'))):
+            ax = axes[r][c]
+            try:
+                t, dEdt, P, chans, resid, turn, conserved = _budget_series(
+                    path, which, **kw)
+            except Exception as exc:                      # a case not run yet
+                ax.text(0.5, 0.5, f'not available\n{type(exc).__name__}',
+                        transform=ax.transAxes, ha='center', va='center',
+                        fontsize=8, color='#999')
+                ax.set_xticks([]); ax.set_yticks([])
+                continue
+            #> Magnitudes on a log axis.  These runs span many decades -- the
+            #> electromagnetic ones grow by six before the CFL condition stops
+            #> them -- and on a linear axis everything but the last half time
+            #> unit is flat against the spike.  Where the two curves lie on top
+            #> of one another the budget closes; the gap between them IS the
+            #> residual, visible directly rather than only in the annotation.
+            floor = max(np.nanmax(np.abs(P)), 1e-300) * 1e-6
+            ax.semilogy(t, np.maximum(np.abs(dEdt), floor), color=colour, lw=1.9,
+                        label=r'$|dE/dt|$  (measured)')
+            ax.semilogy(t, np.maximum(np.abs(P), floor),
+                        color='#c2703a' if which == 'phi' else '#2e6f8e',
+                        lw=1.3, ls='--', label=r'$|\sum P|$  (predicted)')
+            for series, ccol, cname in ((chans['nonlinear'], '#7d3c6b', 'nonlinear'),
+                                        (chans['collisional'], '#8a6d1f', 'collisional'),
+                                        (chans['drift'], '#2e7d6b', 'drift')):
+                if np.any(series != 0):
+                    ax.semilogy(t, np.maximum(np.abs(series), floor), color=ccol,
+                                lw=0.8, alpha=0.75, label=cname)
+            ax.set_ylim(floor * 5, None)
+            note = (f'no drive: invariant flat to {resid:.1e}' if conserved
+                    else f'median residual {resid:.1e}   turnover {turn:.1f}')
+            ax.text(0.015, 0.035, note, transform=ax.transAxes,
+                    fontsize=7.6, color='#333',
+                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.82,
+                              boxstyle='round,pad=0.25'))
+            if r == 0:
+                ax.set_title(name, fontsize=10, loc='left')
+            if c == 0:
+                ax.set_ylabel(f'{label}\n|power into the zonal flow|', fontsize=8.5)
+            if r == rows - 1:
+                ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
+            if r == 0 and c == 0:
+                ax.legend(frameon=False, fontsize=7, ncol=2)
+    if case_title:
+        fig.suptitle(case_title, fontsize=10.5, x=0.008, ha='left')
+        fig.tight_layout(rect=(0, 0, 1, 0.965))
+    else:
+        fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
 # ---------------------------------------------------------------------------
 # Regenerate every figure that is built from measured constants alone (no
 # netCDF needed):  python3 plot_rh_report.py [outdir]

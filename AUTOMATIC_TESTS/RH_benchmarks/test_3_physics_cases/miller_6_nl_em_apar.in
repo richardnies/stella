@@ -1,23 +1,28 @@
+! Case 6: nonlinear electromagnetic, dApar only.
+! Miller tokamak, zonal mode at kx rho = 0.2, turbulence at ky rho = 0.2.
 ! Rosenbluth-Hinton energy budget: minimal nonlinear electrostatic run with
-! kinetic ions and UNMODIFIED adiabatic electrons (no flux-surface-average
-! term), i.e. a plain Boltzmann response.  Exercises the opposite adiabatic
-! closure from rh_nl_adiabatic_electrons.in.
+! MODIFIED adiabatic electrons (the flux-surface-average term is retained).
+! CBC-like gradients make the non-zonal ky ITG unstable, so the mode grows and
+! saturates and a genuine nonlinearly driven zonal flow appears -- without that
+! the budget just measures numerical noise.
 &parameters_physics
-  adiabatic_option = 'no-field-line-average-term'
   nonlinear = .true.
   vnew_ref = 0.01
+  include_apar = .true.
+  include_bpar = .false.
+  beta = 1.0e-2
 /
 &kt_grids_knobs
   grid_option = 'box'
 /
 &kt_grids_box_parameters
-  ! jtwist = 5 puts the zonal mode at kx rho_i = 0.5 rather than 2.5.  The
-  ! Rosenbluth-Hinton construction is a long-wavelength one -- it targets
-  ! kx rho_i << 1/q, about 0.71 here -- so a box whose only zonal mode sits at
-  ! 2.5 tests it outside its range of validity.
-  ny = 4
-  nx = 4
-  y0 = 2.0
+
+
+
+
+  ny = 12
+  nx = 12
+  y0 = 5.0
   jtwist = 5
 /
 &init_g_knobs
@@ -26,7 +31,7 @@
   width0 = 1.0
 /
 &species_knobs
-  nspec = 1
+  nspec = 2
 /
 &species_parameters_1
   dens = 1.0
@@ -36,6 +41,15 @@
   tprim = 8.0
   type = 'ion'
   z = 1.0
+/
+&species_parameters_2
+  dens = 1.0
+  fprim = 2.2
+  mass = 2.7e-4
+  temp = 1.0
+  tprim = 8.0
+  type = 'electron'
+  z = -1.0
 /
 &zgrid_parameters
   boundary_option = 'linked'
@@ -83,7 +97,7 @@
   betadbprim = 0.0
 /
 &dissipation
-  include_collisions = .true.
+  include_collisions = .false.
   collision_model = 'dougherty'
   hyper_dissipation = .false.
 /

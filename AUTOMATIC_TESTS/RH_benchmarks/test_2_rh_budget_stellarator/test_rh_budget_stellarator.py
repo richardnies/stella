@@ -181,7 +181,7 @@ def test_whether_rh_budget_closes_for_nonlinear_modified_adiabatic_electrons(con
     '''Zonal flow driven nonlinearly by an ITG mode, with the flux-surface-average
     term retained in the adiabatic electron response.'''
     time_min, time_max = NONLINEAR_WINDOW[configuration]
-    check_stellarator_budget(configuration, f'{configuration}_nl_adiabatic_electrons.in',
+    check_stellarator_budget(configuration, f'{configuration}_nl_modified_adiabatic.in',
                              tmp_path, stella_version, tolerance=0.08,
                              time_min=time_min, time_max=time_max, channel='nonlinear')
     return
@@ -200,7 +200,7 @@ def test_whether_rh_budget_closes_for_nonlinear_unmodified_adiabatic_electrons(c
     flux-surface-average term), which is the opposite adiabatic closure and
     weights the zonal part of the potential differently.'''
     time_min, time_max = NONLINEAR_WINDOW_IONS[configuration]
-    check_stellarator_budget(configuration, f'{configuration}_nl_adiabatic_ions.in',
+    check_stellarator_budget(configuration, f'{configuration}_nl_adiabatic.in',
                              tmp_path, stella_version, tolerance=0.08,
                              time_min=time_min, time_max=time_max, channel='nonlinear')
     return
