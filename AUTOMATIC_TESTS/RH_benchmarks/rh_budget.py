@@ -254,9 +254,15 @@ def field_line_averaged_rh_inertia(netcdf_file):
 # See DOCUMENTATION/RH_parallel_flow for the derivation.
 ################################################################################
 
-RH_UMOM_FLUX_NONLINEAR   = 'RH_umom_flux_nonlinear'
-RH_UMOM_FLUX_COLLISIONAL = 'RH_umom_flux_collisional'
-RH_UMOM_FLUX_DRIFT       = 'RH_umom_flux_drift'
+#> Current names, then the two earlier spellings, so that output written before
+#> either rename still reads.  The invariant has been called upar, then umom,
+#> and is now Omega_RH.
+RH_OMEGA_FLUX_NONLINEAR   = 'RH_omega_flux_nonlinear'
+RH_OMEGA_FLUX_COLLISIONAL = 'RH_omega_flux_collisional'
+RH_OMEGA_FLUX_DRIFT       = 'RH_omega_flux_drift'
+RH_UMOM_FLUX_NONLINEAR    = 'RH_umom_flux_nonlinear'
+RH_UMOM_FLUX_COLLISIONAL  = 'RH_umom_flux_collisional'
+RH_UMOM_FLUX_DRIFT        = 'RH_umom_flux_drift'
 
 
 def _first_present(ncdata, *names):
@@ -300,7 +306,7 @@ def _field_line_average_per_species(ncdata, name, weight):
     return array
 
 
-def get_rh_umom_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
+def get_rh_omega_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     '''The toroidal-momentum RH budget.
 
     Returns (time, E_uRH, dE_uRH_dt, P_total, P_nonlinear, P_collisional, P_drift).
@@ -316,9 +322,9 @@ def get_rh_umom_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     weight[-1] = 0.0
     weight = weight / weight.sum()
 
-    upar = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_umom', 'RH_upar'), weight)
+    upar = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_omega', 'RH_umom', 'RH_upar'), weight)
     inertia = _field_line_average_per_species(
-        ncdata, _first_present(ncdata, 'RH_umom_inertia', 'RH_upar_inertia'), weight)
+        ncdata, _first_present(ncdata, 'RH_omega_inertia', 'RH_umom_inertia', 'RH_upar_inertia'), weight)
     if upar is None or inertia is None:
         raise KeyError('this run did not write the RH toroidal-momentum diagnostics')
 
@@ -345,9 +351,9 @@ def get_rh_umom_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
         flux = flux[..., keep]
         return -weight_s * np.real(1j * kx[None, None, :] * flux * np.conj(upar)) / inertia2
 
-    P_nl   = power(_first_present(ncdata, RH_UMOM_FLUX_NONLINEAR, 'RH_upar_flux_nonlinear'))
-    P_coll = power(_first_present(ncdata, RH_UMOM_FLUX_COLLISIONAL, 'RH_upar_flux_collisional'))
-    P_dr   = power(_first_present(ncdata, RH_UMOM_FLUX_DRIFT, 'RH_upar_flux_drift'))
+    P_nl   = power(_first_present(ncdata, RH_OMEGA_FLUX_NONLINEAR, RH_UMOM_FLUX_NONLINEAR, 'RH_upar_flux_nonlinear'))
+    P_coll = power(_first_present(ncdata, RH_OMEGA_FLUX_COLLISIONAL, RH_UMOM_FLUX_COLLISIONAL, 'RH_upar_flux_collisional'))
+    P_dr   = power(_first_present(ncdata, RH_OMEGA_FLUX_DRIFT, RH_UMOM_FLUX_DRIFT, 'RH_upar_flux_drift'))
 
     E_total = E.sum(axis=(1, 2))
     dE_dt = np.gradient(E_total, time)

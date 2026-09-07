@@ -26,7 +26,7 @@ module geometry
    ! Geometric quantities for the gyrokinetic equations 
    public :: bmag, dbdzed, btor, bmag_psi0, grho, grho_norm, grad_x
    public :: RH_drift_phase_fac, RH_drift_phase_defined
-   public :: RH_umom_geo_fac
+   public :: RH_omega_geo_fac
    public :: PS_flow_fac, PS_flow_defined
    public :: sym_flow_fac, sym_flow_defined
    public :: dcvdriftdrho, dcvdrift0drho, dgbdriftdrho, dgbdrift0drho
@@ -106,7 +106,7 @@ module geometry
    !> normalisation, so that the ratio is no longer a rotation frequency.
    !> Keeping this separate from RH_drift_phase_fac is what stops a non-zero
    !> value here being mistaken for a geometry that knows the analytic phase.
-   real, dimension(:), allocatable :: RH_umom_geo_fac
+   real, dimension(:), allocatable :: RH_omega_geo_fac
 
 
    !> Geometry profile of the Pfirsch-Schlueter parallel flow, defined so that
@@ -869,7 +869,7 @@ contains
       RH_drift_phase_fac = geo_surf%qinp_psi0 * btor * Rmajor / geo_surf%rhoc
       RH_drift_phase_defined = .true.
       !> Axisymmetric, so the momentum weight's factor is the same constant.
-      RH_umom_geo_fac = RH_drift_phase_fac
+      RH_omega_geo_fac = RH_drift_phase_fac
 
 
       if (debug) write (*, *) 'geometry::Miller::get_geometry_arrays_from_Miller_finished'
@@ -1071,7 +1071,7 @@ contains
       if (.not. allocated(btor)) allocate (btor(-nzgrid:nzgrid)); btor = 0.0
       if (.not. allocated(rmajor)) allocate (rmajor(-nzgrid:nzgrid)); rmajor = 0.0
       if (.not. allocated(RH_drift_phase_fac)) allocate (RH_drift_phase_fac(-nzgrid:nzgrid)); RH_drift_phase_fac = 0.0
-      if (.not. allocated(RH_umom_geo_fac)) allocate (RH_umom_geo_fac(-nzgrid:nzgrid)); RH_umom_geo_fac = 1.0
+      if (.not. allocated(RH_omega_geo_fac)) allocate (RH_omega_geo_fac(-nzgrid:nzgrid)); RH_omega_geo_fac = 1.0
       if (.not. allocated(dBdrho)) allocate (dBdrho(-nzgrid:nzgrid)); dBdrho = 0.0
       if (.not. allocated(d2Bdrdth)) allocate (d2Bdrdth(-nzgrid:nzgrid)); d2Bdrdth = 0.0
       if (.not. allocated(dgradpardrho)) allocate (dgradpardrho(-nzgrid:nzgrid)); dgradpardrho = 0.0
@@ -1210,7 +1210,7 @@ contains
       call broadcast(btor)
       call broadcast(RH_drift_phase_fac)
       call broadcast(RH_drift_phase_defined)
-      call broadcast(RH_umom_geo_fac)
+      call broadcast(RH_omega_geo_fac)
       call broadcast(gradpar)
       call broadcast(b_dot_grad_z)
       call broadcast(b_dot_grad_z_averaged) 
@@ -1592,7 +1592,7 @@ contains
       if (allocated(sym_flow_fac)) deallocate (sym_flow_fac)
       sym_flow_defined = .false.
       if (allocated(RH_drift_phase_fac)) deallocate (RH_drift_phase_fac)
-      if (allocated(RH_umom_geo_fac)) deallocate (RH_umom_geo_fac)
+      if (allocated(RH_omega_geo_fac)) deallocate (RH_omega_geo_fac)
       RH_drift_phase_defined = .false.
       if (allocated(dbdzed)) deallocate (dbdzed)
       if (allocated(jacob)) deallocate (jacob)

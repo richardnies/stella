@@ -281,8 +281,8 @@ def check_collisionless_drift(configuration, tmp_path, stella_version, error=Fal
                     for n in ('RH_fluxes_drift_trapped', 'RH_fluxes_drift_passing'))[:, keep]
     r_phi, s_phi = compare(phi, phi_drift, 'phi_RH', DRIFT_TOLERANCE_PHI[configuration])
 
-    umom = _field_line_average_per_species(ncdata, 'RH_umom', weight)[:, 0, keep]
-    umom_drift = _field_line_average_per_species(ncdata, 'RH_umom_flux_drift', weight)[:, 0, keep]
+    umom = _field_line_average_per_species(ncdata, 'RH_omega', weight)[:, 0, keep]
+    umom_drift = _field_line_average_per_species(ncdata, 'RH_omega_flux_drift', weight)[:, 0, keep]
     r_p, s_p = compare(umom, umom_drift, 'U_RH', DRIFT_TOLERANCE_UMOM[configuration])
 
     assert (not error), f'The drift channel is not verified in {configuration}.'
@@ -325,7 +325,7 @@ def check_stellarator_umom_budget(configuration, input_filename, tmp_path, stell
                                 vmec_file=VMEC_FILE[configuration])
     local_netcdf_file = tmp_path / input_filename.replace('.in', '.out.nc')
 
-    time, E, dE_dt, P, P_nl, P_coll, P_drift = get_rh_umom_budget(local_netcdf_file)
+    time, E, dE_dt, P, P_nl, P_coll, P_drift = get_rh_omega_budget(local_netcdf_file)
     residual = np.linalg.norm(dE_dt - P) / np.linalg.norm(P)
 
     integrand = np.abs(dE_dt)
@@ -401,8 +401,8 @@ def test_whether_the_drift_channel_holds_electromagnetically(configuration, tmp_
         #> turns a working diagnostic into an apparent factor-of-twenty failure.
         return np.abs((projection[1:] - projection[0]) - accumulated).max() / np.abs(projection).max()
 
-    umom = _field_line_average_per_species(ncdata, 'RH_umom', weight)[:, 0, keep]
-    umom_drift = _field_line_average_per_species(ncdata, 'RH_umom_flux_drift', weight)[:, 0, keep]
+    umom = _field_line_average_per_species(ncdata, 'RH_omega', weight)[:, 0, keep]
+    umom_drift = _field_line_average_per_species(ncdata, 'RH_omega_flux_drift', weight)[:, 0, keep]
     r_u = unaccounted(umom, umom_drift)
 
     phi = _field_line_average(ncdata, 'RH_phi_I', weight)[:, keep]
