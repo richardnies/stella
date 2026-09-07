@@ -1024,7 +1024,7 @@ def figure_energy(outfile):
     a1.set_xlabel(r'$k_x\rho$')
     a1.set_ylabel(r'$E_{\rm RH}/|\varphi_{\rm RH}|^2 = \Gamma_{\rm cl}/2\langle\mathcal{I}\rangle^2$')
     a1.set_title('The energy normalisation spans both regimes', fontsize=10.5, loc='left')
-    a1.legend(frameon=False, fontsize=9.5)
+    a1.legend(frameon=False, fontsize=10, loc='lower left')
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
 
@@ -1198,8 +1198,12 @@ def figure_geometry_factors(outfile):
     return outfile
 
 
-STRESS_TABLE = dict(names=[r'$k_x\rho = 0.1$', r'summed over $k_x$'],
-                    rey=[5.32e-4, 1.07e-3], dia=[1.93e-3, 2.73e-3])
+#> Measured with the CORRECTED split, which cuts the Bessel argument rather than
+#> removing the Bessel.  The old split reported dia/rey = 3.62 and 2.54; both of
+#> its halves were finite at kx = 0 where the total is 1.3e-20, so they were two
+#> pieces of one object that cancelled.
+STRESS_TABLE = dict(names=[r'$k_x\rho = 0.2$', r'summed over $k_x$'],
+                    rey=[4.956e-6, 5.082e-6], dia=[1.784e-7, 1.882e-7])
 SPECIES_SPLIT = dict(names=['electrostatic,\nkinetic electrons', 'electromagnetic'],
                      upar=[5.6e2, 5.1e4], mom=[9.2, 845.0])
 
@@ -1214,9 +1218,10 @@ def figure_stress_and_species(outfile):
     for xi, (r, d) in enumerate(zip(STRESS_TABLE['rey'], STRESS_TABLE['dia'])):
         a1.text(xi, max(r, d) * 1.08, f'ratio {d/r:.2f}', ha='center', fontsize=9, color='#333')
     a1.set_xticks(x); a1.set_xticklabels(STRESS_TABLE['names'], fontsize=9.5)
-    a1.set_ylabel('stress'); a1.set_ylim(0, 3.4e-3)
+    a1.set_ylabel('stress'); a1.set_yscale('log')
+    a1.set_ylim(min(STRESS_TABLE['dia']) * 0.25, max(STRESS_TABLE['rey']) * 4)
     a1.legend(frameon=False, fontsize=9.5)
-    a1.set_title('The diamagnetic stress is the larger of the two', fontsize=10.5, loc='left')
+    a1.set_title('The Reynolds stress dominates', fontsize=10.5, loc='left')
 
     x = np.arange(len(SPECIES_SPLIT['names'])); w = 0.34
     a2.bar(x - w/2, SPECIES_SPLIT['upar'], w, color=PHI, label=r'$u_{\parallel e}/u_{\parallel i}$')
