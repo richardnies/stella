@@ -3020,7 +3020,47 @@ contains
    !> the set of grid points the well happens to contain, and the treatment of
    !> the cell adjoining each turning point, where the theta nodes cluster.
    !> Fixing that means changing which nodes the well integral is built on, not
-   !> how they are interpolated.
+   !> how they are interpolated.  Two further candidates have been tried and
+   !> measured, and neither is it: refining the theta and node quadratures
+   !> fourfold changes the answer by 6e-04 relative, and evaluating g at the
+   !> Chebyshev nodes directly from a spline of B -- which removes both the
+   !> supplied turning-point value and the interpolation across the cell beside
+   !> it -- reproduces the monotone-cubic answer to four digits (0.09187 against
+   !> 0.09190, order 1.29 against 1.28).  Raising the turning-point extrapolation
+   !> of <numerator_well> and <weight_well> from linear to quadratic is a no-op
+   !> as well (0.09195, order 1.28).
+   !>
+   !> A fifth was tried on the strength of an argument that the remaining error
+   !> had to be the well's node set -- z_well(1) is the turning point and
+   !> z_well(2) the first grid point inside, the gap between them is whatever the
+   !> grid leaves, and it jumps by a cell as B_c crosses a grid point, which is
+   !> first order and sits exactly where the Chebyshev nodes cluster.  Doing the
+   !> interpolation in theta instead of z removes that pathology completely: a
+   !> point a distance d inside a turning point maps to theta = sqrt(2d/half), so
+   !> the crowded cell is stretched and the node set varies smoothly with B_c.
+   !> It is also a no-op (0.09192, order 1.28).
+   !>
+   !> So the argument was wrong, and with it the claim that the node set is what
+   !> limits this.  Five candidates, four no-ops, and the one that helped was the
+   !> clamp.  Whatever is left is not in how <bounce_ints_in_well> interpolates
+   !> or extrapolates its well profile, because every part of that has now been
+   !> changed independently without moving the answer past the third digit.  The
+   !> next place to look is outside this routine.
+   !>
+   !> Note what the n_theta/n_nodes test already excludes, since it is easy to
+   !> propose again: the weight is integrated on 64 Chebyshev nodes here and the
+   !> drift-orbit phase on 512 uniform theta nodes in eval_Q_profile_hat, and
+   !> those being different rules cannot be the problem, because refining both
+   !> fourfold moves nothing.  Two converged rules compute the same integral
+   !> whatever their form.
+   !>
+   !> What is not excluded, and is the one structural thing left in the chain:
+   !> Q is built on theta nodes inside eval_Q_profile_hat, splined back onto the
+   !> z grid to be stored in Q_hat, and then interpolated onto theta nodes again
+   !> here.  That round trip through the z grid is the only step whose accuracy
+   !> depends on nzed and which no test above has touched, and it is exactly the
+   !> kind of thing that would show up as a stubborn low order.  Testing it means
+   !> carrying Q at the quadrature nodes rather than on the grid.
    !============================================================================
    subroutine interp_monotone(x, y, xi, yi)
 

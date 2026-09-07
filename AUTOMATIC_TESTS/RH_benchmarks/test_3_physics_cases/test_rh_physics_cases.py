@@ -111,6 +111,16 @@ CASES = {
 #> beta.  Whether that is a defect of the diagnostic or of the truncation is not
 #> yet established, so it is bounded rather than tolerated.
 KNOWN_MOMENTUM_FAILURES = {
+    #> Case 10's potential-like budget closes in both geometries -- 4.8e-02 in
+    #> Miller and 6.8e-02 in W7-X, at turnovers of 17 and 6 -- so the
+    #> electromagnetic nonlinear machinery works once the nonlinear term is
+    #> actually driving.  It is the momentum channel that fails, and the W7-X
+    #> number sits with the multi-species electromagnetic failures of cases 3 and
+    #> 6 rather than with anything specific to case 10: same geometry, same
+    #> kinetic electrons, same dApar.  The working hypothesis is that all three
+    #> are one defect, which would mean case 10 needs no separate explanation.
+    #> Not yet tested; recorded so that a fix to cases 3 and 6 is checked here
+    #> too.
     ('miller', 10): (0.40, 4.00),
     ('w7x', 10):    (1.50, 15.0),
     #> Case 2 in W7-X is case 1 with a second kinetic species and nothing else:
