@@ -1396,10 +1396,10 @@ CASE_SUMMARY = [
     ('3  NL modified-adiabatic / W7-X',           1.35e-2, 1.12e-1, False, False),
     ('4  NL adiabatic / Miller',                  1.10e-2, 3.10e-2, True,  True),
     ('4  NL adiabatic / W7-X',                    7.25e-3, 1.56e-1, False, False),
-    ('5  NL kinetic / Miller',                    1.28e-2, 2.65e-1, True,  True),
-    ('5  NL kinetic / W7-X',                      8.47e-4, 1.77e-2, True,  True),
+    ('5  NL kinetic / Miller',                    1.28e-2, 1.38e-2, True,  True),
+    ('5  NL kinetic / W7-X',                      8.47e-4, 1.62e-2, True,  True),
     ('6  NL electromagnetic, dApar / Miller',     4.80e-2, 1.14e+0, True,  True),
-    ('6  NL electromagnetic, dApar / W7-X',       6.78e-2, 5.23e+0, True,  True),
+    ('6  NL electromagnetic, dApar / W7-X',       6.78e-2, 5.07e+0, True,  True),
     ('7  NL electromagnetic, both / Miller',      3.98e-2, 1.33e-2, True,  True),
     ('7  NL electromagnetic, both / W7-X',        2.86e-2, 1.03e-1, True,  True),
 ]
