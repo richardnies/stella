@@ -296,6 +296,10 @@ KNOWN_PHI_FAILURES = {
 #>     except QH.  So the electron-channel defect first seen in W7-X is general,
 #>     not specific to that equilibrium.
 CONFIGURATIONS = ('miller', 'w7x')
+
+#> Below this, |P| is too small a rate of change of E_RH for a residual divided
+#> by it to mean much.  Reported rather than asserted; see <_measure>.
+DRIVE_FLOOR = 0.5
 TURNOVER_FLOOR = 0.5
 
 
@@ -310,10 +314,27 @@ def _measure(netcdf_file, which, window=0.4):
     turnover = np.sum(0.5 * (integrand[1:] + integrand[:-1]) * np.diff(t)) / E.mean()
     magnitude = np.abs(P)
     if magnitude.max() <= 0.0:
-        return float('nan'), turnover          # no drive at all
+        return float('nan'), turnover, 0.0     # no drive at all
     big = magnitude > magnitude.max() / 100.0
     residual = float(np.median(np.abs(dEdt - P)[big] / magnitude[big]))
-    return residual, turnover
+
+    #> Dividing by |P| is what makes this a relative error, and it is only
+    #> meaningful while |P| is itself a significant rate of change of E_RH.  The
+    #> mask above protects against individual small points -- it is relative to
+    #> |P|'s own peak -- but not against |P| being globally weak, which is a real
+    #> failure mode and not a hypothetical one.  Scanning nfield_periods in W7-X
+    #> case 1 moves this residual over 1.5e-02 to 2.7e-01 while the diagnostic
+    #> and the equilibrium are unchanged, and the residual correlates with the
+    #> turnover at -0.947 and with no geometric property above 0.51.  What is
+    #> being measured there is a fixed absolute discrepancy divided by a drive
+    #> that happens to be weak.
+    #>
+    #> <drive> is the same construction as <turnover> but formed from P rather
+    #> than from dE/dt: the fraction of E_RH that the accounted-for sources would
+    #> move over the run.  Where it is small the residual is a ratio of two small
+    #> numbers and should be read as such.
+    drive = float(np.median(magnitude) * (t[-1] - t[0]) / E.mean())
+    return residual, turnover, drive
 
 
 VMEC_FILE = {'w7x':  'wout_w7x_standard.nc',
@@ -343,11 +364,20 @@ def test_whether_the_budget_closes_for_each_physics_case(configuration, case,
     stem, phi_tol, omega_tol, vacuous = CASES[case]
     netcdf_file = _run(configuration, case, tmp_path, stella_version)
 
-    phi_residual, phi_turnover = _measure(netcdf_file, 'phi')
-    omega_residual, omega_turnover = _measure(netcdf_file, 'omega')
+    phi_residual, phi_turnover, phi_drive = _measure(netcdf_file, 'phi')
+    omega_residual, omega_turnover, omega_drive = _measure(netcdf_file, 'omega')
     print(f'\n  -->  case {case} ({stem}), {configuration}: '
-          f'phi {phi_residual:.2e} (turnover {phi_turnover:.2f}), '
-          f'Omega {omega_residual:.2e} (turnover {omega_turnover:.2f})')
+          f'phi {phi_residual:.2e} (turnover {phi_turnover:.2f}, drive {phi_drive:.2f}), '
+          f'Omega {omega_residual:.2e} (turnover {omega_turnover:.2f}, drive {omega_drive:.2f})')
+    #> Not an assertion: a weak drive does not make a case wrong, it makes its
+    #> residual hard to read, and saying so beside the number is worth more than
+    #> failing on it.
+    for which, res, dr in (('phi', phi_residual, phi_drive),
+                           ('Omega', omega_residual, omega_drive)):
+        if dr < DRIVE_FLOOR and res == res:
+            print(f'       NOTE: {which} drive is {dr:.2f}, below {DRIVE_FLOOR}; '
+                  f'its residual divides by a |P| this small and is not a clean '
+                  f'measure of the diagnostic')
 
     if configuration in vacuous:
         #> Recorded as vacuous, not as passing.  If the flow starts moving here
