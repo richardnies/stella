@@ -1,5 +1,5 @@
 ################################################################################
-#     THE SEVEN PHYSICS CASES:  dE/dt = sum P, one ingredient at a time        #
+#    THE ELEVEN PHYSICS CASES:  dE/dt = sum P, one ingredient at a time        #
 ################################################################################
 # The budget identity is one statement, so testing it once proves little about
 # where it would break.  These seven cases each add a single ingredient to the
@@ -7,19 +7,27 @@
 # ingredient that introduced it:
 #
 #   1  linear, collisionless                     no drive at all in Miller
-#   2  linear, collisionless, 2 species, EM      a second species and finite beta
-#   3  linear, collisional                       one source, no turbulence
-#   4  linear, collisional, 2 species, EM        the same, with a source
-#   5  nonlinear, modified-adiabatic electrons   the zonal-flow closure
-#   6  nonlinear, adiabatic electrons            the opposite closure
-#   7  nonlinear, kinetic ions and electrons     a second kinetic species
-#   8  nonlinear electromagnetic, dApar          gbar, Ampere, vpar dApar
-#   9  nonlinear electromagnetic, dApar + dBpar  the whole of chi
+#   2  linear, collisionless, 2 species, ES      a second species, nothing else
+#   3  linear, collisionless, 2 species, EM      ... and now finite beta
+#   4  linear, collisional                       one source, no turbulence
+#   5  linear, collisional, 2 species, ES        the same, with a source
+#   6  linear, collisional, 2 species, EM        ... and now finite beta
+#   7  nonlinear, modified-adiabatic electrons   the zonal-flow closure
+#   8  nonlinear, adiabatic electrons            the opposite closure
+#   9  nonlinear, kinetic ions and electrons     a second kinetic species
+#  10  nonlinear electromagnetic, dApar          gbar, Ampere, vpar dApar
+#  11  nonlinear electromagnetic, dApar + dBpar  the whole of chi
 #
-# Cases 2 and 4 exist because the linear multi-species run is what found the
-# momentum inertia's missing normalisation.  A single-species linear case cannot
-# see that error at all: for m = T = 1 the wrong coefficient and the right one
-# are the same number.
+# The multi-species linear cases exist because that is what found the momentum
+# inertia's missing normalisation.  A single-species linear case cannot see that
+# error at all: for m = T = 1 the wrong coefficient and the right one are the
+# same number, while for kinetic electrons they differ by 61.
+#
+# They come in pairs, electrostatic then electromagnetic, because the first
+# version of this ladder had only the electromagnetic one and it failed without
+# saying which of its two new ingredients was to blame.  The electrostatic
+# member closes to 3e-03 and the electromagnetic member does not close at all,
+# which settles it: finite beta, not the second species.
 #
 # Every case puts the zonal mode at kx rho = 0.2, where FLR corrections are
 # small but not negligible, and drives turbulence at ky rho = 0.2.  Miller lands
@@ -71,15 +79,22 @@ def stella_version(pytestconfig):
 #> asserted to stay bad rather than silently ignored, so that a fix shows up
 #> here as a failure and gets read.
 CASES = {
-    1: ('linear_collisionless',       0.08, None, {'miller'}),
-    2: ('linear_collisionless_multi', 0.30, 0.30, {'miller'}),
-    3: ('linear_collisional',         0.05, 0.05, set()),
-    4: ('linear_collisional_multi',   0.30, 0.30, set()),
-    5: ('nl_modified_adiabatic',      0.08, 0.20, {'w7x'}),
-    6: ('nl_adiabatic',               0.08, 0.08, {'w7x'}),
-    7: ('nl_kinetic',                 0.08, 0.05, set()),
-    8: ('nl_em_apar',                 0.12, None, set()),
-    9: ('nl_em_apar_bpar',            0.08, 0.20, set()),
+    1:  ('linear_collisionless',         0.08, None, {'miller'}),
+    2:  ('linear_collisionless_kinetic', 0.08, 0.08, {'miller'}),   # w7x: see below
+    3:  ('linear_collisionless_multi',   0.30, 0.30, {'miller'}),
+    4:  ('linear_collisional',           0.05, 0.05, set()),
+    #> Case 5 in Miller turns the flow over only 0.12 times, so its potential
+    #> tolerance is never actually asserted; it is the W7-X member that tests
+    #> anything here.  Left as is rather than lengthened, because what this pair
+    #> exists to isolate is visible in W7-X, and a longer Miller run costs more
+    #> than it proves.
+    5:  ('linear_collisional_kinetic',   0.08, 0.08, set()),
+    6:  ('linear_collisional_multi',     0.30, 0.30, set()),
+    7:  ('nl_modified_adiabatic',        0.08, 0.20, {'w7x'}),
+    8:  ('nl_adiabatic',                 0.08, 0.08, {'w7x'}),
+    9:  ('nl_kinetic',                   0.08, 0.05, set()),
+    10: ('nl_em_apar',                   0.12, None, set()),
+    11: ('nl_em_apar_bpar',              0.08, 0.20, set()),
 }
 
 #> The momentum budget does not close in these, and the bound is two-sided so
@@ -96,8 +111,35 @@ CASES = {
 #> beta.  Whether that is a defect of the diagnostic or of the truncation is not
 #> yet established, so it is bounded rather than tolerated.
 KNOWN_MOMENTUM_FAILURES = {
-    ('miller', 8): (0.40, 4.00),
-    ('w7x', 8):    (1.50, 15.0),
+    ('miller', 10): (0.40, 4.00),
+    ('w7x', 10):    (1.50, 15.0),
+    #> Case 2 in W7-X is case 1 with a second kinetic species and nothing else:
+    #> collisionless, electrostatic, so the drift channel is still the only
+    #> source.  The potential projection goes from 1.3e-01 to 1.7e+01 and the
+    #> momentum projection to 1.1e+03 purely from adding electrons.
+    #>
+    #> This looked at first like a per-species normalisation in the drift path,
+    #> which is what the momentum inertia turned out to be.  It is NOT.  Three
+    #> measurements rule that out:
+    #>
+    #>   - splitting the identity dPhi/dt = -i kx F by species gives |z| = 1.07
+    #>     for the ions -- the ordinary case-1 quadrature error -- and 47.6 for
+    #>     the electrons;
+    #>   - but a missing stm^p would give the same p at every mass, and the
+    #>     implied p runs 0.18, 0.69, 0.94 at m_e = 1e-2, 1e-3, 2.7e-4.  There is
+    #>     no constant factor that fits;
+    #>   - and at xdriftknob = 0 the flux is identically zero, yet the electron
+    #>     projection still grows 45x while the ion holds at 1.0018.  Whatever
+    #>     destroys it is not in the drift channel at all.
+    #>
+    #> What is known about it: it is absent at t = 30 (|z| = 1.0025 ion, 1.0370
+    #> electron) and grows in with time; it does not respond to delt (delt/8
+    #> changes 1.0042 to 1.0045); and it gets WORSE with velocity resolution
+    #> (79.2 at 3x against 47.6), which rules out collisionless phase mixing
+    #> outrunning the grid, the obvious candidate.  The collisional twin, case 5,
+    #> closes normally at 1.7e-02.  Unexplained; bounded on both sides so that a
+    #> fix shows up here as a failure and gets read.
+    ('w7x', 2):     (3.0e+02, 3.0e+03),
 }
 
 #> The same, for the potential-like invariant.  W7-X case 1 is the drift channel
@@ -106,7 +148,44 @@ KNOWN_MOMENTUM_FAILURES = {
 #> the report discusses, now measured on a case where the flow actually moves
 #> rather than inferred from a vacuous one.
 KNOWN_PHI_FAILURES = {
+    #> W7-X case 1 is the drift channel on its own -- the only case in which it
+    #> is the sole source -- so it is the only case that measures the drift
+    #> channel's own accuracy rather than a diluted version of it.  It reads
+    #> 1.3e-01 at the resolution the suite runs at, and that number is a
+    #> quadrature error, not a defect of the formula:
+    #>
+    #>   nzed 128, nv  48/24   |z| - 1 = 0.095      (this suite)
+    #>   nzed 512, nv  48/24             0.052
+    #>   nzed 128, nv 192/96             0.059
+    #>   nzed 512, nv  96/48             0.035
+    #>
+    #> where z is the complex fit to the identity dPhi/dt = -i kx F that the
+    #> budget rests on.  It converges in both directions at once and neither
+    #> alone, which is why refining z by itself looks flat.  Two controls place
+    #> the error in the drift-orbit phase Q rather than the flux expression:
+    #> with xdriftknob = 0 the phase is identically zero, no quadrature is
+    #> performed, and the projection is conserved to 4.6e-06; and the relative
+    #> error is linear in the drift strength (0.040 at xdriftknob 0.5, 0.071 at
+    #> 1.0), so the absolute error is quadratic in it, which is what an error
+    #> inside Q looks like when Q itself is proportional to the drift.
+    #>
+    #> Every other W7-X case runs the same drift channel and closes far tighter
+    #> because another source dominates the budget: case 4 reaches 2.9e-03.
     ('w7x', 1): (0.06, 0.40),
+    #> Cases 3 and 6 are the electromagnetic multi-species pair, and they do not
+    #> close.  Cases 2 and 5 were added to say why: they are the same runs with
+    #> the fields switched off, and they close normally, so it is the finite
+    #> beta and not the second species.  See the note in their decks.
+    ('w7x', 3): (1.00, 12.0),
+    ('w7x', 6): (0.50, 6.00),
+    #> And the electrostatic member of that pair, which fails harder than the
+    #> electromagnetic one -- 1.7e+01 against 6.1e+00.  So in W7-X the second
+    #> species alone is enough to break the budget and the finite beta is a
+    #> separate matter; in Miller the same electrostatic run closes to 3e-03 and
+    #> only the electromagnetic one fails.  The two configurations are failing
+    #> for different reasons and the pair is what separates them.  See the note
+    #> against ('w7x', 2) in KNOWN_MOMENTUM_FAILURES for what has been ruled out.
+    ('w7x', 2): (5.0, 50.0),
 }
 
 CONFIGURATIONS = ('miller', 'w7x')
