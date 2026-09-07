@@ -186,6 +186,34 @@ KNOWN_PHI_FAILURES = {
     #>
     #> Every other W7-X case runs the same drift channel and closes far tighter
     #> because another source dominates the budget: case 4 reaches 2.9e-03.
+    #> The number below is a property of this deck's tube length, not of the
+    #> diagnostic.  Scanning nfield_periods at fixed alpha0 = 0.7, everything
+    #> else held, all eight runs complete and non-vacuous:
+    #>
+    #>    nfp     5      6      7      8      9     10     11     12
+    #>   resid  0.102  0.144  0.155  0.124  0.015  0.161  0.183  0.274
+    #>   turn    1.02   1.05   0.71   0.96   4.39   0.76   0.97   0.84
+    #>
+    #> At nfp = 9 the budget closes to 1.5e-02, which would pass the tolerance
+    #> outright, and nfp = 7 and nfp = 9 have indistinguishable field lines --
+    #> 10 wells each, 12.9 grid points per well, trapped fraction 0.328, mirror
+    #> ratio 1.243 -- yet differ by a factor of ten.  So the residual is not a
+    #> smooth function of the geometry and the single number here characterises
+    #> nfp = 8 rather than W7-X.
+    #>
+    #> That also disposes of the join-jump explanation, which the geometry sweep
+    #> had made the leading candidate: nfp = 11 closes the tube almost exactly
+    #> (|B(-L) - B(+L)| = 2e-04, against 1e-01 at nfp = 8) and is the second
+    #> WORST at 0.183.  Correlation of residual with the jump over the scan is
+    #> -0.11.  Nor does it track wells (+0.45), mirror ratio (+0.25), trapped
+    #> fraction (+0.43) or points per well (-0.51).
+    #>
+    #> The tolerance is left calibrated on nfp = 8 because that is what the deck
+    #> runs and a two-sided bound on a known failure is still worth having.  But
+    #> a fix should be judged on the scan, not on this one number, and the fact
+    #> that the same diagnostic closes to 1.5e-02 two field periods away is the
+    #> strongest evidence in this file that what fails here is not the
+    #> formulation.
     ('w7x', 1): (0.06, 0.40),
     #> Cases 3 and 6 are the electromagnetic multi-species pair, and they do not
     #> close.  Cases 2 and 5 were added to say why: they are the same runs with
