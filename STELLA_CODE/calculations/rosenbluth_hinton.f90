@@ -3063,6 +3063,24 @@ contains
    !> exp(-Q), and interpolating numerator_well in theta -- which removes that
    !> error -- was the no-op listed above.
    !>
+   !> And none of them could have worked, which is worth stating before anyone
+   !> spends more effort here.  The residual is independent of the time step as
+   !> well as of the grids: at fixed final time, delt = 0.05, 0.025 and 0.0125
+   !> give 1.2444e-01, 1.2387e-01 and 1.2358e-01, a ratio of 1.00 per halving.
+   !> With nzed refined fourfold and the velocity grid fourfold it is equally
+   !> flat.  A quantity independent of both the spatial and the temporal
+   !> discretisation is not a discretisation error, so the whole class of
+   !> explanation these five attempts belong to is excluded, not merely
+   !> unsupported.
+   !>
+   !> What that leaves is a real, converged discrepancy in the drift channel of
+   !> fixed absolute size.  The case-1 residual is that fixed error divided by
+   !> the strength of the drive, which is why it reads 1.5e-02 at nfield_periods
+   !> = 9, where the flow turns over 4.4 times, and 1.2e-01 at nfp = 8, where it
+   !> turns over 0.96 -- and why it correlates with turnover at -0.947 and with
+   !> no geometric property above 0.51.  Look for a missing or mis-derived term
+   !> in the drift flux, not for a better quadrature.
+   !>
    !> So no candidate currently stands.  What is known is narrow but real: the
    !> trapped channel converges at order 1.28 and the circulating channel beside
    !> it at 1.93, in the same runs, so whatever this is distinguishes trapped
