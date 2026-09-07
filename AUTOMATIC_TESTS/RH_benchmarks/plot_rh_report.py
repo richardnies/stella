@@ -1272,6 +1272,17 @@ def _budget_series(netcdf_file, which, window=None, **kw):
         resid = float(np.median(np.abs(dEdt - P)[big] / mag[big])) if big.any() else np.nan
     integ = np.abs(dEdt)
     turn = np.sum(0.5 * (integ[1:] + integ[:-1]) * np.diff(t)) / E.mean()
+    #> Normalise both sides by E_RH.  The absolute powers carry the amplitude of
+    #> whatever the turbulence happens to be doing and span twenty decades across
+    #> these cases, which says nothing about the diagnostic.  Divided by E_RH
+    #> both sides become a growth rate, 1/time: comparable between cases, between
+    #> configurations, and between the two invariants, and very nearly constant
+    #> through an exponentially growing phase.  The residual is a ratio and is
+    #> unaffected by the normalisation.
+    scale_E = np.where(np.abs(E) > 0, np.abs(E), np.nan)
+    dEdt = dEdt / scale_E
+    P = P / scale_E
+    chans = {k: v / scale_E for k, v in chans.items()}
     return t, dEdt, P, chans, resid, turn, conserved
 
 
@@ -1316,11 +1327,11 @@ def figure_case_budget(runs, outfile, case_title=''):
             curves = [np.abs(dEdt), np.abs(P)] + [np.abs(v) for v in chans.values()
                                                   if np.any(v != 0)]
             peak = max(np.nanmax(c) for c in curves)
-            floor = peak * 1e-6
+            floor = peak * 1e-5
             ax.semilogy(t, np.maximum(np.abs(dEdt), floor), color=PHI, lw=1.9,
-                        label=r'$|dE/dt|$  (measured)')
+                        label=r'$|dE/dt|/E$  (measured)')
             ax.semilogy(t, np.maximum(np.abs(P), floor), color=UPA,
-                        lw=1.3, ls='--', label=r'$|\sum P|$  (predicted)')
+                        lw=1.3, ls='--', label=r'$|\sum P|/E$  (predicted)')
             for series, ccol, cname in ((chans['nonlinear'], '#7d3c6b', 'nonlinear'),
                                         (chans['collisional'], '#8a6d1f', 'collisional'),
                                         (chans['drift'], '#2e7d6b', 'drift')):
@@ -1335,18 +1346,19 @@ def figure_case_budget(runs, outfile, case_title=''):
                     ax.set_ylim(m * 1e-3, m * 3.0)
             note = (f'no drive: invariant flat to {resid:.1e}' if conserved
                     else f'median residual {resid:.1e}   turnover {turn:.1f}')
-            ax.text(0.015, 0.035, note, transform=ax.transAxes,
-                    fontsize=7.6, color='#333',
+            ax.text(0.985, 0.035, note, transform=ax.transAxes,
+                    fontsize=7.6, color='#333', ha='right',
                     bbox=dict(facecolor='white', edgecolor='none', alpha=0.82,
                               boxstyle='round,pad=0.25'))
             if r == 0:
                 ax.set_title(name, fontsize=10, loc='left')
             if c == 0:
-                ax.set_ylabel(f'{label}\n|power into the zonal flow|', fontsize=8.5)
+                ax.set_ylabel(f'{label}\n' r'$|\,\cdot\,| / E$   [$v_{\rm th}/a$]',
+                              fontsize=8.5)
             if r == rows - 1:
                 ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
             if r == 0 and c == 0:
-                ax.legend(frameon=False, fontsize=7, ncol=2)
+                ax.legend(frameon=False, fontsize=7, ncol=1, loc='lower left')
     if case_title:
         fig.suptitle(case_title, fontsize=10.5, x=0.008, ha='left')
         fig.tight_layout(rect=(0, 0, 1, 0.965))
