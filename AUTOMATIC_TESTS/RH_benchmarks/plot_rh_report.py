@@ -1296,6 +1296,7 @@ def figure_case_budget(runs, outfile, case_title=''):
     """
     rows = len(runs)
     fig, axes = plt.subplots(rows, 2, figsize=(10.2, 2.9 * rows), squeeze=False)
+    handles = {}
     for r, (label, path, kw) in enumerate(runs):
         for c, (which, name) in enumerate((('phi', r'$\varphi_{\rm RH}$'),
                                            ('omega', r'$\Omega_{\rm RH}$'))):
@@ -1344,6 +1345,10 @@ def figure_case_budget(runs, outfile, case_title=''):
                 m = np.nanmax(np.abs(dEdt))
                 if m > 0:
                     ax.set_ylim(m * 1e-3, m * 3.0)
+            for line in ax.get_lines():
+                lab = line.get_label()
+                if lab and not lab.startswith('_'):
+                    handles.setdefault(lab, line)
             note = (f'no drive: invariant flat to {resid:.1e}' if conserved
                     else f'median residual {resid:.1e}   turnover {turn:.1f}')
             ax.text(0.985, 0.035, note, transform=ax.transAxes,
@@ -1357,13 +1362,18 @@ def figure_case_budget(runs, outfile, case_title=''):
                               fontsize=8.5)
             if r == rows - 1:
                 ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
-            if r == 0 and c == 0:
-                ax.legend(frameon=False, fontsize=7, ncol=1, loc='lower left')
+            #> Collect handles across every panel.  The legend used to be drawn
+            #> from panel (0,0) alone, so a channel present only elsewhere -- the
+            #> drift channel, which W7-X has and Miller does not -- appeared as
+            #> an unlabelled curve.  One legend for the figure, built from the
+            #> union, cannot do that.
+    if handles:
+        fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8,
+                   ncol=len(handles), loc='upper center',
+                   bbox_to_anchor=(0.5, 0.975))
     if case_title:
         fig.suptitle(case_title, fontsize=10.5, x=0.008, ha='left')
-        fig.tight_layout(rect=(0, 0, 1, 0.965))
-    else:
-        fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.925))
     fig.savefig(outfile)
     plt.close(fig)
     return outfile
