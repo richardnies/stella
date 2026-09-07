@@ -968,15 +968,13 @@ COLL_PARITY = dict(kx=[0.02, 0.05, 0.1, 0.2, 0.5],
                    ratio=[1.34, 0.76, 0.81, 1.48, 2.11])
 
 
-def figure_energy_and_parity(outfile):
-    """The energy normalisation across the two regimes, and the collisional parity.
+def figure_energy(outfile):
+    """The energy normalisation across the two regimes.
 
-    Left: E_RH/|phi_RH|^2 scales as k_x^-2 at long wavelength and saturates at
-    1/2 at short.  Right: the collisional drive is odd-dominated at long
-    wavelength, the opposite ordering to the nonlinear channel.
+    E_RH/|phi_RH|^2 scales as k_x^-2 at long wavelength and saturates at 1/2 at
+    short, which is what the asymptotic forms of Gamma_cl and <I> predict.
     """
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.0, 3.4))
-
+    fig, a1 = plt.subplots(figsize=(6.0, 3.5))
     a1.loglog(ECL_LW['kx'], np.array(ECL_LW['val']) / np.array(ECL_LW['kx'])**2,
               'o-', color=PHI, lw=1.6, ms=5, label='measured')
     a1.loglog(ECL_SW['kx'], ECL_SW['val'], 'o-', color=PHI, lw=1.6, ms=5)
@@ -985,34 +983,20 @@ def figure_energy_and_parity(outfile):
               label=r'$\propto k_x^{-2}$')
     a1.axhline(0.5, color=UPA, ls='--', lw=1.4, label=r'saturation at $1/2$')
     a1.set_xlabel(r'$k_x\rho$')
-    a1.set_ylabel(r'$E_{\rm RH}/|\langle\varphi_{\rm RH}\rangle|^2 = \Gamma_{\rm cl}/2\langle I\rangle^2$')
+    a1.set_ylabel(r'$E_{\rm RH}/|\varphi_{\rm RH}|^2 = \Gamma_{\rm cl}/2\langle\mathcal{I}\rangle^2$')
     a1.set_title('The energy normalisation spans both regimes', fontsize=9.5, loc='left')
-    a1.legend(frameon=False, fontsize=7.6)
-
-    a2.semilogx(COLL_PARITY['kx'], COLL_PARITY['ratio'], 'o-', color=UPA, lw=1.6, ms=6)
-    a2.axhline(1.0, color=GREY, ls=':', lw=1.3)
-    a2.set_xlabel(r'$k_x\rho$')
-    a2.set_ylabel(r'$|F^{\rm coll}_{\rm even}|/|F^{\rm coll}_{\rm odd}|$')
-    a2.set_ylim(0, 3.1)
-    a2.set_title('Collisional drive: the two parities stay comparable',
-                 fontsize=9.5, loc='left')
-    a2.text(0.04, 0.97, 'no clean $k_x^2$ suppression of the even part:\n'
-            'collisions move no particles radially, so the\n'
-            'ordering argument bounds it but does not\n'
-            'make it small over this range',
-            transform=a2.transAxes, fontsize=6.9, color='#444', va='top')
-
-    fig.tight_layout()
-    fig.savefig(outfile)
-    plt.close(fig)
+    a1.legend(frameon=False, fontsize=7.8)
+    fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
 
 
-#> Re-measured 7 Sep with the flux formed from h_s, all three on the same
-#> nonlinear channel and the same windows the tests use.
-#> One run, one window, conversion disabled then enabled.
+#> One electromagnetic run, one window, the g_to_h conversion disabled then
+#> enabled.  See "Fixed: the nonlinear flux advects h_s" in the report.
 AB_TEST = dict(phi_before=6.460e-2, phi_after=4.408e-2,
                U_before=1.269, U_after=2.451e-1)
+
+#> Re-measured 7 Sep with the flux formed from h_s, all three on the same
+#> nonlinear channel and the same windows the tests use.
 CONTROLS = dict(
     names=['adiabatic electrons,\none species', 'kinetic electrons,\nelectrostatic',
            'electromagnetic'],
@@ -1104,7 +1088,7 @@ def figure_projection_lock(outfile):
     a1.set_xlabel(r'$t$')
     a1.set_ylabel(r'$|u_\parallel|\,/\,|\Omega_{\rm RH}|$')
     a1.set_title('The flow stays locked to its projection', fontsize=9.5, loc='left')
-    a1.text(0.04, 0.10, 'drifts by $0.6\%$ over the run:\nthe ratio is the geometric\n'
+    a1.text(0.04, 0.10, r'drifts by $0.6\%$ over the run:' '\n' 'the ratio is the geometric\n'
             'factor $I_p/B$, not a property\nof the initial state',
             transform=a1.transAxes, fontsize=7, color='#444')
 
@@ -1115,7 +1099,7 @@ def figure_projection_lock(outfile):
     a2.set_ylabel(r'$|\delta\varphi|\,/\,|\varphi_{\rm RH}|$')
     a2.set_title('The potential relaxes onto $\\varphi_{\\rm RH}$', fontsize=9.5, loc='left')
     a2.text(0.33, 0.72, 'the GAM rings down and $\\delta\\varphi$ settles\n'
-            'onto the conserved $\\varphi_{\\rm RH}$, to $0.4\%$',
+            'onto the conserved $\\varphi_{\\rm RH}$, to $0.4' r'\%$',
             transform=a2.transAxes, fontsize=7, color='#444')
 
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
@@ -1170,46 +1154,6 @@ def figure_geometry_factors(outfile):
     a3.legend(frameon=False, fontsize=7.4, loc='upper left')
     a3.set_title(r'The inertia, to $7$--$9\%$  ($\mathcal{I}_\Omega$: $0.451$, $0.497 \to 1/2$)',
                  fontsize=9.2, loc='left')
-
-    fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
-    return outfile
-
-
-NL_SCALING = {
-    'tokamak': dict(q=1.40, ratios=[6.03, 2.92, 2.78, 1.96, 1.88], power=-0.72),
-    'TJ-II':   dict(q=0.63, ratios=[3.11, 2.60], power=-0.26),
-    'QH':      dict(q=0.80, ratios=[3.37, 2.92], power=-0.21),
-    'QA':      dict(q=2.39, ratios=[7.87, 6.93], power=-0.18),
-}
-
-
-def figure_nonlinear_scaling(outfile):
-    """The even/odd ratio of the nonlinear drive falls with k_x everywhere."""
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.4, 3.4))
-    cols = {'tokamak': PHI, 'TJ-II': UPA, 'QH': '#2e7d6b', 'QA': '#7d3c6b'}
-
-    for name, d in NL_SCALING.items():
-        a1.plot(np.arange(1, len(d['ratios']) + 1), d['ratios'], 'o-',
-                color=cols[name], lw=1.6, ms=5.5, label=name)
-    a1.set_yscale('log')
-    a1.set_xlabel('successive resolved zonal mode (increasing $k_x$)')
-    a1.set_ylabel(r'$|F^{\rm NL}_{\rm even}|/|F^{\rm NL}_{\rm odd}|$')
-    a1.set_xticks([1, 2, 3, 4, 5])
-    a1.legend(frameon=False, fontsize=7.6)
-    a1.set_title(r'Falls with $k_x$ in every configuration', fontsize=9.5, loc='left')
-
-    for name, d in NL_SCALING.items():
-        a2.plot(d['q'], d['power'], 'o', color=cols[name], ms=9)
-        a2.annotate(name, xy=(d['q'], d['power']), xytext=(0, 9),
-                    textcoords='offset points', ha='center', fontsize=7.6, color=cols[name])
-    a2.axhline(0.0, color=GREY, ls=':', lw=1.4)
-    a2.set_xlabel(r'$q$'); a2.set_ylabel('fitted power of $k_x$')
-    a2.set_ylim(-1.42, 0.22); a2.set_xlim(0.3, 2.8)
-    a2.set_title('Agreement in sign, not in exponent', fontsize=9.5, loc='left')
-    a2.text(0.5, 0.035, 'all negative, ruling out the $O(k_x^2)$ of the naive\n'
-            'cancellation argument; two points spanning a factor\n'
-            'of two is thin evidence for a power',
-            transform=a2.transAxes, fontsize=6.9, color='#444', ha='center')
 
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
@@ -1283,11 +1227,10 @@ STANDALONE_FIGURES = {
     'fig_stellarator_summary.pdf': 'figure_stellarator_summary',
     'fig_asymptotic_weights.pdf': 'figure_asymptotic_weights',
     'fig_closed_forms.pdf': 'figure_closed_forms',
-    'fig_energy_and_parity.pdf': 'figure_energy_and_parity',
+    'fig_energy.pdf': 'figure_energy',
     'fig_controls.pdf': 'figure_controls',
     'fig_projection_lock.pdf': 'figure_projection_lock',
     'fig_geometry_factors.pdf': 'figure_geometry_factors',
-    'fig_nonlinear_scaling.pdf': 'figure_nonlinear_scaling',
     'fig_stress_and_species.pdf': 'figure_stress_and_species',
     'fig_summary.pdf': lambda out: figure_summary(SUMMARY_CASES, out),
 }
