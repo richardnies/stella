@@ -64,7 +64,7 @@ def stella_version(pytestconfig):
 #> asserted to stay bad rather than silently ignored, so that a fix shows up
 #> here as a failure and gets read.
 CASES = {
-    1: ('linear_collisionless', 0.30, None, {'miller', 'w7x'}),
+    1: ('linear_collisionless', 0.08, None, {'miller'}),
     2: ('linear_collisional',   0.05, 0.05, set()),
     3: ('nl_modified_adiabatic', 0.08, 0.20, {'w7x'}),
     4: ('nl_adiabatic',          0.08, 0.08, {'w7x'}),
@@ -89,6 +89,15 @@ CASES = {
 KNOWN_MOMENTUM_FAILURES = {
     ('miller', 6): (0.40, 4.00),
     ('w7x', 6):    (1.50, 15.0),
+}
+
+#> The same, for the potential-like invariant.  W7-X case 1 is the drift channel
+#> on its own, and it does not close: 1.5e-01, converged (1.81e-01 at t = 30,
+#> 1.52e-01 at t = 150, 1.47e-01 at t = 300).  This is the drift-channel defect
+#> the report discusses, now measured on a case where the flow actually moves
+#> rather than inferred from a vacuous one.
+KNOWN_PHI_FAILURES = {
+    ('w7x', 1): (0.06, 0.40),
 }
 
 CONFIGURATIONS = ('miller', 'w7x')
@@ -151,9 +160,17 @@ def test_whether_the_budget_closes_for_each_physics_case(configuration, case,
         return
 
     if phi_turnover >= TURNOVER_FLOOR:
-        assert phi_residual < phi_tol, (
-            f'phi_RH budget: {phi_residual:.3e} > {phi_tol} '
-            f'(turnover {phi_turnover:.2f})')
+        bounds = KNOWN_PHI_FAILURES.get((configuration, case))
+        if bounds is not None:
+            low, high = bounds
+            assert low < phi_residual < high, (
+                f'phi_RH is a known failure here and is bounded on both sides so '
+                f'that neither a regression nor a fix passes unnoticed; measured '
+                f'{phi_residual:.3e}')
+        else:
+            assert phi_residual < phi_tol, (
+                f'phi_RH budget: {phi_residual:.3e} > {phi_tol} '
+                f'(turnover {phi_turnover:.2f})')
 
     if omega_turnover < TURNOVER_FLOOR:
         return

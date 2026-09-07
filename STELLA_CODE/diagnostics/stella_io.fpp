@@ -1075,12 +1075,14 @@ contains
    end subroutine write_RH_omega_nc
 
 
-   subroutine write_RH_omega_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
+   subroutine write_RH_omega_fluxes_nc(nout, flux_nl, flux_coll, flux_drift, &
+                                       flux_nl_phi, flux_nl_apar, flux_nl_bpar)
       implicit none
 
       integer, intent(in) :: nout
       complex, dimension(:, :, :, :, :), intent(in) :: flux_nl
       complex, dimension(:, :, :, :), intent(in) :: flux_coll, flux_drift
+      complex, dimension(:, :, :, :, :), intent(in), optional :: flux_nl_phi, flux_nl_apar, flux_nl_bpar
 
 #ifdef NETCDF
       character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
@@ -1094,6 +1096,24 @@ contains
               long_name="Nonlinear flux driving the RH toroidal-momentum invariant")
       call netcdf_write_complex(ncid, "RH_omega_flux_collisional", flux_coll, dim_names=dims, start=start, &
               long_name="Collisional flux driving the RH toroidal-momentum invariant")
+      !> The nonlinear flux split by which field of chi supplied the advecting
+      !> velocity.  Written only when the caller asks for it, so an
+      !> electrostatic run does not carry three arrays of zeros.
+      if (present(flux_nl_phi)) then
+         call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_phi", flux_nl_phi, &
+                                   dim_names=dims_nl, start=start_nl, &
+                                   long_name="dApar=dBpar=0 part of the momentum nonlinear flux")
+      end if
+      if (present(flux_nl_apar)) then
+         call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_apar", flux_nl_apar, &
+                                   dim_names=dims_nl, start=start_nl, &
+                                   long_name="dApar part of the momentum nonlinear flux")
+      end if
+      if (present(flux_nl_bpar)) then
+         call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_bpar", flux_nl_bpar, &
+                                   dim_names=dims_nl, start=start_nl, &
+                                   long_name="dBpar part of the momentum nonlinear flux")
+      end if
       call netcdf_write_complex(ncid, "RH_omega_flux_drift", flux_drift, dim_names=dims, start=start, &
               long_name="Transit-averaged magnetic drift flux driving the RH toroidal-momentum invariant")
 #endif

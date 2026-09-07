@@ -1,3 +1,17 @@
+! The multi-species linear cases are ELECTROMAGNETIC.  A second kinetic species
+! and a finite beta are the two ingredients that between them broke the momentum
+! budget, and testing them together linearly -- where every channel is either
+! zero or exactly one thing -- is far sharper than waiting for the nonlinear
+! cases to expose them.  This is also the only place in the set where gbar, the
+! parallel Ampere solve and the vpar-dApar part of the advecting velocity are
+! exercised without turbulence on top.
+! MULTIPLE KINETIC SPECIES, linear.  This case exists because it is the one that
+! found a real bug.  With every channel identically zero and nothing driving the
+! projection, a second kinetic species still degraded conservation tenfold, and
+! neither a sixteenfold smaller time step nor a fourfold finer grid moved it --
+! which is what identified the momentum inertia's missing parallel-velocity
+! normalisation.  A single-species linear case cannot see that error, because for
+! m = T = 1 the wrong coefficient and the right one are the same number.
 ! Run length.  At nstep = 600 (t = 30) the drift channel -- the only source in
 ! this case -- had not moved the flow far enough to test anything: the energy
 ! turnover was 0.086, so the budget was satisfied whether the diagnostic was
@@ -27,9 +41,11 @@
 ! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
 ! vanishes and P_drift with it, while here it is the dominant source.
 &parameters_physics
-  adiabatic_option = 'field-line-average-term'
   nonlinear = .false.
   vnew_ref = 0.1
+  include_apar = .true.
+  include_bpar = .true.
+  beta = 4.0e-3
 /
 &kt_grids_knobs
   grid_option = 'range'
@@ -53,7 +69,7 @@
   width0 = 1.0
 /
 &species_knobs
-  nspec = 1
+  nspec = 2
 /
 &species_parameters_1
   dens = 1.0
@@ -63,6 +79,15 @@
   tprim = 0.0
   type = 'ion'
   z = 1.0
+/
+&species_parameters_2
+  dens = 1.0
+  fprim = 2.2
+  mass = 2.7e-4
+  temp = 1.0
+  tprim = 8.0
+  type = 'electron'
+  z = -1.0
 /
 &zgrid_parameters
   boundary_option = 'unconnected'

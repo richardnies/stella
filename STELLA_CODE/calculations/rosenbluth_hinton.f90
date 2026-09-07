@@ -1200,7 +1200,16 @@ contains
    !> V_sigma rather than the sigma-even and sigma-odd pair, and the species
    !> factor, which is n_s alone because a flow carries no charge weighting.
    !> There is correspondingly no even/odd split: V_sigma is one array.
-   subroutine get_RH_omega_fluxes_fluxtube(g, RH_omega_flux_nl, RH_omega_flux_coll, RH_omega_flux_drift)
+   !> The nonlinear flux is optionally returned split by which field of chi_s
+   !> supplied the advecting velocity.  Since
+   !> <chi_s>_R = J0 dphi - vpa J0 dApar + (2 J1 / a)(mu/Z) dBpar and the flux is
+   !> linear in the velocity, the three pieces add to the total.  The split says
+   !> WHICH field is responsible when an electromagnetic budget misbehaves; the
+   !> potential-like invariant has carried it since it was written and the
+   !> momentum one did not.
+   subroutine get_RH_omega_fluxes_fluxtube(g, RH_omega_flux_nl, RH_omega_flux_coll, RH_omega_flux_drift, &
+                                           RH_omega_flux_nl_phi, RH_omega_flux_nl_apar, &
+                                           RH_omega_flux_nl_bpar)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -1235,6 +1244,11 @@ contains
       complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_omega_flux_nl
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_omega_flux_coll
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_omega_flux_drift
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_omega_flux_nl_phi
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_omega_flux_nl_apar
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_omega_flux_nl_bpar
+      complex, dimension(:, :, :, :, :), allocatable :: int_phi, int_apar, int_bpar
+      logical :: do_field_split
 
       complex, dimension(naky, nakx) :: vchix_gyro, vchix_part, NL_term
       complex, dimension(naky, nakx) :: h_slice
@@ -1251,47 +1265,77 @@ contains
       ia = 1
       allocate (flux_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec))
 
+      do_field_split = present(RH_omega_flux_nl_phi) .and. present(RH_omega_flux_nl_apar) &
+                       .and. present(RH_omega_flux_nl_bpar)
+
       !----------------------------- nonlinear -------------------------------
       RH_omega_flux_nl = 0.
+      if (do_field_split) then
+         RH_omega_flux_nl_phi = 0.; RH_omega_flux_nl_apar = 0.; RH_omega_flux_nl_bpar = 0.
+      end if
       if (nonlinear) then
          integrand = 0.
+         if (do_field_split) then
+            allocate (int_phi, source=integrand)
+            allocate (int_apar, source=integrand)
+            allocate (int_bpar, source=integrand)
+         end if
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             iv = iv_idx(vmu_lo, ivmu)
             imu = imu_idx(vmu_lo, ivmu)
             is = is_idx(vmu_lo, ivmu)
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
-                  !> The gyroaveraged radial ExB velocity from the whole of chi.
-                  !> The three field contributions add; gyro_average overwrites
-                  !> its output, so they are accumulated rather than chained.
-                  call gyro_average(zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_gyro)
-                  if (include_apar) then
-                     call gyro_average(-2.0 * vpa(iv)*spec(is)%stm_psi0 &
-                                       * zi*spread(aky,2,nakx)*apar(:,:,iz,it), iz, ivmu, vchix_part)
-                     vchix_gyro = vchix_gyro + vchix_part
-                  end if
-                  if (include_bpar) then
-                     call gyro_average_j1(4.0*mu(imu)*spec(is)%tz &
-                                          * zi*spread(aky,2,nakx)*bpar(:,:,iz,it), iz, ivmu, vchix_part)
-                     vchix_gyro = vchix_gyro + vchix_part
-                  end if
-                  call transform_kx2x_xfirst(vchix_gyro, vchix_gyro_ky_x)
                   !> h_s, not g_s and not gbar_s.  The gyrokinetic nonlinearity
                   !> is {<chi_s>_R, h_s}; see rh_g_to_h_slice.  gbar is a
                   !> different object again -- it belongs to the parallel
                   !> streaming solve and to the conserved projection, and
                   !> substituting it here was tried and makes the
                   !> electromagnetic budget worse (0.29 -> 0.44).
-                  !> h_s, not g_s: the bracket is with the non-Boltzmann part.
                   call rh_g_to_h_slice(iz, it, ivmu, g, h_slice)
                   call transform_kx2x_xfirst(h_slice, g_ky_x)
-                  NL_term_ky_x = 2*real(vchix_gyro_ky_x * conjg(g_ky_x)) * exb_nonlin_fac
-                  call transform_x2kx_xfirst(NL_term_ky_x, NL_term)
-                  integrand(:,:,iz,it,ivmu) = NL_term * spread(RH_omega_weight(:,iz,it,ivmu), 1, naky)
+
+                  !> The gyroaveraged radial velocity from the whole of chi_s.
+                  !> The three field contributions add, and because the flux is
+                  !> linear in the velocity each one's flux can be formed on the
+                  !> way past, which is what the optional split returns.
+                  call gyro_average(zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_part)
+                  vchix_gyro = vchix_part
+                  if (do_field_split) call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_phi)
+
+                  if (include_apar) then
+                     call gyro_average(-2.0 * vpa(iv)*spec(is)%stm_psi0 &
+                                       * zi*spread(aky,2,nakx)*apar(:,:,iz,it), iz, ivmu, vchix_part)
+                     vchix_gyro = vchix_gyro + vchix_part
+                     if (do_field_split) call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_apar)
+                  end if
+
+                  if (include_bpar) then
+                     call gyro_average_j1(4.0*mu(imu)*spec(is)%tz &
+                                          * zi*spread(aky,2,nakx)*bpar(:,:,iz,it), iz, ivmu, vchix_part)
+                     vchix_gyro = vchix_gyro + vchix_part
+                     if (do_field_split) call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_bpar)
+                  end if
+
+                  call omega_flux_piece(vchix_gyro, g_ky_x, iz, it, ivmu, integrand)
                end do
             end do
          end do
          call integrate_vmu(integrand, spec%dens_psi0, RH_omega_flux_nl)
+         if (do_field_split) then
+            call integrate_vmu(int_phi, spec%dens_psi0, RH_omega_flux_nl_phi)
+            if (include_apar) then
+               call integrate_vmu(int_apar, spec%dens_psi0, RH_omega_flux_nl_apar)
+            else
+               RH_omega_flux_nl_apar = 0.
+            end if
+            if (include_bpar) then
+               call integrate_vmu(int_bpar, spec%dens_psi0, RH_omega_flux_nl_bpar)
+            else
+               RH_omega_flux_nl_bpar = 0.
+            end if
+            deallocate (int_phi, int_apar, int_bpar)
+         end if
       end if
 
       !---------------------------- collisional ------------------------------
@@ -3201,6 +3245,40 @@ contains
       Q_fac = zi*akx * vpa/bmag(ia,iz) * spec(is)%smz_psi0 * RH_drift_phase_fac(iz) * xdriftknob
 
    end subroutine eval_Q_fac
+
+   !======================================================================
+   !====== ONE VELOCITY'S CONTRIBUTION TO THE MOMENTUM FLUX ==============
+   !======================================================================
+   !> The nonlinear flux is bilinear in (velocity, distribution): transform the
+   !> velocity to real space, multiply by the already-transformed h_s, transform
+   !> back, and weight.  Factored out so the total and each field's share are
+   !> computed by the same code rather than by two copies of it that could drift
+   !> apart.  <h_ky_x> is passed in because it does not depend on which field is
+   !> being considered and transforming it once per slice is enough.
+   subroutine omega_flux_piece(vchix, h_ky_x, iz, it, ivmu, integrand)
+
+      use stella_layouts, only: vmu_lo
+      use parameters_kxky_grids, only: naky, nakx, nx
+      use zgrid, only: nzgrid
+      use stella_transforms, only: transform_kx2x_xfirst, transform_x2kx_xfirst
+      use geometry, only: exb_nonlin_fac
+
+      implicit none
+
+      complex, dimension(:, :), intent(in) :: vchix
+      complex, dimension(:, :), intent(in) :: h_ky_x
+      integer, intent(in) :: iz, it, ivmu
+      complex, dimension(:, :, -nzgrid:, :, vmu_lo%llim_proc:), intent(inout) :: integrand
+
+      complex, dimension(naky, nx) :: v_ky_x, term_ky_x
+      complex, dimension(naky, nakx) :: term
+
+      call transform_kx2x_xfirst(vchix, v_ky_x)
+      term_ky_x = 2 * real(v_ky_x * conjg(h_ky_x)) * exb_nonlin_fac
+      call transform_x2kx_xfirst(term_ky_x, term)
+      integrand(:, :, iz, it, ivmu) = term * spread(RH_omega_weight(:, iz, it, ivmu), 1, naky)
+
+   end subroutine omega_flux_piece
 
    !======================================================================
    !====== THE NON-BOLTZMANN DISTRIBUTION ON ONE (iz, it, ivmu) SLICE ====

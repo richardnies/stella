@@ -1389,7 +1389,7 @@ def figure_case_budget(runs, outfile, case_title=''):
 CASE_SUMMARY = [
     #  label                                        phi      Om     phi ok  Om ok
     ('1  linear collisionless / Miller',          9.20e-3, 9.12e-3, False, False),
-    ('1  linear collisionless / W7-X',            2.35e-1, 2.34e+1, False, False),
+    ('1  linear collisionless / W7-X',            1.47e-1, 1.01e+1, True,  False),
     ('2  linear collisional / Miller',            5.70e-3, 1.81e-2, True,  False),
     ('2  linear collisional / W7-X',              2.51e-3, 2.43e-2, True,  False),
     ('3  NL modified-adiabatic / Miller',         2.27e-2, 4.62e-2, True,  True),

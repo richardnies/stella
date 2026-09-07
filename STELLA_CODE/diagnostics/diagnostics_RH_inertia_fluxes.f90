@@ -410,6 +410,7 @@ contains
 
       complex, dimension(:, :, :, :), allocatable :: RH_omega_vs_kxzts, RH_omega_g_vs_kxzts
       complex, dimension(:, :, :, :, :), allocatable :: flux_nl
+      complex, dimension(:, :, :, :, :), allocatable :: flux_nl_phi, flux_nl_apar, flux_nl_bpar
       complex, dimension(:, :, :, :), allocatable :: flux_coll, flux_drift
       logical, save :: inertia_written = .false.
 
@@ -420,17 +421,22 @@ contains
       allocate (RH_omega_vs_kxzts(nakx, nztot, ntubes, nspec))
       allocate (RH_omega_g_vs_kxzts(nakx, nztot, ntubes, nspec))
       allocate (flux_nl(naky, nakx, nztot, ntubes, nspec))
+      allocate (flux_nl_phi(naky, nakx, nztot, ntubes, nspec))
+      allocate (flux_nl_apar(naky, nakx, nztot, ntubes, nspec))
+      allocate (flux_nl_bpar(naky, nakx, nztot, ntubes, nspec))
       allocate (flux_coll(nakx, nztot, ntubes, nspec))
       allocate (flux_drift(nakx, nztot, ntubes, nspec))
 
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_omega'
 
       call get_RH_omega(gnew, RH_omega_vs_kxzts, RH_omega_g_vs_kxzts)
-      call get_RH_omega_fluxes_fluxtube(gnew, flux_nl, flux_coll, flux_drift)
+      call get_RH_omega_fluxes_fluxtube(gnew, flux_nl, flux_coll, flux_drift, &
+                                       flux_nl_phi, flux_nl_apar, flux_nl_bpar)
 
       if (proc0) then
          call write_RH_omega_nc(nout, RH_omega_vs_kxzts, RH_omega_g_vs_kxzts)
-         call write_RH_omega_fluxes_nc(nout, flux_nl, flux_coll, flux_drift)
+         call write_RH_omega_fluxes_nc(nout, flux_nl, flux_coll, flux_drift, &
+                                       flux_nl_phi, flux_nl_apar, flux_nl_bpar)
          if (.not. inertia_written) then
             call write_RH_omega_inertia_nc(RH_omega_inertia)
             inertia_written = .true.
@@ -438,6 +444,7 @@ contains
       end if
 
       deallocate (RH_omega_vs_kxzts, RH_omega_g_vs_kxzts, flux_nl, flux_coll, flux_drift)
+      deallocate (flux_nl_phi, flux_nl_apar, flux_nl_bpar)
 
       if (proc0) call time_message(.false., timer(:), 'Write RH_omega')
 
