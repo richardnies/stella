@@ -664,10 +664,10 @@ def figure_stress_split(netcdf_file, outfile, time_min, time_max, title=''):
 def figure_stress_channels(netcdf_file, outfile, time_min, time_max, title=''):
     """The Reynolds and diamagnetic halves of the even nonlinear channel.
 
-    Reads the split stella now forms directly (write_RH_stress_split), so there
-    is no fitting here and total = Reynolds + diamagnetic is exact.  The split
-    is by the gyroaverage on the ExB velocity: J0 -> 1 leaves a density moment,
-    which quasineutrality slaves to phi and which is the Reynolds channel, and
+    Reads the split stella forms directly (write_RH_stress_split), so there is no
+    fitting here and total = Reynolds + diamagnetic is exact.  The split is on
+    the Bessel ARGUMENT: J0 at the distribution's own wavenumber leaves exactly
+    the polarisation-charge flux, which is the Reynolds channel, and
     the remainder carries (J0 - 1) ~ -kperp^2 vperp^2 / 4 Omega^2, i.e. the
     vperp^2 moment, and is the diamagnetic channel.
     """
