@@ -10,7 +10,7 @@ import pathlib
 import re
 
 HERE = pathlib.Path(__file__).resolve().parent
-REPORT = HERE.parent.parent / 'DOCUMENTATION' / 'RH_parallel_flow' / 'rh_parallel_flow.tex'
+REPORT = HERE.parent.parent / 'DOCUMENTATION' / 'stella_RH_report' / 'stella_RH_report.tex'
 
 
 def test_whether_every_registered_figure_function_exists():

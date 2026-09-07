@@ -251,7 +251,7 @@ def field_line_averaged_rh_inertia(netcdf_file):
 #     dE_uRH/dt = sum_s m_s n_s Re[ conj(<RH_upar_s>) d<RH_upar_s>/dt ] / |<I_u,s>|^2
 #               = sum_channels P_uRH .
 #
-# See DOCUMENTATION/RH_parallel_flow for the derivation.
+# See DOCUMENTATION/stella_RH_report for the derivation.
 ################################################################################
 
 #> Current names, then the two earlier spellings, so that output written before

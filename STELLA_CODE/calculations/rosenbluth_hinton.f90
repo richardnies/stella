@@ -65,7 +65,7 @@ module rosenbluth_hinton
    !> sigma-odd member of the same family of weights the linear streaming and
    !> radial drift annihilate; <RH_omega_inertia> is the same projection applied
    !> to a unit-flow shifted Maxwellian, so that the ratio of their field-line
-   !> averages is the parallel flow.  See DOCUMENTATION/RH_parallel_flow.
+   !> averages is the parallel flow.  See DOCUMENTATION/stella_RH_report.
    complex, dimension(:,:,:,:), allocatable :: RH_omega_weight
    complex, dimension(:,:,:,:), allocatable :: RH_omega_inertia
    ! (nakx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
@@ -1957,16 +1957,13 @@ contains
       !> construction, but its cubic spline is not.  Where the well contains
       !> interior maxima of B lying just below B_c -- the ordinary situation on a
       !> stellarator field line, and where g varies over orders of magnitude --
-      !> the spline overshoots and returns negative values; clamping those at
-      !> tiny(0.) then gives that node a weight of 1/sqrt(tiny), some 1e153,
-      !> which swamps the numerator and the bounce time alike and collapses the
-      !> transit average onto a single point.  Confining the interpolant to the
-      !> range of the data it was built from keeps it positive and shape
-      !> preserving.  Interpolating log g instead also enforces positivity, but
-      !> is unstable here: g approaches zero at those interior barriers, so its
-      !> logarithm spikes and the overshoot merely moves into the exponent.
-      call geo_spline(z_well, g_well, z_theta, g_theta)
-      g_theta = min(max(g_theta, minval(g_well)), maxval(g_well))
+      !> the spline overshoots and returns negative values, and the integrand
+      !> carries 1/sqrt(g).  A monotone cubic is bounded on each interval by the
+      !> data either side of it, so it cannot overshoot and needs no repair
+      !> afterwards -- which matters for more than robustness: the clamp that
+      !> used to sit here was an O(1) edit over an O(dz) stretch of the well and
+      !> cost the trapped channel a whole order of convergence.
+      call interp_monotone(z_well, g_well, z_theta, g_theta)
       num_theta = num_theta / sqrt(g_theta)
       den_theta = den_theta / sqrt(g_theta)
 
@@ -2186,21 +2183,18 @@ contains
 
       call geo_spline(z_well, drift_well, z_node, drift_node)
       call geo_spline(z_well, weight_well, z_node, weight_node)
-      call geo_spline(z_well, g_well, z_node, g_node)
+      call interp_monotone(z_well, g_well, z_node, g_node)
 
       !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
       !> construction, but its cubic spline is not.  Where the well contains
       !> interior maxima of B lying just below B_c -- the ordinary situation on a
       !> stellarator field line, and where g varies over orders of magnitude --
-      !> the spline overshoots and returns negative values; clamping those at
-      !> tiny(0.) then gives that node a weight of 1/sqrt(tiny), some 1e153,
-      !> which swamps the numerator and the bounce time alike and collapses the
-      !> transit average onto a single point.  Confining the interpolant to the
-      !> range of the data it was built from keeps it positive and shape
-      !> preserving.  Interpolating log g instead also enforces positivity, but
-      !> is unstable here: g approaches zero at those interior barriers, so its
-      !> logarithm spikes and the overshoot merely moves into the exponent.
-      g_node = min(max(g_node, minval(g_well)), maxval(g_well))
+      !> the spline overshoots and returns negative values, and the integrand
+      !> carries 1/sqrt(g).  A monotone cubic is bounded on each interval by the
+      !> data either side of it, so it cannot overshoot and needs no repair
+      !> afterwards -- which matters for more than robustness: the clamp that
+      !> used to sit here was an O(1) edit over an O(dz) stretch of the well and
+      !> cost the trapped channel a whole order of convergence.
       weight_node = weight_node / sqrt(g_node)
 
       drift_average = sum(drift_node * weight_node) / sum(weight_node)
@@ -2990,6 +2984,129 @@ contains
    end subroutine eval_transit_int_numerator
 
    !> Linear extrapolation of f to <z>, from its values at z1 and z2.
+   !============================================================================
+   !=========== SHAPE-PRESERVING INTERPOLATION OF THE WELL PROFILE =============
+   !============================================================================
+   !> Monotone piecewise cubic (Fritsch-Carlson) interpolation of <y> at <xi>.
+   !>
+   !> This exists for one quantity: g = (B_c - B) / ((z - z_l)(z_r - z)), the
+   !> smooth remainder after the turning-point singularity has been factored out
+   !> of a bounce integral.  g is positive throughout the well by construction,
+   !> but a cubic spline through it is not: where the well contains interior
+   !> maxima of B lying just below B_c -- the ordinary situation on a stellarator
+   !> field line, where g varies over orders of magnitude -- the spline
+   !> overshoots and returns negative values, and the integrand carries
+   !> 1/sqrt(g).
+   !>
+   !> That used to be handled by clamping the spline into the range of its own
+   !> data afterwards.  Clamping works, in that nothing blows up, but it is an
+   !> O(1) correction applied over an O(dz) stretch of the well, so it costs a
+   !> whole order of accuracy: measured against the identity the budget rests
+   !> on, the trapped channel converged as dz while the circulating channel next
+   !> to it converged as dz^2.  A monotone cubic cannot overshoot in the first
+   !> place -- on each interval it is bounded by the data either side of it -- so
+   !> the clamp is unnecessary and the order is recovered.
+   !>
+   !> Interpolating log g instead also enforces positivity, and was tried: it is
+   !> unstable here, because g approaches zero at those interior barriers and its
+   !> logarithm spikes, which merely moves the overshoot into the exponent.
+   !>
+   !> This recovers part of the order but not all of it: measured on the W7-X
+   !> drift channel the trapped channel goes from 0.99 to 1.28, against the
+   !> circulating channel's 1.93, and the residual at production resolution moves
+   !> only from 1.257e-01 to 1.244e-01.  What is left is not these theta
+   !> quadratures -- refining n_theta and n_nodes fourfold changes the answer by
+   !> 6e-04 relative, so they are converged -- but the z-grid data fed to them:
+   !> the set of grid points the well happens to contain, and the treatment of
+   !> the cell adjoining each turning point, where the theta nodes cluster.
+   !> Fixing that means changing which nodes the well integral is built on, not
+   !> how they are interpolated.
+   !============================================================================
+   subroutine interp_monotone(x, y, xi, yi)
+
+      implicit none
+
+      real, dimension(:), intent(in)  :: x, y, xi
+      real, dimension(:), intent(out) :: yi
+
+      integer :: n, m, k, i, klo, khi, kmid
+      real    :: t, h, a, b
+      real, dimension(size(x) - 1) :: hk, delta
+      real, dimension(size(x))     :: d
+      real    :: w1, w2
+
+      n = size(x)
+      m = size(xi)
+
+      if (n == 1) then
+         yi = y(1)
+         return
+      end if
+
+      do k = 1, n - 1
+         hk(k) = x(k + 1) - x(k)
+         delta(k) = (y(k + 1) - y(k)) / hk(k)
+      end do
+
+      if (n == 2) then
+         d = delta(1)
+      else
+         !> Interior nodes: zero derivative at a local extremum, so the
+         !> interpolant cannot overshoot past it; otherwise the weighted
+         !> harmonic mean of the neighbouring slopes, which is the Fritsch-
+         !> Carlson choice and keeps the cubic inside the data.
+         do k = 2, n - 1
+            if (delta(k - 1) * delta(k) <= 0.) then
+               d(k) = 0.
+            else
+               w1 = 2.*hk(k) + hk(k - 1)
+               w2 = hk(k) + 2.*hk(k - 1)
+               d(k) = (w1 + w2) / (w1 / delta(k - 1) + w2 / delta(k))
+            end if
+         end do
+         !> One-sided at the ends, limited so that the end interval cannot
+         !> overshoot either.
+         d(1) = ((2.*hk(1) + hk(2)) * delta(1) - hk(1) * delta(2)) / (hk(1) + hk(2))
+         if (d(1) * delta(1) <= 0.) then
+            d(1) = 0.
+         else if (delta(1) * delta(2) <= 0. .and. abs(d(1)) > abs(3.*delta(1))) then
+            d(1) = 3.*delta(1)
+         end if
+         d(n) = ((2.*hk(n - 1) + hk(n - 2)) * delta(n - 1) - hk(n - 1) * delta(n - 2)) &
+                / (hk(n - 1) + hk(n - 2))
+         if (d(n) * delta(n - 1) <= 0.) then
+            d(n) = 0.
+         else if (delta(n - 1) * delta(n - 2) <= 0. .and. abs(d(n)) > abs(3.*delta(n - 1))) then
+            d(n) = 3.*delta(n - 1)
+         end if
+      end if
+
+      !> Evaluate the Hermite cubic.  <x> is increasing, so the containing
+      !> interval is found by bisection.
+      do i = 1, m
+         if (xi(i) <= x(1)) then
+            yi(i) = y(1); cycle
+         else if (xi(i) >= x(n)) then
+            yi(i) = y(n); cycle
+         end if
+         klo = 1; khi = n
+         do while (khi - klo > 1)
+            kmid = (klo + khi) / 2
+            if (x(kmid) > xi(i)) then
+               khi = kmid
+            else
+               klo = kmid
+            end if
+         end do
+         h = hk(klo)
+         t = (xi(i) - x(klo)) / h
+         a = y(klo); b = y(khi)
+         yi(i) = a * (2.*t**3 - 3.*t**2 + 1.) + b * (-2.*t**3 + 3.*t**2) &
+               + h * d(klo) * (t**3 - 2.*t**2 + t) + h * d(khi) * (t**3 - t**2)
+      end do
+
+   end subroutine interp_monotone
+
    pure real function extrapolate(z, z1, z2, f1, f2)
 
       implicit none
@@ -3118,22 +3235,19 @@ contains
       tmp_imag = aimag(numerator_well) * weight_well
       call geo_spline(z_well, tmp_real, z_node, node_real)
       call geo_spline(z_well, tmp_imag, z_node, node_imag)
-      call geo_spline(z_well, g_well, z_node, g_node)
+      call interp_monotone(z_well, g_well, z_node, g_node)
       deallocate (tmp_real, tmp_imag)
 
       !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
       !> construction, but its cubic spline is not.  Where the well contains
       !> interior maxima of B lying just below B_c -- the ordinary situation on a
       !> stellarator field line, and where g varies over orders of magnitude --
-      !> the spline overshoots and returns negative values; clamping those at
-      !> tiny(0.) then gives that node a weight of 1/sqrt(tiny), some 1e153,
-      !> which swamps the numerator and the bounce time alike and collapses the
-      !> transit average onto a single point.  Confining the interpolant to the
-      !> range of the data it was built from keeps it positive and shape
-      !> preserving.  Interpolating log g instead also enforces positivity, but
-      !> is unstable here: g approaches zero at those interior barriers, so its
-      !> logarithm spikes and the overshoot merely moves into the exponent.
-      g_node = min(max(g_node, minval(g_well)), maxval(g_well))
+      !> the spline overshoots and returns negative values, and the integrand
+      !> carries 1/sqrt(g).  A monotone cubic is bounded on each interval by the
+      !> data either side of it, so it cannot overshoot and needs no repair
+      !> afterwards -- which matters for more than robustness: the clamp that
+      !> used to sit here was an O(1) edit over an O(dz) stretch of the well and
+      !> cost the trapped channel a whole order of convergence.
       node_weight = 1.0 / sqrt(g_node)
 
       !> The Chebyshev rule carries a common factor pi/n_nodes and a common

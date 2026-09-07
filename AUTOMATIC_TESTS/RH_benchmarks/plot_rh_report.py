@@ -925,7 +925,7 @@ def figure_asymptotic_weights(outfile):
 # ---------------------------------------------------------------------------
 # Closed forms measured against direct quadrature, and the energies.
 # Every number below was measured; the tables they replace are in the git
-# history of DOCUMENTATION/RH_parallel_flow/rh_parallel_flow.tex.
+# history of DOCUMENTATION/stella_RH_report/stella_RH_report.tex.
 # ---------------------------------------------------------------------------
 
 LW_CLOSED = dict(kx=[0.005, 0.01, 0.02, 0.05, 0.1, 0.2],

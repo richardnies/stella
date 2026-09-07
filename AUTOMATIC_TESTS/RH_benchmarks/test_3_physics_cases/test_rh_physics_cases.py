@@ -140,6 +140,11 @@ KNOWN_MOMENTUM_FAILURES = {
     #> closes normally at 1.7e-02.  Unexplained; bounded on both sides so that a
     #> fix shows up here as a failure and gets read.
     ('w7x', 2):     (3.0e+02, 3.0e+03),
+    #> The electromagnetic member of the same pair.  Its potential-like residual
+    #> is bounded below; the momentum-like one is bounded here.  Both channels
+    #> fail in W7-X and only the potential one fails in Miller, which is the
+    #> asymmetry the electrostatic twin (case 2) exists to expose.
+    ('w7x', 3):     (1.0e+03, 1.0e+04),
 }
 
 #> The same, for the potential-like invariant.  W7-X case 1 is the drift channel
