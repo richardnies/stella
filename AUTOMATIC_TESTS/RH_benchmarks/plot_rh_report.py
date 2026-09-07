@@ -1450,7 +1450,6 @@ def figure_case_summary(cases, outfile):
 
 STANDALONE_FIGURES = {
     'fig_convergence.pdf': 'figure_convergence',
-    'fig_stellarator_summary.pdf': 'figure_stellarator_summary',
     'fig_asymptotic_weights.pdf': 'figure_asymptotic_weights',
     'fig_closed_forms.pdf': 'figure_closed_forms',
     'fig_energy.pdf': 'figure_energy',
