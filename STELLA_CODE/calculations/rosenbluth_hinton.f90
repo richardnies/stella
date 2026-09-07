@@ -3054,13 +3054,24 @@ contains
    !> fourfold moves nothing.  Two converged rules compute the same integral
    !> whatever their form.
    !>
-   !> What is not excluded, and is the one structural thing left in the chain:
-   !> Q is built on theta nodes inside eval_Q_profile_hat, splined back onto the
-   !> z grid to be stored in Q_hat, and then interpolated onto theta nodes again
-   !> here.  That round trip through the z grid is the only step whose accuracy
-   !> depends on nzed and which no test above has touched, and it is exactly the
-   !> kind of thing that would show up as a stubborn low order.  Testing it means
-   !> carrying Q at the quadrature nodes rather than on the grid.
+   !> One more lead was written here and is also excluded, by a test above rather
+   !> than by a new one.  Q is built on theta nodes, stored on the z grid, and
+   !> interpolated back; and Q(z) has a square-root cusp at each turning point,
+   !> because z = mid + half cos(theta) makes dtheta/dz diverge there, so
+   !> interpolating Q in z is first order exactly where the weight is largest.
+   !> That is a good argument and it is still wrong: numerator_well carries
+   !> exp(-Q), and interpolating numerator_well in theta -- which removes that
+   !> error -- was the no-op listed above.
+   !>
+   !> So no candidate currently stands.  What is known is narrow but real: the
+   !> trapped channel converges at order 1.28 and the circulating channel beside
+   !> it at 1.93, in the same runs, so whatever this is distinguishes trapped
+   !> orbits from passing ones; and it is not in this routine, every part of
+   !> which has now been replaced independently without effect.  Anyone picking
+   !> this up should look for what else trapped orbits do that passing ones do
+   !> not -- the classification against maxval(bmag), the wells find_well
+   !> rejects and the fallback they take -- rather than at the well quadrature,
+   !> which has been eliminated.
    !============================================================================
    subroutine interp_monotone(x, y, xi, yi)
 
