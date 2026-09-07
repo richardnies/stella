@@ -61,13 +61,52 @@ def LW_inertia(netcdf_file):
         out_e[ikx] = ne / den; out_a[ikx] = na / den
     return out_e, out_a
 
-PHI = '#1b3a5c'      # the potential-like invariant
-UPA = '#b0532a'      # the parallel-flow invariant
-GREY = '#6b6b6b'
+#> The palette.  Brighter and more saturated than the original muted pair, so
+#> that curves separate at a glance and survive being printed or projected.  The
+#> two invariants keep a blue/orange identity throughout the report; the channel
+#> colours are chosen to be distinguishable from them and from each other.
+PHI = '#0059c8'      # the potential-like invariant
+UPA = '#e8590c'      # the momentum invariant
+PHI_ALT = '#00a3e0'  # its predicted counterpart
+UPA_ALT = '#f0a202'
+GREY = '#5a5a5a'
+CHAN_NL = '#9c27b0'      # nonlinear
+CHAN_COLL = '#c9a227'    # collisional
+CHAN_DRIFT = '#00a878'   # drift
+CHAN_APAR = '#d81b60'    # dApar share of a flux
+CHAN_BPAR = '#7cb342'    # dBpar share of a flux
 
-plt.rcParams.update({'font.size': 9, 'axes.grid': True, 'grid.alpha': 0.15,
-                     'grid.linewidth': 0.6, 'axes.axisbelow': True,
-                     'figure.dpi': 150, 'savefig.bbox': 'tight'})
+#> Typeset the figures with LaTeX so they match the body text, and set the sizes
+#> from one place.  Everything a reader has to read -- tick labels, axis labels,
+#> legends, annotations -- goes up a couple of points from matplotlib's defaults;
+#> the in-panel notes stay smaller so they inform without crowding the data.
+#>
+#> With usetex on, every string is LaTeX: a literal per-cent sign must be written
+#> \% and an underscore outside maths must be escaped.  _tex() below does that
+#> for text assembled at run time, such as file and variable names.
+plt.rcParams.update({
+    'text.usetex': True,
+    'font.family': 'serif',
+    'font.serif': ['Computer Modern Roman'],
+    'text.latex.preamble': r'\usepackage{amsmath}\usepackage{bm}',
+    'font.size': 12,
+    'axes.titlesize': 12,
+    'axes.labelsize': 12,
+    'xtick.labelsize': 11,
+    'ytick.labelsize': 11,
+    'legend.fontsize': 11,
+    'axes.grid': True, 'grid.alpha': 0.18, 'grid.linewidth': 0.6,
+    'axes.axisbelow': True, 'axes.linewidth': 0.9,
+    'lines.linewidth': 2.0,
+    'figure.dpi': 150, 'savefig.bbox': 'tight',
+})
+
+
+def _tex(text):
+    """Escape a run-time string so LaTeX will set it verbatim-ish."""
+    return (text.replace('\\', r'\textbackslash{}')
+                .replace('_', r'\_').replace('%', r'\%')
+                .replace('&', r'\&').replace('#', r'\#'))
 
 
 def _weights(ncdata):
@@ -117,8 +156,8 @@ def figure_conservation(netcdf_file, outfile, convergence=None):
     ax.set_yscale('log')
     ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
     ax.set_ylabel('departure from initial value')
-    ax.legend(frameon=False, fontsize=8.5, loc='lower right')
-    ax.set_title('Conservation, linear and collisionless', fontsize=9.5, loc='left')
+    ax.legend(frameon=False, fontsize=10, loc='lower right')
+    ax.set_title('Conservation, linear and collisionless', fontsize=10.5, loc='left')
 
     if convergence is not None:
         labels, phi_values, upar_values = convergence
@@ -126,10 +165,10 @@ def figure_conservation(netcdf_file, outfile, convergence=None):
         ax2.plot(x, phi_values, 'o-', color=PHI, lw=1.5, ms=4)
         ax2.plot(x, upar_values, 's-', color=UPA, lw=1.5, ms=4)
         ax2.set_xticks(x)
-        ax2.set_xticklabels(labels, fontsize=7.5)
+        ax2.set_xticklabels(labels, fontsize=9.5)
         ax2.set_yscale('log')
         ax2.set_ylabel('drift over the run')
-        ax2.set_title('Convergence under refinement', fontsize=9.5, loc='left')
+        ax2.set_title('Convergence under refinement', fontsize=10.5, loc='left')
     else:
         ax2.axis('off')
 
@@ -168,11 +207,11 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
             scale = float(np.mean((exact_I[finite] / LW_I[finite])**2))
             err = abs(np.sqrt(1.0 / scale) - 1.0) * 100
             ax_e.plot(t, E * scale, color=GREY, lw=1.3, ls=':',
-                      label=energy_label + rf'  with $O(k_x^2)\ \langle I\rangle$  ({err:.1f}% in $\langle I\rangle$)')
+                      label=energy_label + rf'  with $O(k_x^2)\ \langle I\rangle$  ({err:.1f}\% in $\langle I\rangle$)')
     ax_e.set_ylabel('zonal energy')
-    ax_e.legend(frameon=False, fontsize=8.5)
+    ax_e.legend(frameon=False, fontsize=10)
     if title:
-        ax_e.set_title(title, fontsize=9.5, loc='left')
+        ax_e.set_title(title, fontsize=10.5, loc='left')
 
     ax_p.plot(t, dEdt, color=colour, lw=1.9, label=r'$dE/dt$  (measured)')
     ax_p.plot(t, P, color='#c2703a' if which == 'phi' else '#2e6f8e',
@@ -185,14 +224,14 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
     ax_p.axhline(0.0, color='k', lw=0.5, alpha=0.3)
     ax_p.set_xlabel(r'time  $[a/v_{\rm th}]$')
     ax_p.set_ylabel('power into the zonal flow')
-    ax_p.legend(frameon=False, fontsize=8.5, ncol=2, loc='upper right')
+    ax_p.legend(frameon=False, fontsize=10, ncol=2, loc='upper right')
 
     nonlinear = np.any(P_nl != 0)
     measured, expected = (dEdt - P_coll - P_dr, P_nl) if nonlinear else (dEdt, P)
     residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)
     ax_p.text(0.015, 0.035, f'residual {residual:.2e}'
                             f'  ({"nonlinear channel" if nonlinear else "total budget"})',
-              transform=ax_p.transAxes, ha='left', va='bottom', fontsize=8.5, color='#444')
+              transform=ax_p.transAxes, ha='left', va='bottom', fontsize=10, color='#444')
 
     fig.savefig(outfile)
     plt.close(fig)
@@ -289,9 +328,9 @@ def figure_kx(netcdf_file, outfile, time_min, time_max, title=''):
         ax_w.semilogy(k, amp, marker + '-', color=colour, lw=1.2, ms=4, alpha=0.8)
     ax.set_yscale('log')
     ax.set_ylabel('budget residual, per mode')
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(frameon=False, fontsize=10)
     if title:
-        ax.set_title(title, fontsize=9.5, loc='left')
+        ax.set_title(title, fontsize=10.5, loc='left')
     ax_w.set_ylabel('drive  $|P_{\\rm nl}|$')
     ax_w.set_xlabel(r'$k_x \rho_i$')
     fig.savefig(outfile)
@@ -314,13 +353,13 @@ def figure_summary(cases, outfile):
         values = [c[index] if c[index] is not None else np.nan for c in cases]
         ax.barh(y + offset, values, height=height, color=colour, label=label, alpha=0.9)
     ax.axvline(0.08, color=GREY, ls='--', lw=1.0)
-    ax.text(0.084, -0.55, 'benchmark tolerance', fontsize=7.5, color=GREY, va='bottom')
+    ax.text(0.084, -0.55, 'benchmark tolerance', fontsize=9.5, color=GREY, va='bottom')
     ax.set_xscale('log')
     ax.set_yticks(y)
-    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_yticklabels(labels, fontsize=9.5)
     ax.invert_yaxis()
     ax.set_xlabel('relative budget residual')
-    ax.legend(frameon=False, fontsize=9, ncol=2, loc='lower center',
+    ax.legend(frameon=False, fontsize=10, ncol=2, loc='lower center',
               bbox_to_anchor=(0.5, 1.01))
     ax.grid(axis='y', alpha=0)
     fig.tight_layout()
@@ -348,9 +387,9 @@ def figure_quadrature(rows, outfile):
             ax.loglog(nzed, series[index - 1], 'o-', color=shade, lw=1.4, ms=4,
                       label=rf'$k_x\rho_i={kx}$')
         ax.set_xlabel(r'$n_{\rm zed}$')
-        ax.set_title(name, fontsize=10, loc='left', color=colour)
+        ax.set_title(name, fontsize=11, loc='left', color=colour)
     axes[0].set_ylabel('conservation error')
-    axes[1].legend(frameon=False, fontsize=7.5, loc='upper right', ncol=1)
+    axes[1].legend(frameon=False, fontsize=9.5, loc='upper right', ncol=1)
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -372,13 +411,13 @@ def figure_drift_scan(xdrift, phi_err, upar_err, trapped, phi_tf, upar_tf, outfi
     ax.loglog(xdrift, upar_err, 's-', color=UPA, lw=1.6, ms=5, label=r'$p_{\rm RH}$')
     ax.set_xlabel('xdriftknob  (magnetic drift strength)')
     ax.set_ylabel('conservation error')
-    ax.set_title(r'At fixed $k_x\rho_i=2$', fontsize=9.5, loc='left')
-    ax.legend(frameon=False, fontsize=8.5)
+    ax.set_title(r'At fixed $k_x\rho_i=2$', fontsize=10.5, loc='left')
+    ax.legend(frameon=False, fontsize=10)
 
     ax2.loglog(trapped, phi_tf, 'o-', color=PHI, lw=1.6, ms=5)
     ax2.loglog(trapped, upar_tf, 's-', color=UPA, lw=1.6, ms=5)
     ax2.set_xlabel('trapped fraction')
-    ax2.set_title(r'At fixed $k_x\rho_i=2$, drift on', fontsize=9.5, loc='left')
+    ax2.set_title(r'At fixed $k_x\rho_i=2$, drift on', fontsize=10.5, loc='left')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -402,17 +441,17 @@ def figure_asymptotics(datasets, outfile):
         ax.axhline(plateau, color=colour, ls=':', lw=1.1)
         ax2.semilogx(Q, np.array(Iu), 's-', color=colour, lw=1.5, ms=4, label=label)
     ax.axvline(1.0, color=GREY, ls='--', lw=1.0)
-    ax.text(1.15, ax.get_ylim()[0] * 2, r'$Q = 1$', fontsize=8, color=GREY)
+    ax.text(1.15, ax.get_ylim()[0] * 2, r'$Q = 1$', fontsize=9.5, color=GREY)
     ax.set_xlabel(r'drift-orbit phase  $Q \sim k_x \rho\, q/\epsilon$')
     ax.set_ylabel(r'$\langle I\rangle/[(1-\Gamma_0)Z^2n/T] - 1$')
-    ax.set_title('Neoclassical enhancement', fontsize=9.5, loc='left')
-    ax.legend(frameon=False, fontsize=8)
+    ax.set_title('Neoclassical enhancement', fontsize=10.5, loc='left')
+    ax.legend(frameon=False, fontsize=9.5)
     ax2.axhline(0.5, color=GREY, ls=':', lw=1.1)
-    ax2.text(Q[0], 0.52, r'$1/2$', fontsize=8, color=GREY)
+    ax2.text(Q[0], 0.52, r'$1/2$', fontsize=9.5, color=GREY)
     ax2.axvline(1.0, color=GREY, ls='--', lw=1.0)
     ax2.set_xlabel(r'drift-orbit phase  $Q$')
     ax2.set_ylabel(r'$\langle I_p\rangle$')
-    ax2.set_title('Toroidal-momentum inertia', fontsize=9.5, loc='left')
+    ax2.set_title('Toroidal-momentum inertia', fontsize=10.5, loc='left')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -436,8 +475,8 @@ def figure_phase_mixing(Q, W_all, W_passing, outfile):
     ax.axvline(1.0, color=GREY, ls='--', lw=1.0)
     ax.set_xlabel(r'drift-orbit phase  $Q$')
     ax.set_ylabel(r'$\langle |W| \rangle$')
-    ax.set_title('Phase mixing of the projection weight', fontsize=9.5, loc='left')
-    ax.legend(frameon=False, fontsize=8.5)
+    ax.set_title('Phase mixing of the projection weight', fontsize=10.5, loc='left')
+    ax.legend(frameon=False, fontsize=10)
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -481,12 +520,12 @@ def figure_LW_power(panels, outfile):
             #> ratio is meaningless wherever the channel passes through zero.
             error = abs(np.trapz(LW, time) / np.trapz(exact, time) - 1) * 100
             ax.plot(time, exact, color=colour, lw=1.5,
-                    label=rf'{label}  ({error:.1f}%)')
+                    label=rf'{label}  ({error:.1f}\%)')
             ax.plot(time, LW, color=colour, lw=1.5, ls=':', alpha=0.95)
         ax.axhline(0.0, color='k', lw=0.5, alpha=0.3)
         ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
-        ax.set_title(title, fontsize=9.5, loc='left')
-        ax.legend(frameon=False, fontsize=7.6)
+        ax.set_title(title, fontsize=10.5, loc='left')
+        ax.legend(frameon=False, fontsize=9.5)
 
     axes[0].set_ylabel(r'$P_{\rm RH}$ into the zonal flow')
     fig.tight_layout()
@@ -598,8 +637,8 @@ def figure_stress_split(netcdf_file, outfile, time_min, time_max, title=''):
             label=r'Reynolds $+$ diamagnetic')
     ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
     ax.set_ylabel(r'$F^{\rm NL}_{\rm even}$')
-    ax.set_title(f'{title}  $k_x\\rho = {kx[j]:.2f}$', fontsize=9.5, loc='left')
-    ax.legend(frameon=False, fontsize=8)
+    ax.set_title(f'{title}  $k_x\\rho = {kx[j]:.2f}$', fontsize=10.5, loc='left')
+    ax.legend(frameon=False, fontsize=9.5)
 
     pos = kx > 0
     e1, eb = [], []
@@ -610,12 +649,12 @@ def figure_stress_split(netcdf_file, outfile, time_min, time_max, title=''):
     ax2.semilogy(kx[pos], e1, 'o--', color=GREY, lw=1.4, ms=5, label='Reynolds only')
     ax2.semilogy(kx[pos], eb, 's-', color=UPA, lw=1.6, ms=5, label=r'Reynolds $+$ diamagnetic')
     ax2.set_xlabel(r'$k_x\rho$')
-    ax2.set_ylabel('residual [%]')
-    ax2.set_title('Both stresses are needed', fontsize=9.5, loc='left')
-    ax2.legend(frameon=False, fontsize=8)
+    ax2.set_ylabel(r'residual [\%]')
+    ax2.set_title('Both stresses are needed', fontsize=10.5, loc='left')
+    ax2.legend(frameon=False, fontsize=9.5)
     weight = np.linalg.norm(cb[1] * P_p) / np.linalg.norm(cb[0] * P_phi)
     ax2.text(0.97, 0.06, rf'$|\Pi_T|/|\Pi_\varphi| = {weight:.2f}$', transform=ax2.transAxes,
-             ha='right', fontsize=8.5, color='#444')
+             ha='right', fontsize=10, color='#444')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -656,8 +695,8 @@ def figure_stress_channels(netcdf_file, outfile, time_min, time_max, title=''):
     ax.axhline(0.0, color='k', lw=0.5, alpha=0.3)
     ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
     ax.set_ylabel(r'$F^{\rm NL}_{\rm even}$')
-    ax.set_title(f'{title}  $k_x\\rho = {kx[j]:.2f}$', fontsize=9.5, loc='left')
-    ax.legend(frameon=False, fontsize=8)
+    ax.set_title(f'{title}  $k_x\\rho = {kx[j]:.2f}$', fontsize=10.5, loc='left')
+    ax.legend(frameon=False, fontsize=9.5)
 
     ratio, align = [], []
     for jj in np.where(positive)[0]:
@@ -668,7 +707,7 @@ def figure_stress_channels(netcdf_file, outfile, time_min, time_max, title=''):
     ax2.axhline(1.0, color=GREY, ls=':', lw=1.1)
     ax2.set_xlabel(r'$k_x\rho$')
     ax2.set_ylabel(r'$|\Pi_T| / |\Pi_\varphi|$')
-    ax2.set_title('Diamagnetic against Reynolds', fontsize=9.5, loc='left')
+    ax2.set_title('Diamagnetic against Reynolds', fontsize=10.5, loc='left')
     axr = ax2.twinx()
     axr.plot(kx[positive], align, 's--', color=PHI, lw=1.2, ms=4, alpha=0.8)
     axr.axhline(0.0, color=PHI, lw=0.5, alpha=0.3)
@@ -729,9 +768,9 @@ def figure_convergence(outfile):
         ax.loglog(n, ONE_GRID_AT_A_TIME['U'][kx], 's--', color=c, lw=1.2, ms=4, alpha=0.75)
     ax.set_xlabel(r'$n_{\rm zed}$  (other grids fixed)')
     ax.set_ylabel('conservation error')
-    ax.set_title('Refining one grid: misleading', fontsize=9.5, loc='left')
+    ax.set_title('Refining one grid: misleading', fontsize=10.5, loc='left')
     ax.legend(frameon=True, framealpha=0.92, edgecolor='none',
-              fontsize=7.4, ncol=1, loc='lower left')
+              fontsize=9, ncol=1, loc='lower left')
 
     lv = ALL_GRIDS['level']
     for kx, c in ((0.05, PHI), (2.0, UPA)):
@@ -741,8 +780,8 @@ def figure_convergence(outfile):
     ref = np.array(lv, dtype=float)
     ax2.loglog(ref, 5.6e-1 * (ref / ref[0])**-2, ':', color=GREY, lw=1.3, label=r'$\propto h^{2}$')
     ax2.set_xlabel(r'refinement of $n_{\rm zed}$, $n_{v_\parallel}$, $n_\mu$, $\Delta t$ together')
-    ax2.set_title('Refining all four: it converges', fontsize=9.5, loc='left')
-    ax2.legend(frameon=False, fontsize=7.6)
+    ax2.set_title('Refining all four: it converges', fontsize=10.5, loc='left')
+    ax2.legend(frameon=False, fontsize=9.5)
 
     x = np.arange(len(CONSERVATION_REFINE['label']))
     ax3.plot(x, CONSERVATION_REFINE['phi'], 'o-', color=PHI, lw=1.6, ms=6,
@@ -750,11 +789,11 @@ def figure_convergence(outfile):
     ax3.plot(x, CONSERVATION_REFINE['U'], 's--', color=UPA, lw=1.6, ms=6,
              label=r'$\Omega_{\rm RH}$')
     ax3.set_yscale('log')
-    ax3.set_xticks(x); ax3.set_xticklabels(CONSERVATION_REFINE['label'], fontsize=7.5)
+    ax3.set_xticks(x); ax3.set_xticklabels(CONSERVATION_REFINE['label'], fontsize=9.5)
     ax3.set_xlabel(r'$n_{\rm zed}$ / $\Delta t$')
     ax3.set_ylabel('conservation error')
-    ax3.set_title('Both projections, falling together', fontsize=9.5, loc='left')
-    ax3.legend(frameon=False, fontsize=8)
+    ax3.set_title('Both projections, falling together', fontsize=10.5, loc='left')
+    ax3.legend(frameon=False, fontsize=9.5)
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -791,10 +830,10 @@ def figure_stellarator_summary(outfile):
                 label=r'$\Omega_{\rm RH}$')
     ax.semilogy(x, [STELLARATOR[n]['share'] for n in names], '^:', color=GREY, lw=1.2, ms=5,
                 label='drift channel size')
-    ax.set_xticks(x); ax.set_xticklabels(names, fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels(names, fontsize=9.5)
     ax.set_ylabel('unaccounted fraction')
-    ax.set_title('Drift channel alone (collisionless)', fontsize=9.5, loc='left')
-    ax.legend(frameon=False, fontsize=8, loc='lower left')
+    ax.set_title('Drift channel alone (collisionless)', fontsize=10.5, loc='left')
+    ax.legend(frameon=False, fontsize=9.5, loc='lower left')
 
     bphi = [STELLARATOR[n]['bphi'] for n in names]
     bU = [STELLARATOR[n]['bU'] for n in names]
@@ -805,12 +844,12 @@ def figure_stellarator_summary(outfile):
     #> QA carries no U_RH point: its collisional momentum drive is a near
     #> cancellation, leaving a small-signal test rather than a failing one.
     ax2.annotate('QA: momentum drive\nnearly cancels', xy=(2, 9.3e-2), xytext=(1.5, 2.6e-1),
-                 fontsize=7, color='#444',
+                 fontsize=9, color='#444',
                  arrowprops=dict(arrowstyle='-', color='#888', lw=0.8))
-    ax2.set_xticks(x); ax2.set_xticklabels(names, fontsize=8)
+    ax2.set_xticks(x); ax2.set_xticklabels(names, fontsize=9.5)
     ax2.set_ylabel('budget residual')
-    ax2.set_title('Budget, linear collisional', fontsize=9.5, loc='left')
-    ax2.legend(frameon=False, fontsize=8)
+    ax2.set_title('Budget, linear collisional', fontsize=10.5, loc='left')
+    ax2.legend(frameon=False, fontsize=9.5)
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -850,9 +889,9 @@ def figure_asymptotic_weights(outfile):
               label='nonlinear, TJ-II')
     ref = np.array([0.01, 0.2])
     a1.loglog(ref, 0.08 * (ref / 0.02)**2, ':', color=GREY, lw=1.3, label=r'$\propto k_x^2$')
-    a1.set_xlabel(r'$k_x\rho$'); a1.set_ylabel('error against the exact weight [%]')
-    a1.set_title('Long wavelength', fontsize=9.5, loc='left')
-    a1.legend(frameon=False, fontsize=7.2)
+    a1.set_xlabel(r'$k_x\rho$'); a1.set_ylabel(r'error against the exact weight [\%]')
+    a1.set_title('Long wavelength', fontsize=10.5, loc='left')
+    a1.legend(frameon=False, fontsize=9)
 
     a2.loglog(SW_VS_KX['kx'], SW_VS_KX['err'], 'o-', color=PHI, lw=1.6, ms=5,
               label=r'$n_{\rm zed}=128$')
@@ -862,21 +901,21 @@ def figure_asymptotic_weights(outfile):
                     arrowprops=dict(arrowstyle='->', color=UPA, lw=1.3))
     a2.plot([], [], 'v-', color=UPA, label='refining the grid')
     a2.set_xlabel(r'$k_x\rho$')
-    a2.set_title('Short wavelength', fontsize=9.5, loc='left')
-    a2.legend(frameon=False, fontsize=7.6)
+    a2.set_title('Short wavelength', fontsize=10.5, loc='left')
+    a2.legend(frameon=False, fontsize=9.5)
     a2.text(0.97, 0.44, 'the rise is the quadrature\nit is compared against, not\nthe formula',
-            transform=a2.transAxes, fontsize=7, color='#444', ha='right')
+            transform=a2.transAxes, fontsize=9, color='#444', ha='right')
 
     x = np.arange(len(SW_BANDS['names'])); w = 0.36
     a3.bar(x - w/2, SW_BANDS['gaussian'], w, color=GREY, label='stationary phase')
     a3.bar(x + w/2, SW_BANDS['uniform'], w, color=UPA, label='uniform (Bessel)')
     for xi, fr in zip(x, SW_BANDS['weight']):
-        a3.text(xi, 52, f'{fr:.0%}', ha='center', fontsize=7, color='#444')
-    a3.set_xticks(x); a3.set_xticklabels(SW_BANDS['names'], fontsize=7.5)
-    a3.set_ylabel('error [%]'); a3.set_ylim(0, 58)
-    a3.legend(frameon=False, fontsize=7.6)
+        a3.text(xi, 52, rf'{100*fr:.0f}\%', ha='center', fontsize=10, color='#333')
+    a3.set_xticks(x); a3.set_xticklabels(SW_BANDS['names'], fontsize=9.5)
+    a3.set_ylabel(r'error [\%]'); a3.set_ylim(0, 58)
+    a3.legend(frameon=False, fontsize=9.5)
     a3.set_title(r'By pitch angle, $k_x\rho=10$  (share of weight above)',
-                 fontsize=9.5, loc='left')
+                 fontsize=10.5, loc='left')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -917,9 +956,9 @@ def figure_closed_forms(outfile):
               label=r'the inertia $\langle I\rangle$')
     ref = np.array([0.005, 0.2])
     a1.loglog(ref, 0.21 * (ref / 0.02)**2, ':', color=GREY, lw=1.3, label=r'$\propto k_x^2$')
-    a1.set_xlabel(r'$k_x\rho$'); a1.set_ylabel('error against quadrature [%]')
-    a1.set_title('Long wavelength: the $O(k_x^2)$ expansion', fontsize=9.5, loc='left')
-    a1.legend(frameon=False, fontsize=7.4)
+    a1.set_xlabel(r'$k_x\rho$'); a1.set_ylabel(r'error against quadrature [\%]')
+    a1.set_title('Long wavelength: the $O(k_x^2)$ expansion', fontsize=10.5, loc='left')
+    a1.legend(frameon=False, fontsize=9)
 
     a2.plot(STATPHASE['kx'], STATPHASE['quad'], 'o-', color=PHI, lw=1.6, ms=6,
             label='quadrature')
@@ -927,17 +966,17 @@ def figure_closed_forms(outfile):
             label='stationary phase')
     a2.set_xscale('log'); a2.set_yscale('log')
     a2.set_xlabel(r'$k_x\rho$'); a2.set_ylabel(r'$|\langle e^{-ik_x\delta x}\rangle_\tau|$')
-    a2.set_title('Short wavelength: the amplitude', fontsize=9.5, loc='left')
-    a2.legend(frameon=False, fontsize=7.6)
+    a2.set_title('Short wavelength: the amplitude', fontsize=10.5, loc='left')
+    a2.legend(frameon=False, fontsize=9.5)
     for kx, q, sp in zip(STATPHASE['kx'], STATPHASE['quad'], STATPHASE['sp']):
         a2.annotate(f'{sp/q:.3f}', xy=(kx, q), xytext=(0, 9),
-                    textcoords='offset points', ha='center', fontsize=7.2, color='#444')
+                    textcoords='offset points', ha='center', fontsize=9, color='#444')
     a2.set_xlim(3.6, 28)
     a2.set_ylim(8.2e-2, 2.35e-1)
     a2.text(0.03, 0.06, 'labels: closed form / quadrature\n' +
             r'$c=\langle|W|\rangle\Delta\theta_{\rm rms}$ = ' +
             ', '.join(f'{c:.2f}' for c in C_CONST['c']) + r' at $k_x\rho=5,10,20$',
-            transform=a2.transAxes, fontsize=6.8, color='#444')
+            transform=a2.transAxes, fontsize=9, color='#444')
 
     filled = [not m for m in RESID1['marginal']]
     a3.plot(RESID1['kx'], RESID1['ratio'], '-', color=PHI, lw=1.6, zorder=1)
@@ -950,11 +989,11 @@ def figure_closed_forms(outfile):
     a3.set_ylabel(r'measured $\varphi(\infty)$ / predicted')
     sec = a3.secondary_xaxis('top')
     sec.set_xticks(RESID1['kx'])
-    sec.set_xticklabels([f'{q:g}' for q in RESID1['Q']], fontsize=7.5)
-    sec.set_xlabel(r'$\mathcal{Q}$', fontsize=8.5, labelpad=1.5)
-    a3.set_title('The residual identity, first equality', fontsize=9.5, loc='left', pad=26)
+    sec.set_xticklabels([f'{q:g}' for q in RESID1['Q']], fontsize=9.5)
+    sec.set_xlabel(r'$\mathcal{Q}$', fontsize=10, labelpad=1.5)
+    a3.set_title('The residual identity, first equality', fontsize=10.5, loc='left', pad=26)
     a3.text(0.5, 0.08, 'open marker: flow barely moves,\nso the ratio is poorly determined',
-            transform=a3.transAxes, fontsize=6.9, color='#444', ha='center')
+            transform=a3.transAxes, fontsize=9, color='#444', ha='center')
 
     fig.tight_layout()
     fig.savefig(outfile)
@@ -984,8 +1023,8 @@ def figure_energy(outfile):
     a1.axhline(0.5, color=UPA, ls='--', lw=1.4, label=r'saturation at $1/2$')
     a1.set_xlabel(r'$k_x\rho$')
     a1.set_ylabel(r'$E_{\rm RH}/|\varphi_{\rm RH}|^2 = \Gamma_{\rm cl}/2\langle\mathcal{I}\rangle^2$')
-    a1.set_title('The energy normalisation spans both regimes', fontsize=9.5, loc='left')
-    a1.legend(frameon=False, fontsize=7.8)
+    a1.set_title('The energy normalisation spans both regimes', fontsize=10.5, loc='left')
+    a1.legend(frameon=False, fontsize=9.5)
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
 
@@ -1022,38 +1061,38 @@ def figure_controls(outfile):
            label=r'$\Omega_{\rm RH}$')
     for xi, (a, b) in enumerate(zip([AB_TEST['phi_before'], AB_TEST['phi_after']],
                                     [AB_TEST['U_before'], AB_TEST['U_after']])):
-        a1.text(xi - w/2, a * 1.15, f'{a:.3f}', ha='center', fontsize=7, color='#333')
-        a1.text(xi + w/2, b * 1.15, f'{b:.3f}', ha='center', fontsize=7, color='#333')
+        a1.text(xi - w/2, a * 1.15, f'{a:.3f}', ha='center', fontsize=9, color='#333')
+        a1.text(xi + w/2, b * 1.15, f'{b:.3f}', ha='center', fontsize=9, color='#333')
     a1.annotate('', xy=(1 + w/2, AB_TEST['U_after'] * 1.9),
                 xytext=(0 + w/2, AB_TEST['U_before'] * 1.05),
                 arrowprops=dict(arrowstyle='->', color=UPA, lw=1.5))
-    a1.text(0.5, 0.62, r'$\times 5.2$', transform=a1.transAxes, fontsize=9,
+    a1.text(0.5, 0.62, r'$\times 5.2$', transform=a1.transAxes, fontsize=10,
             color=UPA, ha='center')
     a1.set_yscale('log'); a1.set_ylim(1e-2, 6.0)
     a1.set_xticks(x)
-    a1.set_xticklabels(['flux from $g_s$', 'flux from $h_s$'], fontsize=8.5)
+    a1.set_xticklabels(['flux from $g_s$', 'flux from $h_s$'], fontsize=10)
     a1.set_ylabel('nonlinear-channel residual')
-    a1.legend(frameon=False, fontsize=8)
-    a1.set_title('Advecting the right distribution', fontsize=9.5, loc='left')
+    a1.legend(frameon=False, fontsize=9.5)
+    a1.set_title('Advecting the right distribution', fontsize=10.5, loc='left')
 
     x = np.arange(len(CONTROLS['names'])); w = 0.34
     a2.bar(x - w/2, CONTROLS['phi'], w, color=PHI, label=r'$\varphi_{\rm RH}$')
     a2.bar(x + w/2, CONTROLS['U'], w, color=UPA, label=r'$\Omega_{\rm RH}$')
     for xi, (a, b) in enumerate(zip(CONTROLS['phi'], CONTROLS['U'])):
-        a2.text(xi - w/2, a * 1.15, f'{a:.3f}', ha='center', fontsize=7, color='#333')
-        a2.text(xi + w/2, b * 1.15, f'{b:.3f}', ha='center', fontsize=7, color='#333')
+        a2.text(xi - w/2, a * 1.15, f'{a:.3f}', ha='center', fontsize=9, color='#333')
+        a2.text(xi + w/2, b * 1.15, f'{b:.3f}', ha='center', fontsize=9, color='#333')
     a2.axhline(0.08, color=GREY, ls='--', lw=1.1)
-    a2.text(-0.46, 0.092, 'benchmark tolerance', fontsize=7, color=GREY, ha='left')
+    a2.text(-0.46, 0.092, 'benchmark tolerance', fontsize=9, color=GREY, ha='left')
     a2.annotate('', xy=(1 - w/2 + 0.02, CONTROLS['U'][1] * 0.9),
                 xytext=(0 + w/2, CONTROLS['U'][0] * 1.15),
                 arrowprops=dict(arrowstyle='->', color=UPA, lw=1.5))
-    a2.text(0.36, 0.30, r'$\times 68$', transform=a2.transAxes, fontsize=9,
+    a2.text(0.36, 0.30, r'$\times 68$', transform=a2.transAxes, fontsize=10,
             color=UPA, ha='center')
     a2.set_yscale('log'); a2.set_ylim(2e-3, 2.0)
-    a2.set_xticks(x); a2.set_xticklabels(CONTROLS['names'], fontsize=8)
-    a2.legend(frameon=False, fontsize=8, loc='upper left')
+    a2.set_xticks(x); a2.set_xticklabels(CONTROLS['names'], fontsize=9.5)
+    a2.legend(frameon=False, fontsize=9.5, loc='upper left')
     a2.set_title('A second kinetic species costs; the field does not',
-                 fontsize=9.5, loc='left')
+                 fontsize=10.5, loc='left')
 
     fig.tight_layout()
     fig.savefig(outfile)
@@ -1087,20 +1126,20 @@ def figure_projection_lock(outfile):
     a1.set_ylim(3.50, 3.57)
     a1.set_xlabel(r'$t$')
     a1.set_ylabel(r'$|u_\parallel|\,/\,|\Omega_{\rm RH}|$')
-    a1.set_title('The flow stays locked to its projection', fontsize=9.5, loc='left')
+    a1.set_title('The flow stays locked to its projection', fontsize=10.5, loc='left')
     a1.text(0.04, 0.10, r'drifts by $0.6\%$ over the run:' '\n' 'the ratio is the geometric\n'
             'factor $I_p/B$, not a property\nof the initial state',
-            transform=a1.transAxes, fontsize=7, color='#444')
+            transform=a1.transAxes, fontsize=9, color='#444')
 
     a2.plot(LOCK_PHI['t'], LOCK_PHI['r'], 'o-', color=PHI, lw=1.7, ms=6)
     a2.axhline(1.0, color=GREY, ls=':', lw=1.4)
     a2.set_yscale('log')
     a2.set_xlabel(r'$t$')
     a2.set_ylabel(r'$|\delta\varphi|\,/\,|\varphi_{\rm RH}|$')
-    a2.set_title('The potential relaxes onto $\\varphi_{\\rm RH}$', fontsize=9.5, loc='left')
+    a2.set_title('The potential relaxes onto $\\varphi_{\\rm RH}$', fontsize=10.5, loc='left')
     a2.text(0.33, 0.72, 'the GAM rings down and $\\delta\\varphi$ settles\n'
             'onto the conserved $\\varphi_{\\rm RH}$, to $0.4' r'\%$',
-            transform=a2.transAxes, fontsize=7, color='#444')
+            transform=a2.transAxes, fontsize=9, color='#444')
 
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
@@ -1121,13 +1160,13 @@ def figure_geometry_factors(outfile):
     a1.axhline(UPAR_RATIO['predicted'], color=PHI, ls='--', lw=1.6, label='closed form')
     for xi, m in zip(x, UPAR_RATIO['measured']):
         a1.text(xi, m - 0.28, f'{m/UPAR_RATIO["predicted"]:.3f}',
-                ha='center', fontsize=8, color='white', weight='bold')
+                ha='center', fontsize=9.5, color='white', weight='bold')
     a1.set_xticks(x)
-    a1.set_xticklabels([rf'$k_x\rho={k}$' for k in UPAR_RATIO['kx']], fontsize=8.5)
+    a1.set_xticklabels([rf'$k_x\rho={k}$' for k in UPAR_RATIO['kx']], fontsize=10)
     a1.set_xlim(-0.62, len(x) - 0.38)
     a1.set_ylim(0, 5.0); a1.set_ylabel(r'$|u_\parallel|\,/\,|\Omega_{\rm RH}|$')
-    a1.legend(frameon=False, fontsize=7.8, loc='upper left')
-    a1.set_title('The flow ratio (labels: measured/predicted)', fontsize=9.2, loc='left')
+    a1.legend(frameon=False, fontsize=9.5, loc='upper left')
+    a1.set_title('The flow ratio (labels: measured/predicted)', fontsize=10, loc='left')
 
     x = np.arange(len(TAU_GEOM['eps'])); w = 0.34
     a2.bar(x - w/2, TAU_GEOM['vpar2'], w, color=PHI,
@@ -1136,24 +1175,24 @@ def figure_geometry_factors(outfile):
            label=r'$\langle\langle v_\parallel/B\rangle_\tau^2\rangle/\langle\langle v_\parallel\rangle_\tau^2\rangle$')
     a2.axhline(1.0, color=GREY, ls=':', lw=1.3)
     a2.set_ylim(0.85, 1.03)
-    a2.set_xticks(x); a2.set_xticklabels([rf'$\epsilon={e}$' for e in TAU_GEOM['eps']], fontsize=8)
-    a2.legend(frameon=False, fontsize=7.0)
+    a2.set_xticks(x); a2.set_xticklabels([rf'$\epsilon={e}$' for e in TAU_GEOM['eps']], fontsize=9.5)
+    a2.legend(frameon=False, fontsize=9)
     a2.set_title(r'Both $\to 1$ as $\epsilon\to 0$, as the closed form assumes',
-                 fontsize=9.2, loc='left')
+                 fontsize=10, loc='left')
 
     x = np.arange(len(INERTIA_GEOM['eps'])); w = 0.34
     a3.bar(x - w/2, INERTIA_GEOM['predicted'], w, color=GREY,
            label=r'$1+1.6q^2/\sqrt{\epsilon}$')
     a3.bar(x + w/2, INERTIA_GEOM['measured'], w, color=PHI, label='measured')
     for xi, (pr, me) in enumerate(zip(INERTIA_GEOM['predicted'], INERTIA_GEOM['measured'])):
-        a3.text(xi, max(pr, me) + 0.9, f'{100*(me/pr-1):.0f}%', ha='center',
-                fontsize=7.4, color='#333')
+        a3.text(xi, max(pr, me) + 0.9, rf'{100*(me/pr-1):.0f}\%', ha='center',
+                fontsize=9, color='#333')
     a3.set_xticks(x)
-    a3.set_xticklabels([rf'$\epsilon={e}$' for e in INERTIA_GEOM['eps']], fontsize=8)
+    a3.set_xticklabels([rf'$\epsilon={e}$' for e in INERTIA_GEOM['eps']], fontsize=9.5)
     a3.set_ylim(0, 27); a3.set_ylabel('neoclassical polarisation')
-    a3.legend(frameon=False, fontsize=7.4, loc='upper left')
+    a3.legend(frameon=False, fontsize=9, loc='upper left')
     a3.set_title(r'The inertia, to $7$--$9\%$  ($\mathcal{I}_\Omega$: $0.451$, $0.497 \to 1/2$)',
-                 fontsize=9.2, loc='left')
+                 fontsize=10, loc='left')
 
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
@@ -1173,20 +1212,20 @@ def figure_stress_and_species(outfile):
     a1.bar(x - w/2, STRESS_TABLE['rey'], w, color=PHI, label=r'$|\Pi_\varphi|$  (Reynolds)')
     a1.bar(x + w/2, STRESS_TABLE['dia'], w, color=UPA, label=r'$|\Pi_T|$  (diamagnetic)')
     for xi, (r, d) in enumerate(zip(STRESS_TABLE['rey'], STRESS_TABLE['dia'])):
-        a1.text(xi, max(r, d) * 1.08, f'ratio {d/r:.2f}', ha='center', fontsize=7.4, color='#333')
-    a1.set_xticks(x); a1.set_xticklabels(STRESS_TABLE['names'], fontsize=8)
+        a1.text(xi, max(r, d) * 1.08, f'ratio {d/r:.2f}', ha='center', fontsize=9, color='#333')
+    a1.set_xticks(x); a1.set_xticklabels(STRESS_TABLE['names'], fontsize=9.5)
     a1.set_ylabel('stress'); a1.set_ylim(0, 3.4e-3)
-    a1.legend(frameon=False, fontsize=7.6)
-    a1.set_title('The diamagnetic stress is the larger of the two', fontsize=9.5, loc='left')
+    a1.legend(frameon=False, fontsize=9.5)
+    a1.set_title('The diamagnetic stress is the larger of the two', fontsize=10.5, loc='left')
 
     x = np.arange(len(SPECIES_SPLIT['names'])); w = 0.34
     a2.bar(x - w/2, SPECIES_SPLIT['upar'], w, color=PHI, label=r'$u_{\parallel e}/u_{\parallel i}$')
     a2.bar(x + w/2, SPECIES_SPLIT['mom'], w, color=UPA, label='momentum, $e/i$')
     a2.set_yscale('log'); a2.set_ylim(1, 3e5)
-    a2.set_xticks(x); a2.set_xticklabels(SPECIES_SPLIT['names'], fontsize=8)
-    a2.legend(frameon=False, fontsize=7.6)
+    a2.set_xticks(x); a2.set_xticklabels(SPECIES_SPLIT['names'], fontsize=9.5)
+    a2.legend(frameon=False, fontsize=9.5)
     a2.set_title(r'Electrons carry the parallel flow ($j_\parallel$: $100\%$)',
-                 fontsize=9.5, loc='left')
+                 fontsize=10.5, loc='left')
 
     fig.tight_layout(); fig.savefig(outfile); plt.close(fig)
     return outfile
@@ -1307,7 +1346,7 @@ def figure_case_budget(runs, outfile, case_title=''):
             except Exception as exc:                      # a case not run yet
                 ax.text(0.5, 0.5, f'not available\n{type(exc).__name__}',
                         transform=ax.transAxes, ha='center', va='center',
-                        fontsize=8, color='#999')
+                        fontsize=9.5, color='#999')
                 ax.set_xticks([]); ax.set_yticks([])
                 continue
             #> Magnitudes on a log axis.  These runs span many decades -- the
@@ -1352,14 +1391,14 @@ def figure_case_budget(runs, outfile, case_title=''):
             note = (f'no drive: invariant flat to {resid:.1e}' if conserved
                     else f'median residual {resid:.1e}   turnover {turn:.1f}')
             ax.text(0.985, 0.035, note, transform=ax.transAxes,
-                    fontsize=7.6, color='#333', ha='right',
+                    fontsize=9.5, color='#333', ha='right',
                     bbox=dict(facecolor='white', edgecolor='none', alpha=0.82,
                               boxstyle='round,pad=0.25'))
             if r == 0:
-                ax.set_title(name, fontsize=10, loc='left')
+                ax.set_title(name, fontsize=11, loc='left')
             if c == 0:
                 ax.set_ylabel(f'{label}\n' r'$|\,\cdot\,| / E$   [$v_{\rm th}/a$]',
-                              fontsize=8.5)
+                              fontsize=10)
             if r == rows - 1:
                 ax.set_xlabel(r'time  $[a/v_{\rm th}]$')
             #> Collect handles across every panel.  The legend used to be drawn
@@ -1368,11 +1407,11 @@ def figure_case_budget(runs, outfile, case_title=''):
             #> an unlabelled curve.  One legend for the figure, built from the
             #> union, cannot do that.
     if handles:
-        fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8,
+        fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=9.5,
                    ncol=len(handles), loc='upper center',
                    bbox_to_anchor=(0.5, 0.975))
     if case_title:
-        fig.suptitle(case_title, fontsize=10.5, x=0.008, ha='left')
+        fig.suptitle(case_title, fontsize=11.5, x=0.008, ha='left')
     fig.tight_layout(rect=(0, 0, 1, 0.925))
     fig.savefig(outfile)
     plt.close(fig)
@@ -1387,21 +1426,25 @@ def figure_case_budget(runs, outfile, case_title=''):
 #> then satisfied by a correct diagnostic and a broken one alike, so the number
 #> is drawn hollow and is not a result.
 CASE_SUMMARY = [
-    #  label                                        phi      Om     phi ok  Om ok
-    ('1  linear collisionless / Miller',          9.20e-3, 9.12e-3, False, False),
-    ('1  linear collisionless / W7-X',            1.47e-1, 1.01e+1, True,  False),
-    ('2  linear collisional / Miller',            5.70e-3, 1.81e-2, True,  False),
-    ('2  linear collisional / W7-X',              2.51e-3, 2.43e-2, True,  False),
-    ('3  NL modified-adiabatic / Miller',         2.27e-2, 4.62e-2, True,  True),
-    ('3  NL modified-adiabatic / W7-X',           1.35e-2, 1.12e-1, False, False),
-    ('4  NL adiabatic / Miller',                  1.10e-2, 3.10e-2, True,  True),
-    ('4  NL adiabatic / W7-X',                    7.25e-3, 1.56e-1, False, False),
-    ('5  NL kinetic / Miller',                    1.28e-2, 1.38e-2, True,  True),
-    ('5  NL kinetic / W7-X',                      8.47e-4, 1.62e-2, True,  True),
-    ('6  NL electromagnetic, dApar / Miller',     4.80e-2, 1.14e+0, True,  True),
-    ('6  NL electromagnetic, dApar / W7-X',       6.78e-2, 5.07e+0, True,  True),
-    ('7  NL electromagnetic, both / Miller',      3.98e-2, 1.33e-2, True,  True),
-    ('7  NL electromagnetic, both / W7-X',        2.86e-2, 1.03e-1, True,  True),
+    #  label                                          phi      Om     phi ok  Om ok
+    ('1  linear collisionless / Miller',            9.20e-3, 9.12e-3, False, False),
+    ('1  linear collisionless / W7-X',              1.47e-1, 1.01e+1, True,  False),
+    ('2  linear collisionless, 2sp, EM / Miller',   6.54e+0, 1.40e-3, True,  False),
+    ('2  linear collisionless, 2sp, EM / W7-X',     5.72e+0, 2.90e+3, True,  True),
+    ('3  linear collisional / Miller',              9.16e-3, 3.48e-2, True,  False),
+    ('3  linear collisional / W7-X',                2.23e-3, 2.35e-2, True,  False),
+    ('4  linear collisional, 2sp, EM / Miller',     2.83e+1, 7.07e+1, True,  True),
+    ('4  linear collisional, 2sp, EM / W7-X',       1.05e+0, 3.69e+2, True,  True),
+    ('5  NL modified-adiabatic / Miller',           2.27e-2, 4.62e-2, True,  True),
+    ('5  NL modified-adiabatic / W7-X',             1.35e-2, 1.12e-1, False, False),
+    ('6  NL adiabatic / Miller',                    1.10e-2, 3.10e-2, True,  True),
+    ('6  NL adiabatic / W7-X',                      7.25e-3, 1.56e-1, False, False),
+    ('7  NL kinetic / Miller',                      1.28e-2, 1.38e-2, True,  True),
+    ('7  NL kinetic / W7-X',                        8.47e-4, 1.62e-2, True,  True),
+    ('8  NL EM, dApar / Miller',                    4.77e-2, 1.16e+0, True,  True),
+    ('8  NL EM, dApar / W7-X',                      6.78e-2, 5.07e+0, True,  True),
+    ('9  NL EM, both / Miller',                     4.05e-2, 1.32e-2, True,  True),
+    ('9  NL EM, both / W7-X',                       2.86e-2, 1.03e-1, True,  True),
 ]
 
 
@@ -1426,17 +1469,17 @@ def figure_case_summary(cases, outfile):
                 edgecolor=colour, linewidth=1.1,
                 hatch=[None if o else '///' for o in oks])
     ax.axvline(0.08, color=GREY, ls='--', lw=1.1)
-    ax.text(0.088, -0.72, 'benchmark tolerance', fontsize=7.3, color=GREY, va='top')
+    ax.text(0.088, -0.72, 'benchmark tolerance', fontsize=9, color=GREY, va='top')
     ax.set_xscale('log')
-    ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=7.8)
+    ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=9.5)
     ax.invert_yaxis()
     ax.set_xlabel('median relative residual of the budget')
-    ax.legend(frameon=False, fontsize=9, ncol=2, loc='lower center',
+    ax.legend(frameon=False, fontsize=10, ncol=2, loc='lower center',
               bbox_to_anchor=(0.5, 1.01))
     ax.grid(axis='y', alpha=0)
-    ax.text(0.99, 0.015, 'hollow: energy turnover below 0.5, so the budget is\n'
-                         'satisfied whether the diagnostic is right or not',
-            transform=ax.transAxes, fontsize=6.9, color='#555', ha='right')
+    ax.text(0.5, -0.135, 'hollow: energy turnover below 0.5, so the budget is satisfied '
+                         'whether the diagnostic is right or not',
+            transform=ax.transAxes, fontsize=9.5, color='#444', ha='center')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)

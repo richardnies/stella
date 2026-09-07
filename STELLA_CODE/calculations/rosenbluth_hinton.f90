@@ -1276,9 +1276,17 @@ contains
       if (nonlinear) then
          integrand = 0.
          if (do_field_split) then
-            allocate (int_phi, source=integrand)
-            allocate (int_apar, source=integrand)
-            allocate (int_bpar, source=integrand)
+            !> Explicit bounds, not source=integrand.  `integrand` is the shared
+            !> module scratch g0 aliased in above, and allocating from it left
+            !> these three with bounds that did not match the dummy argument's
+            !> in omega_flux_piece, which crashed with SIGBUS.
+            allocate (int_phi(naky, nakx, -nzgrid:nzgrid, ntubes, &
+                              vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+            allocate (int_apar(naky, nakx, -nzgrid:nzgrid, ntubes, &
+                               vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+            allocate (int_bpar(naky, nakx, -nzgrid:nzgrid, ntubes, &
+                               vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+            int_phi = 0.; int_apar = 0.; int_bpar = 0.
          end if
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             iv = iv_idx(vmu_lo, ivmu)

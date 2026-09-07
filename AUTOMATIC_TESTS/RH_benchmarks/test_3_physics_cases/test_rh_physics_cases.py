@@ -7,12 +7,19 @@
 # ingredient that introduced it:
 #
 #   1  linear, collisionless                     no drive at all in Miller
-#   2  linear, collisional                       one source, no turbulence
-#   3  nonlinear, modified-adiabatic electrons   the zonal-flow closure
-#   4  nonlinear, adiabatic electrons            the opposite closure
-#   5  nonlinear, kinetic ions and electrons     a second kinetic species
-#   6  nonlinear electromagnetic, dApar          gbar, Ampere, vpar dApar
-#   7  nonlinear electromagnetic, dApar + dBpar  the whole of chi
+#   2  linear, collisionless, 2 species, EM      a second species and finite beta
+#   3  linear, collisional                       one source, no turbulence
+#   4  linear, collisional, 2 species, EM        the same, with a source
+#   5  nonlinear, modified-adiabatic electrons   the zonal-flow closure
+#   6  nonlinear, adiabatic electrons            the opposite closure
+#   7  nonlinear, kinetic ions and electrons     a second kinetic species
+#   8  nonlinear electromagnetic, dApar          gbar, Ampere, vpar dApar
+#   9  nonlinear electromagnetic, dApar + dBpar  the whole of chi
+#
+# Cases 2 and 4 exist because the linear multi-species run is what found the
+# momentum inertia's missing normalisation.  A single-species linear case cannot
+# see that error at all: for m = T = 1 the wrong coefficient and the right one
+# are the same number.
 #
 # Every case puts the zonal mode at kx rho = 0.2, where FLR corrections are
 # small but not negligible, and drives turbulence at ky rho = 0.2.  Miller lands
@@ -64,31 +71,33 @@ def stella_version(pytestconfig):
 #> asserted to stay bad rather than silently ignored, so that a fix shows up
 #> here as a failure and gets read.
 CASES = {
-    1: ('linear_collisionless', 0.08, None, {'miller'}),
-    2: ('linear_collisional',   0.05, 0.05, set()),
-    3: ('nl_modified_adiabatic', 0.08, 0.20, {'w7x'}),
-    4: ('nl_adiabatic',          0.08, 0.08, {'w7x'}),
-    5: ('nl_kinetic',            0.08, 0.05, set()),
-    6: ('nl_em_apar',            0.12, None, set()),
-    7: ('nl_em_apar_bpar',       0.08, 0.20, set()),
+    1: ('linear_collisionless',       0.08, None, {'miller'}),
+    2: ('linear_collisionless_multi', 0.30, 0.30, {'miller'}),
+    3: ('linear_collisional',         0.05, 0.05, set()),
+    4: ('linear_collisional_multi',   0.30, 0.30, set()),
+    5: ('nl_modified_adiabatic',      0.08, 0.20, {'w7x'}),
+    6: ('nl_adiabatic',               0.08, 0.08, {'w7x'}),
+    7: ('nl_kinetic',                 0.08, 0.05, set()),
+    8: ('nl_em_apar',                 0.12, None, set()),
+    9: ('nl_em_apar_bpar',            0.08, 0.20, set()),
 }
 
 #> The momentum budget does not close in these, and the bound is two-sided so
 #> that neither a regression nor a fix passes unnoticed.
-#> Case 5 in Miller used to be here at (0.10, 0.80).  It was the momentum
+#> Case 7 in Miller used to be here at (0.10, 0.80).  It was the momentum
 #> inertia missing its parallel-velocity normalisation, which made the electron
 #> inertia 61 times too small and let the electrons carry the whole of
 #> E_Omega_RH; it now closes at 1.4e-02 and is asserted normally.
 #>
-#> Case 6 remains, and only at beta = 1e-2.  At beta = 1e-3 and 3e-3 cases 6 and
-#> 7 give comparable residuals, 6e-02 to 1e-01; it is at 1e-2 that case 6 alone
+#> Case 8 remains, and only at beta = 1e-2.  At beta = 1e-3 and 3e-3 cases 8 and
+#> 9 give comparable residuals, 6e-02 to 1e-01; it is at 1e-2 that case 6 alone
 #> diverges, and there its energy turnover is 131 against case 7's 13 -- the run
 #> is doing something qualitatively different when dBpar is dropped at that
 #> beta.  Whether that is a defect of the diagnostic or of the truncation is not
 #> yet established, so it is bounded rather than tolerated.
 KNOWN_MOMENTUM_FAILURES = {
-    ('miller', 6): (0.40, 4.00),
-    ('w7x', 6):    (1.50, 15.0),
+    ('miller', 8): (0.40, 4.00),
+    ('w7x', 8):    (1.50, 15.0),
 }
 
 #> The same, for the potential-like invariant.  W7-X case 1 is the drift channel
