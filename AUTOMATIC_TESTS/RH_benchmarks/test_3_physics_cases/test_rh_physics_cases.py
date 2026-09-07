@@ -203,6 +203,41 @@ KNOWN_PHI_FAILURES = {
     ('w7x', 2): (5.0, 50.0),
 }
 
+#> Only Miller and W7-X are asserted.  The other four equilibria have been run
+#> on all eleven cases -- the decks are here and the measurements are below --
+#> but no tolerances are set for them, because setting forty-four bounds from
+#> one measurement each is bookkeeping dressed up as verification.  Add them
+#> deliberately, case by case, as each is understood.
+#>
+#> The sweep was run to test a prediction, and refuted it.  The prediction was
+#> that case 1, which is the drift channel on its own, would be worst in TJ-II
+#> (the largest trapped fraction, so the most exposure to the trapped-channel
+#> quadrature error) and weakest in QA and QH (quasi-symmetric, so small
+#> bounce-averaged drift).  Measured, with * marking a turnover below 0.5 where
+#> the case is not a real test:
+#>
+#>   case 1     miller  *vacuous   w7x  1.24e-01   iter *4.81e-01
+#>              qa  5.40e-02       qh   1.39e+00   tjii  1.07e-01
+#>
+#> TJ-II is second best, not worst.  And QA and QH -- both quasi-symmetric, both
+#> with small bounce-averaged drift -- differ by a factor of 26.  Two
+#> configurations that share the property the explanation rests on cannot differ
+#> by 26 because of that property, so the trapped-fraction account of case 1 is
+#> wrong, whatever else is true.
+#>
+#> What the sweep does establish, across all six configurations:
+#>
+#>   - the nonlinear adiabatic and modified-adiabatic cases (7, 8) close
+#>     everywhere: 1.2e-03 to 6.2e-02.  The core nonlinear machinery is sound in
+#>     every geometry tried.
+#>   - the linear collisional case (4) closes everywhere: 2.6e-03 to 1.8e-02.
+#>   - the multi-species electromagnetic cases (3, 6) fail everywhere, 0.6 to
+#>     3.2.  That is not a stellarator effect and not a W7-X peculiarity; it is
+#>     the electromagnetic multi-species physics itself, which supports treating
+#>     cases 3, 6 and the momentum channel of case 10 as one defect.
+#>   - the multi-species electrostatic case (2) also fails in every geometry
+#>     except QH.  So the electron-channel defect first seen in W7-X is general,
+#>     not specific to that equilibrium.
 CONFIGURATIONS = ('miller', 'w7x')
 TURNOVER_FLOOR = 0.5
 
@@ -224,7 +259,11 @@ def _measure(netcdf_file, which, window=0.4):
     return residual, turnover
 
 
-VMEC_FILE = {'w7x': 'wout_w7x_standard.nc'}
+VMEC_FILE = {'w7x':  'wout_w7x_standard.nc',
+             'iter': 'wout_iter.nc',
+             'qa':   'wout_QA.nc',
+             'qh':   'wout_QH.nc',
+             'tjii': 'wout_tjii.nc'}
 
 
 def _run(configuration, case, tmp_path, stella_version):
