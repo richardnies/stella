@@ -1074,7 +1074,22 @@ contains
                !> already inside the weight, so the inertia is quadratic in the
                !> geometric factor and the ratio returns a frequency.
                integrand_vpamu(1, :, iz, it, ivmu) = RH_omega_weight(:, iz, it, ivmu) &
-                    * vpa(iv) * spec(is)%mass / spec(is)%temp &
+               !> The rigidly rotating state is gbar = (m/T) omega vpar (I/B) F_M
+               !> with vpar PHYSICAL, but vpa(iv) here is stella's normalised
+               !> parallel velocity, in units of the species thermal speed.  The
+               !> conversion supplies one factor of stm = sqrt(T/m), so what
+               !> multiplies vpa(iv) is (m/T)*stm = sqrt(m/T), not m/T.
+               !>
+               !> For a single ion species with m = T = 1 the two are the same
+               !> number, which is why this went unnoticed, and why the
+               !> calibration <I_Omega> -> 1/2 is unaffected.  Between species
+               !> they differ by sqrt(m_s/T_s): with kinetic electrons the
+               !> electron inertia came out 61 times too small, so Omega_RH,e
+               !> was 61 times too large and its share of E_Omega_RH, which goes
+               !> as the square, too large by 3700.  The electrons then carried
+               !> essentially all of E and the budget inherited their
+               !> discretisation error in place of the ions'.
+                    * vpa(iv) * spec(is)%mass / spec(is)%temp * spec(is)%stm_psi0 &
                     * RH_omega_geo_fac(iz) / bmag(ia, iz)
                !> integrate_vmu folds the Maxwellian into its own weights when
                !> the evolved pdf is normalised by one.
