@@ -3124,6 +3124,25 @@ contains
    !>
    !> So the drift-orbit phase and its consistency with <vMx> are excluded too.
    !>
+   !> The J0 factors have been checked against stella's own as well, since the
+   !> closure test above cannot see them -- J0 cancels out of it.  This module
+   !> hand-rolls the Bessel argument in eval_transit_int_numerator rather than
+   !> reading gyro_averages::aj0x, and the two agree exactly for a zonal mode:
+   !> stella builds kperp2 = akx^2 gds22, divided by shat^2 unless q_as_x, which
+   !> is what is written here; both clamp it at zero; and the argument is
+   !> bess_fac * smz_psi0 * sqrt(vperp2 * kperp2) / bmag in both.  stella then
+   !> calls enforce_single_valued_kperp2, which this module does not, but that
+   !> acts only where nsegments > 1 and a zonal mode links to itself, so it is a
+   !> no-op here.
+   !>
+   !> That closes the audit.  Every factor in the chain from the geometry to the
+   !> flux has now been checked against either stella's own arithmetic or a
+   !> numerical test: the drift normalisation, the energy scaling, the Maxwellian
+   !> weighting, the Boltzmann coefficient, the drift-orbit phase, its
+   !> consistency with <vMx>, and the Bessel arguments.  The implementation is
+   !> faithful to the derivation in this note.  If a term is missing it is
+   !> missing from both, which is where anyone continuing should look.
+   !>
    !> So no candidate currently stands.  What is known is narrow but real: the
    !> trapped channel converges at order 1.28 and the circulating channel beside
    !> it at 1.93, in the same runs, so whatever this is distinguishes trapped
