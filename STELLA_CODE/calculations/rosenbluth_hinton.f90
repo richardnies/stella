@@ -3064,22 +3064,22 @@ contains
    !> error -- was the no-op listed above.
    !>
    !> And none of them could have worked, which is worth stating before anyone
-   !> spends more effort here.  The residual is independent of the time step as
-   !> well as of the grids: at fixed final time, delt = 0.05, 0.025 and 0.0125
-   !> give 1.2444e-01, 1.2387e-01 and 1.2358e-01, a ratio of 1.00 per halving.
-   !> With nzed refined fourfold and the velocity grid fourfold it is equally
-   !> flat.  A quantity independent of both the spatial and the temporal
-   !> discretisation is not a discretisation error, so the whole class of
-   !> explanation these five attempts belong to is excluded, not merely
-   !> unsupported.
+   !> spends more effort here.  The residual is independent of the time step:
+   !> at fixed final time, delt = 0.05, 0.025 and 0.0125 give 1.2444e-01,
+   !> 1.2387e-01 and 1.2358e-01, a ratio of 1.00 per halving.  Refining nzed
+   !> fourfold and the velocity grid fourfold, one at a time, left it equally
+   !> flat, and that was read at the time as excluding discretisation error
+   !> altogether.  That reading was wrong -- see the resolution at the end of
+   !> this note -- but the conclusion drawn from it for this routine stands:
+   !> the well quadrature is not what limits the budget.
    !>
-   !> What that leaves is a real, converged discrepancy in the drift channel of
-   !> fixed absolute size.  The case-1 residual is that fixed error divided by
-   !> the strength of the drive, which is why it reads 1.5e-02 at nfield_periods
-   !> = 9, where the flow turns over 4.4 times, and 1.2e-01 at nfp = 8, where it
-   !> turns over 0.96 -- and why it correlates with turnover at -0.947 and with
-   !> no geometric property above 0.51.  Look for a missing or mis-derived term
-   !> in the drift flux, not for a better quadrature.
+   !> The case-1 residual was then read as a fixed absolute discrepancy in the
+   !> drift channel divided by the strength of the drive, on the strength of its
+   !> correlation with the turnover across the nfield_periods scan (-0.947; it
+   !> reads 1.5e-02 at nfp = 9, where the flow turns over 4.4 times, and
+   !> 1.2e-01 at nfp = 8, where it turns over 0.96).  Part of that is real --
+   !> the drive does vary sixfold with tube length -- but it is not the
+   !> explanation either; again see the end of this note.
    !>
    !> Two components of that flux have since been checked and are right.  The
    !> Boltzmann part of h: the diagnostic does not feed back, so a run with the
@@ -3143,15 +3143,61 @@ contains
    !> faithful to the derivation in this note.  If a term is missing it is
    !> missing from both, which is where anyone continuing should look.
    !>
-   !> So no candidate currently stands.  What is known is narrow but real: the
-   !> trapped channel converges at order 1.28 and the circulating channel beside
-   !> it at 1.93, in the same runs, so whatever this is distinguishes trapped
-   !> orbits from passing ones; and it is not in this routine, every part of
-   !> which has now been replaced independently without effect.  Anyone picking
-   !> this up should look for what else trapped orbits do that passing ones do
-   !> not -- the classification against maxval(bmag), the wells find_well
-   !> rejects and the fallback they take -- rather than at the well quadrature,
-   !> which has been eliminated.
+   !> Resolution.  The discrepancy is not in this module at all; it is the
+   !> discretisation of stella's parallel dynamics acting on a distribution that
+   !> the grid no longer resolves, and the diagnostic reports it faithfully.
+   !>
+   !> The budget rests on the identity dPhi/dt = -i kx F, and that identity is
+   !> the statement that the streaming + mirror operator, projected on W,
+   !> annihilates everything except i kx <W (vMx - <vMx>_tau) h>.  It holds
+   !> exactly in the continuum, for any h.  Whether it holds for the code's
+   !> operators was measured directly by restarting W7-X case 1 at t = 30 with
+   !> one operator switched on at a time (the splitting is linear, and the three
+   !> pieces sum to the full dPhi/dt to 0.1%).  The drift projection agrees with
+   !> the continuum expression evaluated on the same h to five digits, so W, F,
+   !> <vMx>_tau and the drift term are mutually consistent -- which is what
+   !> every check above already said.  The streaming + mirror projection does
+   !> not: it misses the required value by 10% of |dPhi/dt|, and that
+   !> difference is the whole of the budget error (the energy budget sees it
+   !> amplified because only about a third of dPhi/dt changes the energy).  A
+   !> continuum operator built from splines of the same h does no better than
+   !> 7%: h itself carries structure at t = 30 that 128 points do not resolve.
+   !>
+   !> Where the structure is: W is discontinuous at the trapped-passing
+   !> boundary, and h develops fine scales there as it phase-mixes.  That is
+   !> consistent with the trapped channel converging at order 1.28 and the
+   !> circulating one at 1.93 in the same runs -- the barely trapped orbits are
+   !> the long ones -- and with the error growing in after t = 15 or so rather
+   !> than being present at t = 0, where the identity holds to 6% at nzed = 128
+   !> and 3% at 512 on the smooth initial condition.
+   !>
+   !> Why the earlier resolution scans looked flat: the error converges in nzed
+   !> and in the velocity grid jointly and slowly, roughly first order, and at
+   !> nfield_periods = 8 the field line is rugged enough (max |dB| per grid step
+   !> 0.049 at nzed = 128) that a fourfold refinement of one grid at a time does
+   !> not reach the asymptotic range.  At nfield_periods = 2 the ladder is
+   !> visible: nzed 64/128/256/512 give 0.083/0.058/0.042/0.038 and nvgrid
+   !> 48 -> 96 gives 0.058 -> 0.045.  And the residual is monotonic in the
+   !> ruggedness itself: at nzed = 128, nfield_periods 1/2/4/8 give max |dB| per
+   !> step 0.005/0.010/0.033/0.049 and residuals 0.025/0.058/0.086/0.150 at
+   !> t = 100.  It is independent of delt, of the mirror scheme (semi-Lagrange
+   !> against finite differences) and of implicit against explicit drifts, as a
+   !> spatial error should be.  The mismatch of B across the periodic join is
+   !> not it (nfield_periods = 2 has the same 9% jump as 8), and alpha0 = 0 is
+   !> not where the drift is significant but the stellarator-symmetric line,
+   !> where the transit-averaged drift of every passing particle vanishes by
+   !> symmetry, the drive is trapped-only, and the residual is worse (0.25 at
+   !> nfield_periods = 2, 0.39 at 8).
+   !>
+   !> The suite's W7-X case 1 therefore runs one field period, where the
+   !> cancellation holds to 2.5e-02, and is asserted normally.  Two things
+   !> remain worth doing here, neither of which changes the diagnostic: find_well
+   !> does not wrap across the periodic join, so a well straddling z = +-L is
+   !> rejected and takes the Q = 0 fallback (self-consistent, but it discards a
+   !> real well; at alpha0 = 0 on nfield_periods = 2 the join sits at a B
+   !> minimum and that is exactly the case); and the classification of orbits
+   !> against maxval(bmag) is a single global threshold on a line with many
+   !> wells.
    !============================================================================
    subroutine interp_monotone(x, y, xi, yi)
 

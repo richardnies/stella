@@ -157,93 +157,32 @@ KNOWN_MOMENTUM_FAILURES = {
     ('w7x', 3):     (1.0e+03, 1.0e+04),
 }
 
-#> The same, for the potential-like invariant.  W7-X case 1 is the drift channel
-#> on its own, and it does not close: 1.5e-01, converged (1.81e-01 at t = 30,
-#> 1.52e-01 at t = 150, 1.47e-01 at t = 300).  This is the drift-channel defect
-#> the report discusses, now measured on a case where the flow actually moves
-#> rather than inferred from a vacuous one.
+#> The same, for the potential-like invariant.
+#>
+#> W7-X case 1 used to be here at (0.06, 0.40): it is the drift channel on its
+#> own -- the only case in which that is the sole source -- and at
+#> nfield_periods = 8 it read 1.2e-01 to 1.5e-01, converged in time and flat
+#> under nzed alone.  It is now asserted normally, at 2.5e-02, after the deck
+#> was shortened to one field period.  The residual is a discretisation error
+#> of the parallel dynamics, and it tracks how rugged the field line is per
+#> grid point: at nzed = 128, nfp 1/2/4/8 give max |dB| per step of
+#> 0.005/0.010/0.033/0.049 and residuals 0.025/0.058/0.086/0.150.  At nfp = 2
+#> it converges with resolution, slowly and in nzed and nvgrid jointly (nzed
+#> 64/128/256/512: 0.083/0.058/0.042/0.038; nvgrid 48 -> 96: 0.058 -> 0.045),
+#> and it is independent of delt, of the mirror scheme and of implicit against
+#> explicit drifts.  Restarting at t = 30 with one operator at a time locates
+#> it: the drift projection agrees with the continuum to five digits, and the
+#> whole of the error is the discrete streaming + mirror projection missing the
+#> exact cancellation that the identity dPhi/dt = -i kx F rests on, by 10% of
+#> |dPhi/dt| at nfp = 8.  Two earlier readings are superseded by this.  The
+#> nfp = 5..12 scan's "resid ~ turnover^-1.44" was the drive varying with tube
+#> length on top of the ruggedness, and the turnover alone accounts for 2x of
+#> the 6x between nfp = 8 and nfp = 1.  And alpha0 = 0 is not where the drift
+#> is significant: it is the stellarator-symmetric line, on which the
+#> transit-averaged drift of every passing particle vanishes, so the drive is
+#> trapped-only and the residual is worse (0.25 at nfp = 2, 0.39 at nfp = 8).
+#> See the deck for the numbers behind each of these.
 KNOWN_PHI_FAILURES = {
-    #> W7-X case 1 is the drift channel on its own -- the only case in which it
-    #> is the sole source -- so it is the only case that measures the drift
-    #> channel's own accuracy rather than a diluted version of it.  It reads
-    #> 1.3e-01 at the resolution the suite runs at, and that number is a
-    #> quadrature error, not a defect of the formula:
-    #>
-    #>   nzed 128, nv  48/24   |z| - 1 = 0.095      (this suite)
-    #>   nzed 512, nv  48/24             0.052
-    #>   nzed 128, nv 192/96             0.059
-    #>   nzed 512, nv  96/48             0.035
-    #>
-    #> where z is the complex fit to the identity dPhi/dt = -i kx F that the
-    #> budget rests on.  It converges in both directions at once and neither
-    #> alone, which is why refining z by itself looks flat.  Two controls place
-    #> the error in the drift-orbit phase Q rather than the flux expression:
-    #> with xdriftknob = 0 the phase is identically zero, no quadrature is
-    #> performed, and the projection is conserved to 4.6e-06; and the relative
-    #> error is linear in the drift strength (0.040 at xdriftknob 0.5, 0.071 at
-    #> 1.0), so the absolute error is quadratic in it, which is what an error
-    #> inside Q looks like when Q itself is proportional to the drift.
-    #>
-    #> Every other W7-X case runs the same drift channel and closes far tighter
-    #> because another source dominates the budget: case 4 reaches 2.9e-03.
-    #> The number below is a property of this deck's tube length, not of the
-    #> diagnostic.  Scanning nfield_periods at fixed alpha0 = 0.7, everything
-    #> else held, all eight runs complete and non-vacuous:
-    #>
-    #>    nfp     5      6      7      8      9     10     11     12
-    #>   resid  0.102  0.144  0.155  0.124  0.015  0.161  0.183  0.274
-    #>   turn    1.02   1.05   0.71   0.96   4.39   0.76   0.97   0.84
-    #>
-    #> At nfp = 9 the budget closes to 1.5e-02, which would pass the tolerance
-    #> outright, and nfp = 7 and nfp = 9 have indistinguishable field lines --
-    #> 10 wells each, 12.9 grid points per well, trapped fraction 0.328, mirror
-    #> ratio 1.243 -- yet differ by a factor of ten.  So the residual is not a
-    #> smooth function of the geometry and the single number here characterises
-    #> nfp = 8 rather than W7-X.
-    #>
-    #> That also disposes of the join-jump explanation, which the geometry sweep
-    #> had made the leading candidate: nfp = 11 closes the tube almost exactly
-    #> (|B(-L) - B(+L)| = 2e-04, against 1e-01 at nfp = 8) and is the second
-    #> WORST at 0.183.  Correlation of residual with the jump over the scan is
-    #> -0.11.  Nor does it track wells (+0.45), mirror ratio (+0.25), trapped
-    #> fraction (+0.43) or points per well (-0.51).
-    #>
-    #> What the residual DOES track is the turnover, and strongly:
-    #>
-    #>    corr(log resid, log turnover)   -0.947      resid ~ turnover^-1.44
-    #>    corr(log resid, points/well)    -0.51
-    #>    corr(log resid, wells)          +0.45
-    #>    corr(log resid, trapped frac)   +0.43
-    #>    corr(log resid, trapped share)  +0.15
-    #>    corr(log resid, join jump)      -0.11
-    #>
-    #> Multiplying the residual by the turnover collapses an 18.5x spread across
-    #> the scan to 3.5x.  So this statistic is a roughly fixed absolute
-    #> non-conservation divided by the strength of the drive, and the drive
-    #> varies sixfold with tube length.  The 1.2e-01 at nfp = 8 is a statement
-    #> about how weakly the drift channel drives in this deck, not about the
-    #> drift flux being 12% wrong.
-    #>
-    #> That also explains the alpha0 results quantitatively, which had been read
-    #> the other way round.  Going to alpha0 = 0 collapses the turnover, and the
-    #> residual rises by about what turnover^-1.44 predicts:
-    #>
-    #>    QH   turnover 0.83 -> 0.11   predicted 18x   measured 23x
-    #>    W7-X turnover 0.96 -> 0.63   predicted 1.8x  measured 3.1x
-    #>
-    #> so "alpha0 = 0 is worse" was the denominator collapsing, not the physics
-    #> degrading.  alpha0 = 0 is the stellarator-symmetry point: the tube closes
-    #> exactly there AND the bounce-averaged drift largely cancels, which are the
-    #> same symmetry, so it cannot be used to test the one without removing the
-    #> other.
-    #>
-    #> The tolerance is left calibrated on nfp = 8 because that is what the deck
-    #> runs.  But the statistic itself is the thing to fix here: a residual
-    #> normalised by |P| is unstable when |P| is small, and either driving this
-    #> case harder (nfp = 9 reaches turnover 4.4 and closes to 1.5e-02) or
-    #> dividing by something better conditioned would make it measure the drift
-    #> channel rather than the drive.
-    ('w7x', 1): (0.06, 0.40),
     #> Cases 3 and 6 are the electromagnetic multi-species pair, and they do not
     #> close.  Cases 2 and 5 were added to say why: they are the same runs with
     #> the fields switched off, and they close normally, so it is the finite
@@ -275,6 +214,8 @@ KNOWN_PHI_FAILURES = {
 #>
 #>   case 1     miller  *vacuous   w7x  1.24e-01   iter *4.81e-01
 #>              qa  5.40e-02       qh   1.39e+00   tjii  1.07e-01
+#>              (w7x at nfield_periods = 8, which the other four still run; the
+#>               w7x deck is now one field period and reads 2.5e-02)
 #>
 #> TJ-II is second best, not worst.  And QA and QH -- both quasi-symmetric, both
 #> with small bounce-averaged drift -- differ by a factor of 26.  Two
@@ -324,10 +265,10 @@ def _measure(netcdf_file, which, window=0.4):
     #> |P|'s own peak -- but not against |P| being globally weak, which is a real
     #> failure mode and not a hypothetical one.  Scanning nfield_periods in W7-X
     #> case 1 moves this residual over 1.5e-02 to 2.7e-01 while the diagnostic
-    #> and the equilibrium are unchanged, and the residual correlates with the
-    #> turnover at -0.947 and with no geometric property above 0.51.  What is
-    #> being measured there is a fixed absolute discrepancy divided by a drive
-    #> that happens to be weak.
+    #> and the equilibrium are unchanged; most of that is the discretisation
+    #> error growing with the ruggedness of the line (see the deck), but part
+    #> of it is the drive varying sixfold with tube length under a discrepancy
+    #> that does not.
     #>
     #> <drive> is the same construction as <turnover> but formed from P rather
     #> than from dE/dt: the fraction of E_RH that the accounted-for sources would
