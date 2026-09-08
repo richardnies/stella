@@ -42,7 +42,7 @@ contains
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
-      use parameters_physics, only: triangular_ZF_g_exb
+      use parameters_physics, only: triangular_ZF_g_exb, triangular_ZF_nkx
       use parameters_physics, only: triangular_ZF_flow_PS, triangular_ZF_flow_sym
       use parameters_physics, only: triangular_ZF_upar_fac
       use parameters_physics, only: zonal_init_option_switch, zonal_init_none, zonal_init_triangular
@@ -54,6 +54,7 @@ contains
 
       real :: corr
       integer :: ivmu, is, imu, iv, it, iz, ia, ikx
+      integer :: ikx_ZF, m_ZF
       real, dimension(:, :), allocatable :: energy
       complex, dimension(:, :), allocatable :: g0k
       complex, dimension(nakx, -nzgrid:nzgrid) :: phi_ZF
@@ -116,14 +117,28 @@ contains
             iv = iv_idx(vmu_lo, ivmu)
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
-                  !Setup lowest kx of zonal flow profile
+                  !> Set up the fundamental harmonic of the prescribed zonal profile.
+                  !> <triangular_ZF_nkx> selects WHICH radial harmonic carries it:
+                  !> the profile sits on kx = triangular_ZF_nkx * dkx, i.e. array
+                  !> index 1 + triangular_ZF_nkx.  With the default of 1 this is the
+                  !> lowest kx and the zonal wavelength is the box length, so it
+                  !> cannot be varied independently of Lx -- raising jtwist then
+                  !> rescales u_Z(0) and the flow shear along with the box, which
+                  !> makes a box-length convergence test meaningless.  Raising
+                  !> jtwist and triangular_ZF_nkx together keeps kx_Z, and hence
+                  !> both u_Z(0) = 2*g_exb/kx_Z and the shear, fixed.
+                  ikx_ZF = 1 + triangular_ZF_nkx
                   phi_ZF(:, :) = 0
-                  phi_ZF(2, :) = zi*triangular_ZF_g_exb / akx(2)**2
+                  phi_ZF(ikx_ZF, :) = zi*triangular_ZF_g_exb / akx(ikx_ZF)**2
 
                   if (zonal_init_option_switch == zonal_init_triangular) then
-                     do ikx = 3, nakx / 2 + 1
-                     ! Triangular v_ZF, adjust k > kmin modes accordingly
-                        phi_ZF(ikx, :) = phi_ZF(2, :) / (akx(ikx)/akx(2))**3 * (1 - (-1)**(ikx-1))/2.0
+                     !> A triangular wave is the ODD harmonics of the fundamental
+                     !> falling off as 1/m^3, so step through m = 3, 5, 7, ... of
+                     !> the chosen fundamental rather than of the lowest kx.
+                     do m_ZF = 3, nakx, 2
+                        ikx = 1 + m_ZF * triangular_ZF_nkx
+                        if (ikx > nakx / 2 + 1) exit
+                        phi_ZF(ikx, :) = phi_ZF(ikx_ZF, :) / (akx(ikx)/akx(ikx_ZF))**3
                      end do
                   end if
 

@@ -1204,6 +1204,7 @@ contains
       use dissipation, only: include_collisions, advance_collisions_explicit, collisions_implicit
       use sources, only: source_option_switch, source_option_krook
       use sources, only: add_krook_operator
+      use tertiary_sponge, only: add_tertiary_sponge
       use parallel_streaming, only: advance_parallel_streaming_explicit
       use fields, only: fields_updated, advance_fields
       use fields_radial_variation, only: get_radial_correction
@@ -1350,6 +1351,11 @@ contains
          if (radial_variation) call advance_radial_variation(pdf, rhs)
 
          if (source_option_switch == source_option_krook) call add_krook_operator(pdf, rhs)
+
+         !> x-dependent Krook drag that absorbs the mode away from the zonal-flow
+         !> extremum at the centre of the box, so that a tertiary eigenmode can
+         !> decay at large |x| in a periodic box (no-op unless requested)
+         call add_tertiary_sponge(pdf, rhs)
 
          if (include_multibox_krook) call add_multibox_krook(pdf, rhs)
 
@@ -1946,8 +1952,21 @@ contains
                !> compute the contribution to the Poisson bracket from dg/dy*d<chi>/dx
                bracket = bracket - g0xy * g1xy
 
-               !> estimate the CFL dt due to the above contribution
-               cfl_dt_ExB = min(cfl_dt_ExB, 2.*pi / max(maxval(abs(g1xy)) * akx(ikx_max), zero))
+               !> Estimate the CFL dt due to the above contribution.
+               !>
+               !> SKIPPED for only_zonal_interaction. Here <chi> is NOT restricted
+               !> to its zonal part, so g1xy = d<chi>/dy is carried by the
+               !> non-zonal perturbation, which in a frozen-zonal (tertiary) run
+               !> grows as exp(gamma t) without bound -- this estimate would then
+               !> drive the timestep to zero over the course of the run. It should
+               !> not constrain dt in any case: the partner factor dg/dx has been
+               !> reduced to its zonal (frozen) part, so this contribution is
+               !> LINEAR in the perturbation, not an advection of it. The genuine
+               !> advective constraint, by the prescribed zonal flow, is the
+               !> dg/dy * d<chi>/dx estimate above, which is retained.
+               if (.not. only_zonal_interaction) then
+                  cfl_dt_ExB = min(cfl_dt_ExB, 2.*pi / max(maxval(abs(g1xy)) * akx(ikx_max), zero))
+               end if
 
                if (radial_variation) then
                   bracket = bracket - gfac * g0xy * g1xy * exb_nonlin_fac_p * spread(rho_clamped, 1, ny)
@@ -1958,7 +1977,10 @@ contains
                   g1xy = g1xy * exb_nonlin_fac
                   bracket = bracket - g0xy * g1xy
                   !> estimate the CFL dt due to the above contribution
-                  cfl_dt_ExB = min(cfl_dt_ExB, 2.*pi / max(maxval(abs(g1xy)) * akx(ikx_max), zero))
+                  !> (skipped for only_zonal_interaction, for the reason above)
+                  if (.not. only_zonal_interaction) then
+                     cfl_dt_ExB = min(cfl_dt_ExB, 2.*pi / max(maxval(abs(g1xy)) * akx(ikx_max), zero))
+                  end if
                end if
 
                if (yfirst) then
@@ -1992,8 +2014,16 @@ contains
 
       if (runtype_option_switch == runtype_multibox) call scope(subprocs)
 
-      !> If keeping only zonal interaction but zonal fields are frozen, ignore CFL
-      if ((only_zonal_interaction) .and. (freeze_zonal)) cfl_dt_ExB = cfl_dt_linear
+      !> NOTE (corrected): this used to overwrite cfl_dt_ExB with cfl_dt_linear
+      !> whenever only_zonal_interaction .and. freeze_zonal, on the grounds that
+      !> a frozen zonal field needs no CFL. That is wrong. Freezing the zonal
+      !> field stops it EVOLVING; it does not stop it ADVECTING, and advection by
+      !> a prescribed flow constrains an explicit scheme exactly as any other
+      !> advection does. With the override in place a tertiary run kept the
+      !> timestep it was given at initialisation no matter how strong the
+      !> prescribed flow was -- measured advective CFL numbers of 0.78, 1.56 and
+      !> 2.34 at triangular_ZF_g_exb = 6.4, 12.8 and 19.2, all at an unchanged
+      !> dt = 1.2467e-2. The ExB estimate is now respected in this case too.
 
 
       !> check estimated cfl_dt to see if the time step size needs to be changed

@@ -54,6 +54,7 @@ module parameters_physics
    public :: triangular_ZF_flow_PS, triangular_ZF_flow_sym
    public :: triangular_ZF_upar_fac
    public :: triangular_ZF_g_exb
+   public :: triangular_ZF_nkx
    
    !> Large scale physics options of the system - e.g. whether we have full flux effects, 
    !> electromagnetic effects, or radially global effects.
@@ -143,6 +144,13 @@ module parameters_physics
    real :: beta, zeff, tite, nine, rhostar, irhostar, vnew_ref
    real :: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
    real :: triangular_ZF_g_exb, triangular_ZF_upar_fac 
+   !> radial harmonic index carrying the prescribed zonal profile.  1 (the
+   !> default) puts it on the lowest kx, so the zonal wavelength equals the
+   !> box length and CANNOT be varied independently of Lx.  Setting it to n
+   !> puts the profile on kx = n*dkx, so raising jtwist and n together holds
+   !> the zonal wavelength -- hence u_Z(0) and the flow shear -- fixed while
+   !> the box grows.  That is what a box-length convergence test needs.
+   integer :: triangular_ZF_nkx
    real :: freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax
    logical :: initialised = .false.
 
@@ -219,6 +227,7 @@ contains
       triangular_ZF_flow_PS  = 1.0
       triangular_ZF_flow_sym = 0.0
       triangular_ZF_g_exb    = 0.0
+      triangular_ZF_nkx      = 1
       triangular_ZF_upar_fac = 1.0
       
       full_flux_surface = .false.
@@ -290,7 +299,7 @@ contains
         zonal_init_option, zonal_closure_option, &
         triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
         RH_analytic_drift_phase, &
-        triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac, &
+        triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac, triangular_ZF_nkx, &
         full_flux_surface, include_apar, include_bpar, radial_variation, &
         beta, zeff, tite, nine, rhostar, vnew_ref, &
         g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -425,7 +434,7 @@ contains
          zonal_init_option, zonal_closure_option, &
          triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
          RH_analytic_drift_phase, &
-         triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac
+         triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac, triangular_ZF_nkx
 
       namelist /parameters/ beta, zeff, tite, nine, rhostar, vnew_ref, &
          g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -549,6 +558,7 @@ contains
      call broadcast(triangular_ZF_flow_PS)
      call broadcast(triangular_ZF_flow_sym)
      call broadcast(triangular_ZF_g_exb)
+     call broadcast(triangular_ZF_nkx)
      call broadcast(triangular_ZF_upar_fac)
      
      call broadcast(full_flux_surface)

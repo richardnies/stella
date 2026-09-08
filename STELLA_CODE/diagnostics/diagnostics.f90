@@ -198,7 +198,10 @@ contains
       call write_RH_integrands_to_netcdf_file()
       call write_RH_bounce_drift_to_netcdf_file()
 
-      ! Initialise RH inertia_fluxes diagnostics (including first write to netcdf)
+      !> The RH arrays themselves are allocated by <init_rosenbluth_hinton>, which
+      !> <stella.f90> calls unconditionally and before <ginit>.  Nothing needs to be
+      !> initialised here: <dist_fn::init_gxyz> can rely on them being present even
+      !> when no RH diagnostic was requested.
 
    end subroutine init_diagnostics
 
