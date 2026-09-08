@@ -1,26 +1,29 @@
-! The multi-species linear cases are ELECTROMAGNETIC.  A second kinetic species
-! and a finite beta are the two ingredients that between them broke the momentum
-! budget, and testing them together linearly -- where every channel is either
-! zero or exactly one thing -- is far sharper than waiting for the nonlinear
-! cases to expose them.  This is also the only place in the set where gbar, the
-! parallel Ampere solve and the vpar-dApar part of the advecting velocity are
-! exercised without turbulence on top.
-! MULTIPLE KINETIC SPECIES, linear.  This case exists because it is the one that
-! found a real bug.  With every channel identically zero and nothing driving the
-! projection, a second kinetic species still degraded conservation tenfold, and
-! neither a sixteenfold smaller time step nor a fourfold finer grid moved it --
-! which is what identified the momentum inertia's missing parallel-velocity
-! normalisation.  A single-species linear case cannot see that error, because for
-! m = T = 1 the wrong coefficient and the right one are the same number.
-! Case 4: linear, collisional.
-! W7-X, zonal mode at kx rho = 0.2.
-! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
-! collisional damping.  A single zonal mode initialised with ginit_option='rh'
-! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
-! fluxes vanish and the budget is driven by the collisional channel together
-! with the magnetic-drift channel, which is what distinguishes this from the
-! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
-! vanishes and P_drift with it, while here it is the dominant source.
+! Case 6: linear, collisional, kinetic ions and electrons, electromagnetic.
+! QA, zonal mode at kx rho = 0.2.
+!
+! NOT ASSERTED.  The suite runs Miller and W7-X only; this deck is the W7-X deck
+! with the equilibrium swapped -- nothing else differs; see
+! w7x_6_linear_collisional_multi.in for the reasoning behind every parameter.
+! make_case_figures.py measures and plots this run with the suite's statistic
+! when its output is present, and the report (DOCUMENTATION/stella_RH_report,
+! section "The four remaining configurations") collects the numbers of all
+! forty-four such runs.
+!
+! Equilibrium.  QA, the quasi-axisymmetric configuration of the older benchmark
+! set (nfp = 2, q = 2.39, shat = 0.02 at rho = 0.71; the largest n /= 0
+! harmonic of B is 3.6e-3 of B00).
+!
+! Tube.  Eight field periods along alpha0 = 0.7.  Open: B 1.076 -> 0.989
+! across the join, |grad x|^2 ratio 0.08 -- the farthest from unity of
+! the whole set.
+!
+! Last measured (median relative residual over the last 40% of the run, energy
+! turnover of that window in parentheses):
+! phi_RH 6.0e-01 (turnover 1.89);
+! Omega_RH 3.6e+01 (turnover 1.03).
+!
+! Fails on phi_RH (0.60) like every driven case 6; Omega_RH 36 at a
+! turnover of 1.03, the one case-6 momentum panel that is not hollow.
 &parameters_physics
   nonlinear = .false.
   vnew_ref = 0.1

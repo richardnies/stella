@@ -1,31 +1,35 @@
-! Run length.  At nstep = 600 (t = 30) the drift channel -- the only source in
-! this case -- had not moved the flow far enough to test anything: the energy
-! turnover was 0.086, so the budget was satisfied whether the diagnostic was
-! right or not.  It is NOT the field line: alpha0 = 0, 0.35, 0.7, 1.05 and 1.57
-! all give turnovers between 0.03 and 0.15.  It is the run length.  At
-! nstep = 6000 (t = 300) the turnover is 1.9 and the case becomes a real test of
-! the drift channel, which is what it exists for.  nstep = 3000 is enough on
-! paper -- it gives 0.88 -- but the turnover is not reproducible to better than a
-! factor of two between invocations, and a run of that length came back at 0.49
-! on one of them, just under the threshold, which skips the assertion and passes
-! vacuously.  Twice the length puts it clear of that boundary.  The phi_RH residual then
-! settles at 1.5e-01: 1.81e-01 at t = 30, 1.52e-01 at t = 150, 1.47e-01 at
-! t = 300, so it is a converged measurement of the drift-channel defect rather
-! than a transient.
+! Case 1: linear, collisionless, adiabatic electrons.
+! ITER, zonal mode at kx rho = 0.2.
 !
-! Omega_RH stays vacuous even here, turnover 0.09, and rises only to 0.24 by
-! t = 300.  That is structural rather than a matter of length: the secular drift
-! is carried mostly by trapped particles and W^[Omega] vanishes on trapped
-! orbits, so the drift channel has very little purchase on the odd invariant.
-! Case 1: linear, collisionless.
-! W7-X, zonal mode at kx rho = 0.2.
-! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
-! collisional damping.  A single zonal mode initialised with ginit_option='rh'
-! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
-! fluxes vanish and the budget is driven by the collisional channel together
-! with the magnetic-drift channel, which is what distinguishes this from the
-! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
-! vanishes and P_drift with it, while here it is the dominant source.
+! NOT ASSERTED.  The suite runs Miller and W7-X only; this deck is the W7-X deck
+! with the equilibrium swapped and nfield_periods set to one poloidal turn --
+! nothing else differs; see w7x_1_linear_collisionless.in for the reasoning
+! behind every parameter.  make_case_figures.py measures and plots this run with
+! the suite's statistic when its output is present, and the report
+! (DOCUMENTATION/stella_RH_report, section "The four remaining configurations")
+! collects the numbers of all forty-four such runs.
+!
+! Equilibrium.  ITER, an axisymmetric free-boundary equilibrium read through
+! VMEC (wout_iter.nc carries twelve n = 0 harmonics and nothing else; it
+! is up-down asymmetric).  q = -2.51, shat = 0.21 at rho = 0.71.
+!
+! Tube.  One poloidal turn: nfield_periods = 2.505 = |q|, which is what a
+! closed tube is in an axisymmetric field (one field period would be 0.4
+! of a turn and would test nothing).  The two ends coincide to 2e-4 in
+! |grad x|^2, so this tube closes, like Miller's.
+!
+! Last measured (median relative residual over the last 40% of the run, energy
+! turnover of that window in parentheses):
+! phi_RH 2.1e+00 (turnover 0.06, below the floor);
+! Omega_RH 1.6e+04 (turnover 0.02, below the floor).
+!
+! Both invariants hold on the closed turn and the suite window reads
+! nothing (turnovers 0.06, 0.02).  The run is not Miller, though: the
+! up-down asymmetric grid leaves a small discrete drift channel, active to
+! t ~ 10 (turnover 0.13), on which phi_RH closes at 4.5e-02; after it dies
+! away E_RH leaks 10% over the remaining 80 time units with the drift
+! channel a third of that.  A closed axisymmetric tube conserves the
+! invariant only to the parallel discretisation error.
 &parameters_physics
   adiabatic_option = 'field-line-average-term'
   nonlinear = .false.
@@ -75,7 +79,7 @@
 /
 &knobs
   delt = 0.05
-  nstep = 6000
+  nstep = 2000
   print_extra_info_to_terminal = .false.
   drifts_implicit = .true.
 /
@@ -90,7 +94,7 @@
   geo_option = 'vmec'
 /
 &vmec_parameters
-  nfield_periods = 8
+  nfield_periods = 2.505
   torflux = 0.5
   alpha0 = 0.7
   vmec_filename = 'wout_iter.nc'

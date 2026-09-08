@@ -1,45 +1,26 @@
-! The multi-species linear cases are ELECTROMAGNETIC.  A second kinetic species
-! and a finite beta are the two ingredients that between them broke the momentum
-! budget, and testing them together linearly -- where every channel is either
-! zero or exactly one thing -- is far sharper than waiting for the nonlinear
-! cases to expose them.  This is also the only place in the set where gbar, the
-! parallel Ampere solve and the vpar-dApar part of the advecting velocity are
-! exercised without turbulence on top.
-! MULTIPLE KINETIC SPECIES, linear.  This case exists because it is the one that
-! found a real bug.  With every channel identically zero and nothing driving the
-! projection, a second kinetic species still degraded conservation tenfold, and
-! neither a sixteenfold smaller time step nor a fourfold finer grid moved it --
-! which is what identified the momentum inertia's missing parallel-velocity
-! normalisation.  A single-species linear case cannot see that error, because for
-! m = T = 1 the wrong coefficient and the right one are the same number.
-! Run length.  At nstep = 600 (t = 30) the drift channel -- the only source in
-! this case -- had not moved the flow far enough to test anything: the energy
-! turnover was 0.086, so the budget was satisfied whether the diagnostic was
-! right or not.  It is NOT the field line: alpha0 = 0, 0.35, 0.7, 1.05 and 1.57
-! all give turnovers between 0.03 and 0.15.  It is the run length.  At
-! nstep = 6000 (t = 300) the turnover is 1.9 and the case becomes a real test of
-! the drift channel, which is what it exists for.  nstep = 3000 is enough on
-! paper -- it gives 0.88 -- but the turnover is not reproducible to better than a
-! factor of two between invocations, and a run of that length came back at 0.49
-! on one of them, just under the threshold, which skips the assertion and passes
-! vacuously.  Twice the length puts it clear of that boundary.  The phi_RH residual then
-! settles at 1.5e-01: 1.81e-01 at t = 30, 1.52e-01 at t = 150, 1.47e-01 at
-! t = 300, so it is a converged measurement of the drift-channel defect rather
-! than a transient.
+! Case 3: linear, collisionless, kinetic ions and electrons, electromagnetic.
+! QH, zonal mode at kx rho = 0.2.
 !
-! Omega_RH stays vacuous even here, turnover 0.09, and rises only to 0.24 by
-! t = 300.  That is structural rather than a matter of length: the secular drift
-! is carried mostly by trapped particles and W^[Omega] vanishes on trapped
-! orbits, so the drift channel has very little purchase on the odd invariant.
-! Case 1: linear, collisionless.
-! W7-X, zonal mode at kx rho = 0.2.
-! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
-! collisional damping.  A single zonal mode initialised with ginit_option='rh'
-! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
-! fluxes vanish and the budget is driven by the collisional channel together
-! with the magnetic-drift channel, which is what distinguishes this from the
-! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
-! vanishes and P_drift with it, while here it is the dominant source.
+! NOT ASSERTED.  The suite runs Miller and W7-X only; this deck is the W7-X deck
+! with the equilibrium swapped -- nothing else differs; see
+! w7x_3_linear_collisionless_multi.in for the reasoning behind every parameter.
+! make_case_figures.py measures and plots this run with the suite's statistic
+! when its output is present, and the report (DOCUMENTATION/stella_RH_report,
+! section "The four remaining configurations") collects the numbers of all
+! forty-four such runs.
+!
+! Equilibrium.  QH, the quasi-helically symmetric configuration of the older
+! benchmark set (nfp = 4, q = -0.80, shat = -0.003 at rho = 0.71).
+!
+! Tube.  Eight field periods along alpha0 = 0.7.  Open: B 1.353 -> 1.173
+! across the join, |grad x|^2 ratio 0.81.
+!
+! Last measured (median relative residual over the last 40% of the run, energy
+! turnover of that window in parentheses):
+! phi_RH 1.8e+00 (turnover 2.42);
+! Omega_RH 2.8e+02 (turnover 4.55).
+!
+! phi_RH 1.8, Omega_RH 2.8e+02: the dA_par transient, see w7x_3.
 &parameters_physics
   nonlinear = .false.
   vnew_ref = 0.1

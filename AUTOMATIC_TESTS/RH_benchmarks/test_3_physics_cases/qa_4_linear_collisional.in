@@ -1,12 +1,28 @@
-! Case 4: linear, collisional.
-! W7-X, zonal mode at kx rho = 0.2.
-! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
-! collisional damping.  A single zonal mode initialised with ginit_option='rh'
-! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
-! fluxes vanish and the budget is driven by the collisional channel together
-! with the magnetic-drift channel, which is what distinguishes this from the
-! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
-! vanishes and P_drift with it, while here it is the dominant source.
+! Case 4: linear, collisional, adiabatic electrons.
+! QA, zonal mode at kx rho = 0.2.
+!
+! NOT ASSERTED.  The suite runs Miller and W7-X only; this deck is the W7-X deck
+! with the equilibrium swapped -- nothing else differs; see
+! w7x_4_linear_collisional.in for the reasoning behind every parameter.
+! make_case_figures.py measures and plots this run with the suite's statistic
+! when its output is present, and the report (DOCUMENTATION/stella_RH_report,
+! section "The four remaining configurations") collects the numbers of all
+! forty-four such runs.
+!
+! Equilibrium.  QA, the quasi-axisymmetric configuration of the older benchmark
+! set (nfp = 2, q = 2.39, shat = 0.02 at rho = 0.71; the largest n /= 0
+! harmonic of B is 3.6e-3 of B00).
+!
+! Tube.  Eight field periods along alpha0 = 0.7.  Open: B 1.076 -> 0.989
+! across the join, |grad x|^2 ratio 0.08 -- the farthest from unity of
+! the whole set.
+!
+! Last measured (median relative residual over the last 40% of the run, energy
+! turnover of that window in parentheses):
+! phi_RH 2.6e-03 (turnover 0.49, below the floor);
+! Omega_RH 3.6e-02 (turnover 0.39, below the floor).
+!
+! Closes (2.6e-03 at a turnover of 0.49, a hair under the floor).
 &parameters_physics
   adiabatic_option = 'field-line-average-term'
   nonlinear = .false.

@@ -1,12 +1,29 @@
-! Case 4: linear, collisional.
-! W7-X, zonal mode at kx rho = 0.2.
-! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
-! collisional damping.  A single zonal mode initialised with ginit_option='rh'
-! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
-! fluxes vanish and the budget is driven by the collisional channel together
-! with the magnetic-drift channel, which is what distinguishes this from the
-! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
-! vanishes and P_drift with it, while here it is the dominant source.
+! Case 4: linear, collisional, adiabatic electrons.
+! ITER, zonal mode at kx rho = 0.2.
+!
+! NOT ASSERTED.  The suite runs Miller and W7-X only; this deck is the W7-X deck
+! with the equilibrium swapped -- nothing else differs; see
+! w7x_4_linear_collisional.in for the reasoning behind every parameter.
+! make_case_figures.py measures and plots this run with the suite's statistic
+! when its output is present, and the report (DOCUMENTATION/stella_RH_report,
+! section "The four remaining configurations") collects the numbers of all
+! forty-four such runs.
+!
+! Equilibrium.  ITER, an axisymmetric free-boundary equilibrium read through
+! VMEC (wout_iter.nc carries twelve n = 0 harmonics and nothing else; it
+! is up-down asymmetric).  q = -2.51, shat = 0.21 at rho = 0.71.
+!
+! Tube.  Eight field periods = 3.2 poloidal turns along alpha0 = 0.7, the
+! W7-X tube of the original set.  It does NOT close: B goes from 1.112
+! to 1.183 across the periodic join and |grad x|^2 by a ratio of 0.67,
+! so ITER here has the open-tube problems of the stellarators.
+!
+! Last measured (median relative residual over the last 40% of the run, energy
+! turnover of that window in parentheses):
+! phi_RH 1.2e-02 (turnover 1.79);
+! Omega_RH 1.7e-02 (turnover 0.29, below the floor).
+!
+! Closes, as case 4 does in all six configurations.
 &parameters_physics
   adiabatic_option = 'field-line-average-term'
   nonlinear = .false.

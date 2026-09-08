@@ -1287,6 +1287,29 @@ SUMMARY_CASES = [
 # repeated systematically.
 # ---------------------------------------------------------------------------
 
+def time_step_collapsed(netcdf_file, factor=1e3):
+    """(collapsed?, time of collapse) for a run whose time step fell by more
+    than `factor` below its first value.
+
+    stella cuts the step to the CFL limit as the fields grow, and the
+    electromagnetic turbulent decks end with it a factor of ten to forty
+    below where it started; that is the run being cut short, not a failure.
+    A step that has fallen by a thousand is a run that went numerically
+    unstable -- three of the sixty-six configuration runs end at 1e-10 with
+    |phi|^2 at 1e11 to 1e20 -- and the budget measured across that is
+    reported, but marked.
+    """
+    with Dataset(netcdf_file) as ds:
+        t = np.asarray(ds.variables['t'][:], dtype=float)
+    dt = np.diff(t)
+    if len(dt) < 2 or dt[0] <= 0:
+        return False, None
+    bad = np.nonzero(dt < dt[0] / factor)[0]
+    if len(bad) == 0:
+        return False, None
+    return True, float(t[bad[0]])
+
+
 def _budget_series(netcdf_file, which, window=None, **kw):
     """(time, dE/dt, sum P, channels, residual, turnover, conserved?).
 
@@ -1354,16 +1377,19 @@ def _budget_series(netcdf_file, which, window=None, **kw):
     return t, dEdt, P, chans, resid, turn, conserved
 
 
-def figure_case_budget(runs, outfile, case_title=''):
+def figure_case_budget(runs, outfile, case_title='', row_height=2.9):
     """The budget for one physics case, across configurations.
 
     `runs` is a list of (configuration label, netcdf path, window kwargs).
     Rows are configurations, columns are the two invariants.  A closed budget
     puts the measured derivative on top of the predicted total; the faint lines
     are the individual channels, so it is visible which one carries the budget.
+    `row_height` is in inches; six configurations to a page need about 1.75.
+    A run whose time step collapsed (time_step_collapsed) says so in its
+    annotation, because its residual is measured across a numerical blow-up.
     """
     rows = len(runs)
-    fig, axes = plt.subplots(rows, 2, figsize=(10.2, 2.9 * rows), squeeze=False)
+    fig, axes = plt.subplots(rows, 2, figsize=(10.2, row_height * rows), squeeze=False)
     handles = {}
     for r, (label, path, kw) in enumerate(runs):
         for c, (which, name) in enumerate((('phi', r'$\varphi_{\rm RH}$'),
@@ -1419,8 +1445,11 @@ def figure_case_budget(runs, outfile, case_title=''):
                     handles.setdefault(lab, line)
             note = (f'no drive: invariant flat to {resid:.1e}' if conserved
                     else f'median residual {resid:.1e}   turnover {turn:.1f}')
+            collapsed, t_bad = time_step_collapsed(path)
+            if collapsed:
+                note += f'   (time step collapsed at t = {t_bad:.0f})'
             ax.text(0.985, 0.035, note, transform=ax.transAxes,
-                    fontsize=9.5, color='#333', ha='right',
+                    fontsize=8.5 if collapsed else 9.5, color='#333', ha='right',
                     bbox=dict(facecolor='white', edgecolor='none', alpha=0.82,
                               boxstyle='round,pad=0.25'))
             if r == 0:
@@ -1512,6 +1541,115 @@ def figure_case_summary(rows, outfile):
                          'no bar: no source, only conservation',
             transform=ax.transAxes, fontsize=9, color='#444', ha='center')
     fig.tight_layout()
+    fig.savefig(outfile)
+    plt.close(fig)
+    return outfile
+
+
+
+
+#> One colour per configuration in the six-configuration figure.  Not the
+#> invariant colours: those mean phi and Omega everywhere else in the report,
+#> and here the panel title already says which invariant is shown.
+CONFIG_COLOURS = {'miller': '#1f5fa8', 'w7x': '#c0392b', 'iter': '#2e8b57',
+                  'qa': '#7b4ea3', 'qh': '#d98c1f', 'tjii': '#6d4c41'}
+
+
+def figure_case_configurations(rows, tags, labels, outfile):
+    """Every case in every configuration, one panel per invariant.
+
+    `rows` are make_case_figures.summary_rows over all six configurations;
+    `tags` fixes the configuration order within a case and `labels` maps a tag
+    to its printed name.  Cases are the groups on the vertical axis and the
+    bars within a group are the configurations.  The conventions are those of
+    figure_case_summary: hollow where the energy turnover is below the floor,
+    a tick or bracket where the suite asserts something, and E(T)/E(0) as text
+    where the run has no source.  Only Miller and W7-X carry ticks, because
+    only those are asserted; the other four are run and reported.  The energy
+    turnover of the measured window is printed at the end of each bar, and a
+    dagger marks a run whose time step collapsed (time_step_collapsed), whose
+    residual is measured across a numerical blow-up.
+    """
+    cases = sorted({r[14] for r in rows})
+    n = len(tags)
+    h = 0.78 / n
+    #> Six bars per case at 0.76 inch a case leaves each bar 0.1 inch,
+    #> which is what a 6.5 pt conservation label needs to sit on its own bar
+    #> without touching its neighbours (case 2 carries two of them).
+    fig, axes = plt.subplots(1, 2, figsize=(9.6, 0.76 * len(cases) + 1.6),
+                             sharey=True)
+    lo, hi = np.inf, 0.0
+    for ax, idx, ok_idx, b_idx, c_idx, to_idx, name in (
+            (axes[0], 1, 3, 5, 11, 7, r'$\varphi_{\rm RH}$'),
+            (axes[1], 2, 4, 6, 12, 8, r'$\Omega_{\rm RH}$')):
+        for r in rows:
+            tag, case = r[13], r[14]
+            yi = cases.index(case) + (tags.index(tag) - (n - 1) / 2) * h
+            colour = CONFIG_COLOURS.get(tag, '#777')
+            if r[c_idx] is not None:
+                ratio = r[c_idx]
+                if abs(ratio - 1.0) > 0.05:
+                    text = r'\textbf{$\mathbf{E(T)/E(0) = ' + f'{ratio:.3f}' + '}$}'
+                else:
+                    text = f'$E(T)/E(0) = {ratio:.3f}$'
+                #> On a white patch: a neighbour's hollow bar can run
+                #> underneath it (case 2's Omega panel).
+                ax.text(1.0, yi, text, transform=ax.get_yaxis_transform(),
+                        fontsize=6.5, va='center', ha='right', color=colour,
+                        bbox=dict(facecolor='white', edgecolor='none',
+                                  alpha=0.85, pad=0.6))
+                continue
+            val, ok = r[idx], r[ok_idx]
+            if not np.isfinite(val) or val <= 0:
+                continue
+            lo, hi = min(lo, val), max(hi, val)
+            ax.barh(yi, val, height=h, color=colour if ok else 'none',
+                    edgecolor=colour, linewidth=0.9,
+                    hatch=None if ok else '///')
+            #> The turnover, in the bar's colour past its end and past the
+            #> tick or bracket if there is one, and a dagger where the run
+            #> blew up.  These two are what the results table used to carry
+            #> beside the residual.
+            bound = r[b_idx] if ok else None
+            turn = r[to_idx]
+            tag_text = f'{turn:.2g}' if turn < 10 else f'{turn:.0f}'
+            if r[15]:
+                tag_text += r'$^\dagger$'
+            right = val if bound is None else max(val, np.max(bound))
+            ax.text(right * 1.3, yi, tag_text, fontsize=5.6, va='center',
+                    ha='left', color=colour)
+            if bound is None:
+                continue
+            if isinstance(bound, tuple):
+                ax.plot(bound, [yi, yi], color='k', lw=0.9, solid_capstyle='butt')
+                for b in bound:
+                    ax.plot([b] * 2, [yi - h/2, yi + h/2], color='k', lw=0.9)
+            else:
+                ax.plot([bound] * 2, [yi - h/2, yi + h/2], color='k', lw=1.3)
+        ax.set_xscale('log')
+        ax.set_title(name, fontsize=11, loc='left')
+        ax.set_xlabel('median relative residual of the budget')
+        ax.grid(axis='x', alpha=0.25, lw=0.6)
+        for i in range(len(cases) - 1):
+            ax.axhline(i + 0.5, color='#bbb', lw=0.5)
+    for ax in axes:
+        #> Room on the right for the turnover labels.
+        ax.set_xlim(lo / 2.5, hi * 12)
+    axes[0].set_yticks(range(len(cases)))
+    axes[0].set_yticklabels([f'{c}' for c in cases], fontsize=9.5)
+    axes[0].set_ylabel('case')
+    axes[0].invert_yaxis()
+    handles = [plt.Rectangle((0, 0), 1, 1, color=CONFIG_COLOURS.get(t, '#777'))
+               for t in tags]
+    fig.legend(handles, [labels[t] for t in tags], frameon=False, fontsize=9.5,
+               ncol=n, loc='upper center', bbox_to_anchor=(0.5, 0.995))
+    fig.text(0.5, 0.008, 'number: energy turnover of the window;  '
+                         'hollow: turnover below 0.5, not a result;  '
+                         'tick: asserted tolerance;  bracket: two-sided bound;  '
+                         'no bar: no source, only conservation;  '
+                         r'$\dagger$: time step collapsed, measured on the blow-up',
+             fontsize=8, color='#444', ha='center')
+    fig.tight_layout(rect=(0, 0.025, 1, 0.955))
     fig.savefig(outfile)
     plt.close(fig)
     return outfile

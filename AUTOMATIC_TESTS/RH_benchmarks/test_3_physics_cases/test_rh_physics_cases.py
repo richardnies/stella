@@ -212,45 +212,44 @@ KNOWN_PHI_FAILURES = {
     ('w7x', 6): (0.50, 6.00),
 }
 
-#> Only Miller and W7-X are asserted.  The other four equilibria have been run
-#> on all eleven cases -- the decks are here and the measurements are below --
-#> but no tolerances are set for them, because setting forty-four bounds from
-#> one measurement each is bookkeeping dressed up as verification.  Add them
-#> deliberately, case by case, as each is understood.
+#> Only Miller and W7-X are asserted.  The other four equilibria -- ITER, QA,
+#> QH and TJ-II -- ship all eleven decks too, each the W7-X deck with the
+#> equilibrium swapped (ITER's cases 1 and 2 also take nfield_periods = 2.505,
+#> one poloidal turn, because one field period of an axisymmetric field is 0.4
+#> of a turn and tests nothing).  The suite does not run them: forty-four runs
+#> of up to ten minutes is more than a test suite should cost, and setting
+#> forty-four bounds from one measurement each is bookkeeping dressed up as
+#> verification.  make_case_figures.py measures and plots them with the same
+#> statistic when their output is present; every deck header carries its last
+#> measurement, and the report collects them (DOCUMENTATION/stella_RH_report,
+#> "The four remaining configurations").
 #>
-#> The sweep was run to test a prediction, and refuted it.  The prediction was
-#> that case 1, which is the drift channel on its own, would be worst in TJ-II
-#> (the largest trapped fraction, so the most exposure to the trapped-channel
-#> quadrature error) and weakest in QA and QH (quasi-symmetric, so small
-#> bounce-averaged drift).  Measured, with * marking a turnover below 0.5 where
-#> the case is not a real test:
+#> What the four establish, read against the two asserted configurations:
 #>
-#>   case 1     miller  *vacuous   w7x  1.24e-01   iter *4.81e-01
-#>              qa  5.40e-02       qh   1.39e+00   tjii  1.07e-01
-#>              (w7x at nfield_periods = 8, which the other four still run; the
-#>               w7x deck is now one field period and reads 2.5e-02)
-#>
-#> TJ-II is second best, not worst.  And QA and QH -- both quasi-symmetric, both
-#> with small bounce-averaged drift -- differ by a factor of 26.  Two
-#> configurations that share the property the explanation rests on cannot differ
-#> by 26 because of that property, so the trapped-fraction account of case 1 is
-#> wrong, whatever else is true.
-#>
-#> What the sweep does establish, across all six configurations:
-#>
-#>   - the nonlinear adiabatic and modified-adiabatic cases (7, 8) close
-#>     everywhere: 1.2e-03 to 6.2e-02.  The core nonlinear machinery is sound in
-#>     every geometry tried.
-#>   - the linear collisional case (4) closes everywhere: 2.6e-03 to 1.8e-02.
-#>   - the multi-species electromagnetic cases (3, 6) fail everywhere, 0.6 to
-#>     3.2.  That is not a stellarator effect and not a W7-X peculiarity; it is
-#>     the electromagnetic multi-species physics itself, which supports treating
-#>     cases 3, 6 and the momentum channel of case 10 as one defect.
-#>   - the multi-species electrostatic case (2) also failed in every geometry
-#>     except QH, on the decks of the time (alpha0 = 0.7-style tubes, ginit
-#>     'default').  What that was measuring turned out not to be the diagnostic
-#>     -- see the case-2 deck -- and the four unasserted decks have not been
-#>     revisited since.
+#>   - Nothing is special to Miller or W7-X.  The even invariant closes at
+#>     1e-3 to 1e-1 wherever it is driven with adiabatic, collisional or
+#>     turbulent electrons (cases 1, 4, 5, 7, 8, 9) and fails only with two
+#>     kinetic species at finite beta (cases 3, 6, and phi_RH in 10/11 outside
+#>     QA), in all six.  The dA_par transient is not a stellarator effect.
+#>   - The odd invariant fails on every tube that does not close, in every
+#>     equilibrium: case 1 reads 0.3 to 3 on the one-period alpha0 = 0.7 tubes
+#>     (W7-X 2.9, QH 0.32, TJ-II 0.54, QA 1.0) and 1e1 to 1e3 with kinetic
+#>     electrons (case 3).  ITER on a closed poloidal turn conserves it like
+#>     Miller.  With kinetic electrons on an open tube E_Omega is pumped even
+#>     with collisions (cases 9 and 10 in ITER, QH and W7-X, in the quiet phase
+#>     before turbulence): the case-2 mechanism on the odd invariant.
+#>   - The collisionless kinetic-electron growth of case 2 (see the w7x_2 deck)
+#>     is strongest where the join is most mismatched: on the old eight-period
+#>     tubes it blew up in QA and TJ-II (|grad x|^2 ratios 0.08 and 0.18
+#>     across the join), read 7.9 in ITER (0.67) and 0.44 in QH (0.81), and it
+#>     is absent on every closed tube.  All case-2 decks now sit on
+#>     alpha0 = 0, where QA and QH have no source at all (quasi-symmetry: the
+#>     drift channel cancels to 1e-19) and carry E(T)/E(0) instead of a
+#>     residual; TJ-II is driven there and reads 0.53, halving at nzed = 256.
+#>   - Three decks blow up: QA case 9 and TJ-II cases 8 and 9, under-resolved
+#>     turbulence at a/L_T = 8 with no hyper-dissipation and twelve modes each
+#>     way.  Their numbers are measured on the blow-up and say nothing about
+#>     the diagnostic; the decks are kept identical to W7-X's on purpose.
 CONFIGURATIONS = ('miller', 'w7x')
 
 #> Below this, |P| is too small a rate of change of E_RH for a residual divided
@@ -269,8 +268,13 @@ def _measure(netcdf_file, which, window=0.4):
     integrand = np.abs(dEdt)
     turnover = np.sum(0.5 * (integrand[1:] + integrand[:-1]) * np.diff(t)) / E.mean()
     magnitude = np.abs(P)
-    if magnitude.max() <= 0.0:
-        return float('nan'), turnover, 0.0     # no drive at all
+    #> No source at all: every channel is identically zero (the Miller
+    #> collisionless cases) or cancels to round-off (the quasi-symmetric
+    #> tubes of case 2, where |P| sits at 1e-19 against a dE/dt of 1e-5).
+    #> A residual divided by that is 1e+15 of nothing; the run is a
+    #> conservation test instead and is reported as such.
+    if magnitude.max() <= 1e-10 * np.abs(dEdt).max():
+        return float('nan'), turnover, 0.0
     big = magnitude > magnitude.max() / 100.0
     residual = float(np.median(np.abs(dEdt - P)[big] / magnitude[big]))
 

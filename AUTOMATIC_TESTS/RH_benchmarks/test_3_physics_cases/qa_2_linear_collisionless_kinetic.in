@@ -1,19 +1,34 @@
-! Linear, collisionless, kinetic ions AND electrons, ELECTROSTATIC.
+! Case 2: linear, collisionless, kinetic ions and electrons, electrostatic.
+! QA, zonal mode at kx rho = 0.2.
 !
-! This case exists because the electromagnetic multi-species case next to it
-! fails and a single case could not say which of its two new ingredients was
-! responsible.  Turning the fields off while keeping the second species answers
-! it: the projection is conserved to 3e-3 here and not at all at beta = 4e-3,
-! so it is the finite beta and not the second species.
+! NOT ASSERTED.  The suite runs Miller and W7-X only; this deck is the W7-X deck
+! with the equilibrium swapped -- nothing else differs; see
+! w7x_2_linear_collisionless_kinetic.in for the reasoning behind every
+! parameter.  make_case_figures.py measures and plots this run with the suite's
+! statistic when its output is present, and the report
+! (DOCUMENTATION/stella_RH_report, section "The four remaining configurations")
+! collects the numbers of all forty-four such runs.
 !
-! It is also the cheapest case that can see a per-species normalisation error at
-! all.  With one species at m = T = 1 a wrong power of sqrt(T/m) and the right
-! one are the same number; with kinetic electrons they differ by 61.  That is
-! what the momentum inertia bug turned out to be.
+! Equilibrium.  QA, the quasi-axisymmetric configuration of the older benchmark
+! set (nfp = 2, q = 2.39, shat = 0.02 at rho = 0.71; the largest n /= 0
+! harmonic of B is 3.6e-3 of B00).
 !
-! Miller is linear, collisionless and axisymmetric here, so every flux channel
-! is identically zero and the budget reduces to the statement that the RH
-! projection does not move at all.
+! Tube.  One field period along alpha0 = 0, the stellarator-symmetric line
+! (the W7-X case-2 tube).  Closed: B = 1.000 at both ends.
+!
+! Last measured (median relative residual over the last 40% of the run, energy
+! turnover of that window in parentheses):
+! phi_RH no source, E(T)/E(0) = 0.952;
+! Omega_RH no source, E(T)/E(0) = 0.995.
+!
+! No source: on the quasi-symmetric line the drift channel cancels to
+! 1e-19 against a dE/dt of 1e-5, as it does in Miller, so the row carries
+! E_RH(T)/E_RH(0) = 0.952 (phi) and 0.995 (Omega) over t = 100 -- the
+! electron projection moving on a neutral state, see w7x_2.  Before this
+! deck was moved to alpha0 = 0 it ran on the open eight-period tube
+! (|grad x|^2 ratio 0.08) and blew up (turnover 8e2 in the window): the
+! collisionless kinetic-electron growth of w7x_2, strongest where the
+! join is most mismatched.
 &parameters_physics
   nonlinear = .false.
   vnew_ref = 0.1
@@ -31,7 +46,7 @@
   nakx = 1
 /
 &init_g_knobs
-  ginit_option = 'default'
+  ginit_option = 'rh'
   phiinit = 1.0
   den0 = 1.0
   upar0 = 1.0
@@ -69,7 +84,7 @@
 /
 &knobs
   delt = 0.05
-  nstep = 6000
+  nstep = 2000
   print_extra_info_to_terminal = .false.
   drifts_implicit = .true.
 /
@@ -84,9 +99,9 @@
   geo_option = 'vmec'
 /
 &vmec_parameters
-  nfield_periods = 8
+  nfield_periods = 1
   torflux = 0.5
-  alpha0 = 0.7
+  alpha0 = 0.0
   vmec_filename = 'wout_QA.nc'
 /
 &dissipation

@@ -5,12 +5,17 @@ and the summary figure that puts every case on one axis.
 Usage:  python3 make_case_figures.py <run directory> <figure directory>
 
 The run directory holds the output of test_3_physics_cases/*.in, one
-<config>_<n>_<name>.out.nc per deck.  Each case becomes a single figure with
-one row per configuration and one column per invariant, in the shape of the
-budget figure the report already uses.  The summary, fig_case_summary.pdf, is
-measured here with the same statistic the test asserts -- it imports the test
-module for the statistic, the tolerances and the bounds -- so the figure and
-the assertions cannot drift apart.  Its rows are also printed as a table.
+<config>_<n>_<name>.out.nc per deck.  Each case becomes one figure,
+fig_case<n>_<name>.pdf, with a row for every configuration that has output
+-- the two the suite asserts (Miller and W7-X) and the four it only runs
+(ITER, QA, QH, TJ-II) -- and the two invariants as columns.  The summary,
+fig_case_summary.pdf, is measured here with the same statistic the test
+asserts -- it imports the test module for the statistic, the tolerances and
+the bounds -- so the figure and the assertions cannot drift apart; it
+carries the asserted configurations only.  fig_case_configurations.pdf puts
+all six on one axis per invariant, with the energy turnover beside each bar
+and a dagger on the runs whose time step collapsed.  Every row is also
+printed as a table.
 '''
 import importlib.util
 import pathlib
@@ -65,7 +70,11 @@ CASES = {
         dict(window=0.4)),
 }
 
-CONFIGURATIONS = (('miller', 'Miller tokamak'), ('w7x', 'W7-X'))
+#> Every configuration with decks, asserted or not, in the order the figures
+#> show them.  Which of them the suite asserts is the test module's business
+#> (its CONFIGURATIONS); here it only decides which rows carry a tolerance.
+CONFIGURATIONS = (('miller', 'Miller tokamak'), ('w7x', 'W7-X'), ('iter', 'ITER'),
+                  ('qa', 'QA'), ('qh', 'QH'), ('tjii', 'TJ-II'))
 
 
 SHORT = {
@@ -80,10 +89,13 @@ SHORT = {
 def summary_rows(rundir):
     '''One row per (case, configuration) present in <rundir>, measured as the
     test measures it: (label, phi residual, Omega residual, phi tested, Omega
-    tested, phi bound, Omega bound, the two turnovers, the two drives, and the
-    two conservation ratios E(T)/E(0) for a run with no source, else None).  A
-    bound is the tolerance as a float, a (low, high) pair for a known failure,
-    or None where nothing is asserted.'''
+    tested, phi bound, Omega bound, the two turnovers, the two drives, the
+    two conservation ratios E(T)/E(0) for a run with no source, else None,
+    the configuration tag, the case number, and whether the time step
+    collapsed during the run).  A bound is the
+    tolerance as a float, a (low, high) pair for a known failure, or None
+    where nothing is asserted -- which is every row of a configuration the
+    suite does not assert.'''
     T = load_test_module()
     rows = []
     for case, (stem, phi_tol, omega_tol, vacuous) in sorted(T.CASES.items()):
@@ -95,7 +107,7 @@ def summary_rows(rundir):
             om_res, om_to, om_dr = T._measure(nc, 'omega')
             phi_ok = phi_to >= T.TURNOVER_FLOOR
             om_ok = om_to >= T.TURNOVER_FLOOR
-            if tag in vacuous:
+            if tag in vacuous or tag not in T.CONFIGURATIONS:
                 phi_bound = om_bound = None
             else:
                 phi_bound = T.KNOWN_PHI_FAILURES.get((tag, case), phi_tol)
@@ -110,7 +122,8 @@ def summary_rows(rundir):
             om_cons = conservation_ratio(nc, 'omega') if om_res != om_res else None
             rows.append((f'{case:>2}  {SHORT[case]} / {label}',
                          phi_res, om_res, phi_ok, om_ok, phi_bound, om_bound,
-                         phi_to, om_to, phi_dr, om_dr, phi_cons, om_cons))
+                         phi_to, om_to, phi_dr, om_dr, phi_cons, om_cons,
+                         tag, case, P.time_step_collapsed(nc)[0]))
     return rows
 
 
@@ -129,17 +142,19 @@ def print_summary(rows):
     print(f'{"case / configuration":42s} {"phi":>9s} {"turn":>5s} {"drive":>5s}   '
           f'{"Omega":>9s} {"turn":>5s} {"drive":>5s}')
     for (label, phi_res, om_res, phi_ok, om_ok, phi_b, om_b,
-         phi_to, om_to, phi_dr, om_dr, phi_cons, om_cons) in rows:
+         phi_to, om_to, phi_dr, om_dr, phi_cons, om_cons, tag, case, blew) in rows:
         print(f'{label:42s} {phi_res:9.2e} {phi_to:5.2f} {phi_dr:5.2f}{" " if phi_ok else "*"}  '
               f'{om_res:9.2e} {om_to:5.2f} {om_dr:5.2f}{" " if om_ok else "*"}'
               + (f'   no source: E(T)/E(0) = {phi_cons:.3f} / {om_cons:.3f}'
-                 if phi_cons is not None and om_cons is not None else ''))
+                 if phi_cons is not None and om_cons is not None else '')
+              + ('   + time step collapsed' if blew else ''))
     print('* turnover below the floor: shown hollow, not a result')
 
 
 def main(rundir, figdir):
     rundir, figdir = pathlib.Path(rundir), pathlib.Path(figdir)
     figdir.mkdir(parents=True, exist_ok=True)
+    asserted = load_test_module().CONFIGURATIONS
     for case, (stem, title, window) in sorted(CASES.items()):
         runs = []
         for tag, label in CONFIGURATIONS:
@@ -148,17 +163,23 @@ def main(rundir, figdir):
                 runs.append((label, nc, window))
             else:
                 print(f'  missing: {nc.name}')
-        if not runs:
-            continue
-        out = figdir / f'fig_case{case}_{stem}.pdf'
-        P.figure_case_budget(runs, out, case_title=title)
-        print('wrote', out.name)
+        if runs:
+            #> Six rows have to fit a page with room for a caption.
+            out = figdir / f'fig_case{case}_{stem}.pdf'
+            P.figure_case_budget(runs, out, case_title=title,
+                                 row_height=1.75 if len(runs) > 2 else 2.9)
+            print('wrote', out.name)
     rows = summary_rows(rundir)
     if rows:
         print_summary(rows)
         out = figdir / 'fig_case_summary.pdf'
-        P.figure_case_summary(rows, out)
+        P.figure_case_summary([r for r in rows if r[13] in asserted], out)
         print('wrote', out.name)
+        if any(r[13] not in asserted for r in rows):
+            out = figdir / 'fig_case_configurations.pdf'
+            P.figure_case_configurations(rows, [c for c, _ in CONFIGURATIONS],
+                                         dict(CONFIGURATIONS), out)
+            print('wrote', out.name)
 
 
 if __name__ == '__main__':

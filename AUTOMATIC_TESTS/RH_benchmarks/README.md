@@ -147,3 +147,26 @@ and labels a panel rather than quoting a number when it is below a per-mille.
 The VMEC equilibria are not in the repository, being some 24 MB together.  Each
 test skips if its `wout` file is absent; drop them beside the decks to enable
 the suite.
+
+Physics cases
+-------------
+`test_3_physics_cases/` asserts the budget of both invariants -- the potential
+`phi_RH` and the momentum `Omega_RH` -- on eleven physics cases (linear and
+nonlinear; collisionless and collisional; adiabatic, modified-adiabatic and
+kinetic electrons; electrostatic and electromagnetic), each in Miller geometry
+and in W7-X, twenty-two runs.  The statistic is the median pointwise relative
+residual over the last 40% of each run, asserted only when the run turns the
+invariant's energy over at least 0.5 times in that window; the cases that do not
+are asserted to *stay* vacuous, and the known failures (the odd invariant on the
+non-closing W7-X `alpha0 = 0.7` tube, and the electromagnetic cases with two
+kinetic species) are held as two-sided bounds so that neither a regression nor a
+repair passes unnoticed.  The tolerances and the reasoning live in the test file
+and the deck headers.
+
+The same eleven decks are shipped for ITER, QA, QH and TJ-II -- forty-four more,
+each the W7-X deck with the equilibrium swapped -- but the suite does not run
+them.  `make_case_figures.py <run dir> <figure dir>` measures every run it finds
+with the test's own statistic and draws one budget figure per case plus the
+summary figures the report uses; every non-asserted deck's header carries its
+last measurement, and `DOCUMENTATION/stella_RH_report` ("The four remaining
+configurations") collects them.
