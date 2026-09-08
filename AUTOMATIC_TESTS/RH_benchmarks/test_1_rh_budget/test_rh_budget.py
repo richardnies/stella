@@ -102,11 +102,13 @@ def check_rh_budget(input_filename, tmp_path, stella_version, tolerance,
     run_local_stella_simulation(input_filename, tmp_path, stella_version)
     local_netcdf_file = tmp_path / input_filename.replace('.in', '.out.nc')
 
-    time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift, P_drift_tr, P_drift_pa = get_rh_budget(
+    (time, E_RH, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift, P_drift_tr,
+     P_drift_pa, P_induction) = get_rh_budget(
         local_netcdf_file, time_min, time_max, kx_max)
 
     if channel == 'nonlinear':
-        measured, expected, what = dE_RH_dt - P_collisional - P_drift, P_nonlinear, 'nonlinear channel'
+        measured, expected, what = (dE_RH_dt - P_collisional - P_drift - P_induction,
+                                    P_nonlinear, 'nonlinear channel')
     else:
         measured, expected, what = dE_RH_dt, P_RH, 'total budget'
     residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)

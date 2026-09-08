@@ -117,13 +117,25 @@ def _weights(ncdata):
     return weight / weight.sum()
 
 
+def _rh_phi_projection(ncdata, weight):
+    """(<phi_I(g)>, <A dApar>) -- the projection that equals the relaxed
+    potential, and the part of the gbar projection that the fluxes account for
+    separately.  Files written before RH_phi_I_g existed fall back to the gbar
+    projection and carry no induction term."""
+    gbar = _field_line_average(ncdata, 'RH_phi_I', weight)
+    g = _field_line_average(ncdata, 'RH_phi_I_g', weight)
+    if g is None:
+        return gbar, np.zeros_like(gbar)
+    return g, gbar - g
+
+
 def invariants(netcdf_file):
     """Field-line-averaged <phi_RH> and <upar_RH>, each divided by its inertia."""
     ncdata = Dataset(netcdf_file)
     weight = _weights(ncdata)
     time = np.array(ncdata.variables['t'][:])
 
-    phi = _field_line_average(ncdata, 'RH_phi_I', weight)
+    phi = _rh_phi_projection(ncdata, weight)[0]
     inertia = _field_line_average(ncdata, 'RH_inertia', weight)
     upar = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_omega', 'RH_upar'), weight)
     upar_inertia = _field_line_average_per_species(
@@ -186,10 +198,13 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
     carries it.
     """
     if which == 'phi':
-        t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_budget(netcdf_file, time_min, time_max)[:7]
+        series = get_rh_budget(netcdf_file, time_min, time_max)
+        t, E, dEdt, P, P_nl, P_coll, P_dr = series[:7]
+        P_ind = series[9]
         colour, energy_label = PHI, r'$E_{\rm RH}$'
     else:
         t, E, dEdt, P, P_nl, P_coll, P_dr = get_rh_omega_budget(netcdf_file, time_min, time_max)
+        P_ind = np.zeros_like(P_dr)
         colour, energy_label = UPA, r'$E_{\Omega\rm RH}$'
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(6.6, 5.0), sharex=True,
@@ -216,18 +231,20 @@ def figure_budget(netcdf_file, outfile, which='phi', title='', time_min=None, ti
     ax_p.plot(t, dEdt, color=colour, lw=1.9, label=r'$dE/dt$  (measured)')
     ax_p.plot(t, P, color='#c2703a' if which == 'phi' else '#2e6f8e',
               lw=1.3, ls='--', label=r'$\sum P$  (predicted)')
-    for series, style, label in ((P_nl, '#7d3c6b', r'$P$ nonlinear'),
-                                 (P_coll, '#8a6d1f', r'$P$ collisional'),
-                                 (P_dr, '#2e7d6b', r'$P$ drift')):
-        if np.any(series != 0):
-            ax_p.plot(t, series, color=style, lw=0.9, alpha=0.85, label=label)
+    for channel, style, label in ((P_nl, '#7d3c6b', r'$P$ nonlinear'),
+                                  (P_coll, '#8a6d1f', r'$P$ collisional'),
+                                  (P_dr, '#2e7d6b', r'$P$ drift'),
+                                  (P_ind, '#b0453a', r'$P$ induction')):
+        if np.any(channel != 0):
+            ax_p.plot(t, channel, color=style, lw=0.9, alpha=0.85, label=label)
     ax_p.axhline(0.0, color='k', lw=0.5, alpha=0.3)
     ax_p.set_xlabel(r'time  $[a/v_{\rm th}]$')
     ax_p.set_ylabel('power into the zonal flow')
     ax_p.legend(frameon=False, fontsize=10, ncol=2, loc='upper right')
 
     nonlinear = np.any(P_nl != 0)
-    measured, expected = (dEdt - P_coll - P_dr, P_nl) if nonlinear else (dEdt, P)
+    measured, expected = ((dEdt - P_coll - P_dr - P_ind, P_nl) if nonlinear
+                          else (dEdt, P))
     residual = np.linalg.norm(measured - expected) / np.linalg.norm(expected)
     ax_p.text(0.015, 0.035, f'residual {residual:.2e}'
                             f'  ({"nonlinear channel" if nonlinear else "total budget"})',
@@ -250,7 +267,7 @@ def per_kx_residual(netcdf_file, which, time_min, time_max):
     kx = np.array(ncdata.variables['kx'][:])
 
     if which == 'phi':
-        signal = _field_line_average(ncdata, 'RH_phi_I', weight)
+        signal, A_dApar = _rh_phi_projection(ncdata, weight)
         inertia = _field_line_average(ncdata, 'RH_inertia', weight)
         fluxes = {n: _field_line_average(ncdata, n, weight) for n in
                   ('RH_fluxes_phi_even', 'RH_fluxes_phi_odd',
@@ -274,7 +291,10 @@ def per_kx_residual(netcdf_file, which, time_min, time_max):
         E = np.abs(signal)**2 / (2 * inertia2)[None, :] * norm[None, :]
         pref = norm[None, :] / inertia2[None, :]
         P_nl = -np.real(1j * kx[None, :] * nonlinear * np.conj(signal)) * pref
-        P_ot = -np.real(1j * kx[None, :] * other * np.conj(signal)) * pref
+        #> The induction channel joins the collisional and drift terms: like
+        #> them it is a source the nonlinear channel is measured against.
+        P_ot = (-np.real(1j * kx[None, :] * other * np.conj(signal)) * pref
+                - np.real(np.gradient(A_dApar, time, axis=0) * np.conj(signal)) * pref)
     else:
         signal = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_omega', 'RH_upar'), weight).sum(axis=1)
         inertia = _field_line_average_per_species(ncdata, _first_present(ncdata, 'RH_omega_inertia', 'RH_upar_inertia'), weight)

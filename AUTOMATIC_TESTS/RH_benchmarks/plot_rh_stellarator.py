@@ -75,7 +75,8 @@ def energy_from_phi(netcdf_file):
 
 
 def figure(netcdf_file, title, outfile, time_min=3.0):
-    time, E, dEdt, P, P_nl, P_coll, P_drift, P_drift_tr, P_drift_pa = get_rh_budget(netcdf_file)
+    (time, E, dEdt, P, P_nl, P_coll, P_drift, P_drift_tr, P_drift_pa,
+     P_induction) = get_rh_budget(netcdf_file)
     t_phi, E_phi = energy_from_phi(netcdf_file)
 
     fig, (ax_e, ax_p) = plt.subplots(2, 1, figsize=(7.2, 6.4), sharex=True,

@@ -276,6 +276,12 @@ def check_collisionless_drift(configuration, tmp_path, stella_version, error=Fal
             print(f'    the drift channel carries {share:.3e} of the initial projection')
         return residual, share
 
+    #> The gbar projection, deliberately, and not the g_s one that the energy
+    #> budget of test 3 uses.  What is checked here is that the change in the
+    #> projection is accounted for by the accumulated flux, and the fluxes come
+    #> from the evolution equation for gbar_s; the g_s projection would need the
+    #> accumulated induction term added back, which is algebraically the same
+    #> comparison.  See the header of rh_budget.py.
     phi = _field_line_average(ncdata, 'RH_phi_I', weight)[:, keep]
     phi_drift = sum(_field_line_average(ncdata, n, weight)
                     for n in ('RH_fluxes_drift_trapped', 'RH_fluxes_drift_passing'))[:, keep]
@@ -405,6 +411,12 @@ def test_whether_the_drift_channel_holds_electromagnetically(configuration, tmp_
     umom_drift = _field_line_average_per_species(ncdata, 'RH_omega_flux_drift', weight)[:, 0, keep]
     r_u = unaccounted(umom, umom_drift)
 
+    #> The gbar projection, deliberately, and not the g_s one that the energy
+    #> budget of test 3 uses.  What is checked here is that the change in the
+    #> projection is accounted for by the accumulated flux, and the fluxes come
+    #> from the evolution equation for gbar_s; the g_s projection would need the
+    #> accumulated induction term added back, which is algebraically the same
+    #> comparison.  See the header of rh_budget.py.
     phi = _field_line_average(ncdata, 'RH_phi_I', weight)[:, keep]
     phi_drift = sum(_field_line_average(ncdata, n, weight)
                     for n in ('RH_fluxes_drift_trapped', 'RH_fluxes_drift_passing'))[:, keep]

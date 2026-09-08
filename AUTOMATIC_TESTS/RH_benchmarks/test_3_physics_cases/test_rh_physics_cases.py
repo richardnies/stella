@@ -252,6 +252,19 @@ KNOWN_PHI_FAILURES = {
 #>     the diagnostic; the decks are kept identical to W7-X's on purpose.
 CONFIGURATIONS = ('miller', 'w7x')
 
+#> The potential budget is measured from the projection of g_s
+#> ("RH_phi_I_g"), which is the one that equals the relaxed potential, and its
+#> power sum carries the induction channel that the three fluxes -- which come
+#> from the evolution equation for gbar_s -- do not account for.  See the header
+#> of rh_budget.py.  Every electrostatic case is unaffected: there the two
+#> projections are the same array and the induction channel is identically zero,
+#> so cases 1, 2, 4, 5, 7, 8 and 9 read exactly what they read before.  Of the
+#> four electromagnetic cases the residual is a wash -- Miller case 6 improves
+#> from 5.37 to 9.30e-01 and W7-X case 3 from 6.35 to 5.67, W7-X cases 10 and 11
+#> worsen slightly from 6.77e-02 to 7.50e-02 and 2.91e-02 to 3.40e-02 -- because
+#> the induction channel is the size of the residual already present.  What the
+#> change buys is that the quantity asserted is the relaxed potential.
+#>
 #> Below this, |P| is too small a rate of change of E_RH for a residual divided
 #> by it to mean much.  Reported rather than asserted; see <_measure>.
 DRIVE_FLOOR = 0.5

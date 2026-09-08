@@ -9,8 +9,16 @@ time evolution, by asserting that the zonal-flow energy it implies obeys
 with, `<.>` being the dl/B field-line average and `F` the sum of every RH flux
 channel written to the netCDF file,
 
-    E_RH(t,kx) = |<RH_phi_I>|^2 / (2 |<RH_inertia>|^2) * (1 - Gamma0)
-    P_RH(t,kx) = -Re[ i kx F <RH_phi_I>* ] / |<RH_inertia>|^2 * (1 - Gamma0)
+    E_RH(t,kx) = |<RH_phi_I_g>|^2 / (2 |<RH_inertia>|^2) * (1 - Gamma0)
+    P_RH(t,kx) = -Re[ i kx F <RH_phi_I_g>* ] / |<RH_inertia>|^2 * (1 - Gamma0)
+               - Re[ d<A dApar>/dt <RH_phi_I_g>* ] / |<RH_inertia>|^2 * (1 - Gamma0)
+
+`RH_phi_I_g` is the projection of g_s, the one that equals the relaxed
+potential; `RH_phi_I` is the projection of gbar_s, and `<A dApar>` is their
+difference.  The second line is the induction channel, which the RH fluxes do
+not account for because they come from the evolution equation for gbar_s.  It
+is identically zero in an electrostatic run, where the two projections are the
+same array.
 
 Both sides come from the same run, so no reference data is needed and the tests
 keep working when the physics of a case legitimately changes.

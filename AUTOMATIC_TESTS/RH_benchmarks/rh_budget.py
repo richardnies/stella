@@ -7,14 +7,25 @@
 # transferred into it are, per radial wavenumber and with <.> the dl/B
 # field-line average,
 #
-#     E_RH(t,kx) = |<RH_phi_I>|^2 / (2 |<RH_inertia>|^2) * (1 - Gamma0)
-#     P_RH(t,kx) = -Re[ i kx F <RH_phi_I>* ] / |<RH_inertia>|^2 * (1 - Gamma0)
+#     E_RH(t,kx) = |<RH_phi_I_g>|^2 / (2 |<RH_inertia>|^2) * (1 - Gamma0)
+#     P_RH(t,kx) = -Re[ i kx F <RH_phi_I_g>* ] / |<RH_inertia>|^2 * (1 - Gamma0)
 #
 # where F is the sum of every RH flux written to the netCDF file (phi/apar/bpar,
-# even and odd in vpa, plus the collisional flux).  If the diagnostic is
-# consistent then
+# even and odd in vpa, plus the collisional flux).
 #
-#     d E_RH / dt  =  sum_kx P_RH
+# The projection is of g_s (RH_phi_I_g), which is the one that equals the
+# relaxed potential.  The fluxes, however, come from the evolution equation for
+# gbar_s, so electromagnetically they do not account for all of dphi_RH/dt: the
+# difference is the induction channel
+#
+#     P_ind(t,kx) = -Re[ d<A dApar>/dt <RH_phi_I_g>* ] / |<RH_inertia>|^2 * (1-Gamma0)
+#
+# with <A dApar> = <RH_phi_I> - <RH_phi_I_g>, the weight A being built from the
+# geometry and the equilibrium Maxwellian alone and so constant in time.  It is
+# identically zero whenever dApar = 0, which is every electrostatic run.  If the
+# diagnostic is consistent then
+#
+#     d E_RH / dt  =  sum_kx (P_RH + P_ind)
 #
 # and the benchmarks assert exactly that.  The test needs no reference data:
 # both sides come from the same run, so it checks the diagnostic against the
@@ -90,7 +101,8 @@ def _field_line_average(ncdata, name, weight):
 def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None,
                   interior=True):
     '''Return (time, E_RH, dE_RH/dt, P_RH, P_RH_nonlinear, P_RH_collisional,
-    P_RH_drift), all summed over kx.
+    P_RH_drift, P_RH_drift_trapped, P_RH_drift_passing, P_RH_induction), all
+    summed over kx.
 
     dE_RH/dt is a centred difference, so it is defined on the interior points;
     P_RH is returned on the same points.  interior=False keeps the two end
@@ -114,7 +126,21 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None,
     weight[-1] = 0.0
     weight = weight / weight.sum()
 
-    RH_phi_I = _field_line_average(ncdata, 'RH_phi_I', weight)
+    #> The projection of g_s, which is the one that equals the relaxed potential.
+    #> 'RH_phi_I' is the projection of gbar_s: the two differ by the velocity
+    #> moment of the Apar part of gbar, a weight that is first order in Q where
+    #> the inertia is second, so the difference is 3-29% of the projection in an
+    #> electromagnetic run and identically zero otherwise.  That difference is
+    #> the induction channel below.  Files written before RH_phi_I_g existed
+    #> fall back to the old projection, and then carry no induction channel.
+    RH_phi_I_gbar = _field_line_average(ncdata, 'RH_phi_I', weight)
+    RH_phi_I = _field_line_average(ncdata, 'RH_phi_I_g', weight)
+    if RH_phi_I is None:
+        RH_phi_I = RH_phi_I_gbar
+    #> <A dApar> = <phi_I(gbar)> - <phi_I(g)>, and the weight A is built from the
+    #> geometry and the equilibrium Maxwellian alone, so it does not move in time
+    #> and d<A dApar>/dt is the time derivative of this difference.
+    A_dApar = RH_phi_I_gbar - RH_phi_I
     RH_inertia = _field_line_average(ncdata, 'RH_inertia', weight)
 
     def summed_fluxes(names):
@@ -138,6 +164,7 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None,
         finite_kx &= np.abs(kx) <= kx_max
     kx = kx[finite_kx]
     RH_phi_I = RH_phi_I[:, finite_kx]
+    A_dApar = A_dApar[:, finite_kx]
     RH_inertia = RH_inertia[finite_kx]
     RH_fluxes_nonlinear = RH_fluxes_nonlinear[:, finite_kx]
     RH_fluxes_collisional = RH_fluxes_collisional[:, finite_kx]
@@ -177,6 +204,13 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None,
     P_RH_drift_trapped = power(RH_fluxes_drift_trapped)
     P_RH_drift_passing = power(RH_fluxes_drift_passing)
 
+    #> The induction channel: the work the changing parallel vector potential
+    #> does on the projection.  It is what the three fluxes do not account for
+    #> once the projection is of g_s, since they come from the evolution
+    #> equation for gbar_s.  Identically zero whenever dApar = 0.
+    P_RH_induction = -np.real(np.gradient(A_dApar, time, axis=0)
+                              * np.conj(RH_phi_I)) * prefactor
+
     # np.gradient rather than a fixed-step difference: a nonlinear run may adapt
     # delt, so the time axis is not guaranteed to be uniformly spaced.  Drop the
     # end points, where np.gradient falls back to a one-sided difference.
@@ -190,15 +224,17 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None,
     P_drift = P_RH_drift[interior].sum(axis=1)
     P_drift_trapped = P_RH_drift_trapped[interior].sum(axis=1)
     P_drift_passing = P_RH_drift_passing[interior].sum(axis=1)
+    P_induction = P_RH_induction[interior].sum(axis=1)
 
     window = np.ones_like(time, dtype=bool)
     if time_min is not None: window &= time >= time_min
     if time_max is not None: window &= time <= time_max
 
     return (time[window], E_RH_total[window], dE_RH_dt[window],
-            (P_nonlinear + P_collisional + P_drift)[window],
+            (P_nonlinear + P_collisional + P_drift + P_induction)[window],
             P_nonlinear[window], P_collisional[window], P_drift[window],
-            P_drift_trapped[window], P_drift_passing[window])
+            P_drift_trapped[window], P_drift_passing[window],
+            P_induction[window])
 
 
 def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total', kx_max=None):
@@ -208,13 +244,15 @@ def budget_residual(netcdf_file, time_min=None, time_max=None, channel='total', 
     channel='nonlinear'  dE_RH/dt - P_collisional - P_drift      against P_nonlinear
     channel='drift'      dE_RH/dt - P_collisional - P_nonlinear  against P_drift
     '''
-    _, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift, _, _ = get_rh_budget(
-        netcdf_file, time_min, time_max, kx_max)
+    (_, _, dE_RH_dt, P_RH, P_nonlinear, P_collisional, P_drift, _, _,
+     P_induction) = get_rh_budget(netcdf_file, time_min, time_max, kx_max)
 
     if channel == 'nonlinear':
-        measured, expected = dE_RH_dt - P_collisional - P_drift, P_nonlinear
+        measured = dE_RH_dt - P_collisional - P_drift - P_induction
+        expected = P_nonlinear
     elif channel == 'drift':
-        measured, expected = dE_RH_dt - P_collisional - P_nonlinear, P_drift
+        measured = dE_RH_dt - P_collisional - P_nonlinear - P_induction
+        expected = P_drift
     else:
         measured, expected = dE_RH_dt, P_RH
 
