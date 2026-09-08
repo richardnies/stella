@@ -146,6 +146,7 @@ contains
       use diagnostics_RH_inertia_fluxes, only: init_diagnostics_RH_inertia_fluxes
       use parameters_diagnostics, only: write_RH_inertia_fluxes
       use parameters_physics, only: omprimfac_RH
+      use parameters_physics, only: triangular_ZF_RH
       use mp, only: broadcast, proc0
 
       implicit none
@@ -186,8 +187,16 @@ contains
       if (proc0) call get_nout(tstart, nout)
       call broadcast(nout)
 
-      ! Initialise RH inertia_fluxes diagnostics (including first write to netcdf)
-      if (write_RH_inertia_fluxes .or. abs(omprimfac_RH) > epsilon(0.)) call init_diagnostics_RH_inertia_fluxes()
+      !> Initialise RH inertia_fluxes diagnostics (including first write to netcdf).
+      !>
+      !> <triangular_ZF_RH> is in this condition because it is not only a diagnostic:
+      !> dist_fn::init_gxyz READS RH_integrand_even/odd and RH_inertia when building the
+      !> prescribed zonal g.  Those arrays are allocated here and nowhere else, so a run
+      !> with triangular_ZF_RH = .true. and no RH diagnostic requested used to reach
+      !> init_gxyz with them unallocated and segfault.  init_diagnostics is called before
+      !> ginit, so allocating here is early enough.
+      if (write_RH_inertia_fluxes .or. abs(omprimfac_RH) > epsilon(0.) &
+          .or. triangular_ZF_RH) call init_diagnostics_RH_inertia_fluxes()
 
    end subroutine init_diagnostics
 
