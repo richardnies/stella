@@ -1,15 +1,82 @@
-! Linear, collisionless, kinetic ions AND electrons, ELECTROSTATIC.
+! Case 2: linear, collisionless, kinetic ions AND electrons, ELECTROSTATIC.
+! W7-X, one field period along alpha0 = 0, zonal mode at kx rho = 0.2,
+! initialised as a zonal charge perturbation (ginit_option = 'rh').
 !
 ! This case exists because the electromagnetic multi-species case next to it
 ! fails and a single case could not say which of its two new ingredients was
-! responsible.  Turning the fields off while keeping the second species answers
-! it: the projection is conserved to 3e-3 here and not at all at beta = 4e-3,
-! so it is the finite beta and not the second species.
+! responsible.  Turning the fields off while keeping the second species is
+! meant to answer it.  It is also the cheapest case that can see a per-species
+! normalisation error at all: with one species at m = T = 1 a wrong power of
+! sqrt(T/m) and the right one are the same number; with kinetic electrons they
+! differ by 61.  That is what the momentum inertia bug turned out to be.
 !
-! It is also the cheapest case that can see a per-species normalisation error at
-! all.  With one species at m = T = 1 a wrong power of sqrt(T/m) and the right
-! one are the same number; with kinetic electrons they differ by 61.  That is
-! what the momentum inertia bug turned out to be.
+! The setup is case 1's -- one field period, nzed 128, nvgrid 48, nmu 24,
+! delt 0.05, nstep 2000, den0 = upar0 = 1 -- with two changes, both forced.
+!
+! The initial condition.  ginit_option = 'rh', not 'default'.  'default' puts
+! the same density and parallel-flow perturbation into every species.  With
+! adiabatic electrons that is a zonal charge perturbation, and case 1 is
+! initialised that way; with kinetic electrons it is a NEUTRAL one, and the
+! zonal flow is only its polarisation residual: Phi_i(0) = 0.27(1+i) as in
+! case 1 against Phi_e(0) = -0.29(1+i), 94% cancelled, E_RH(0) = 1.0e-02
+! against 1.1 for case 1 with the same g_i.  The drift then acts on the
+! neutral part of g, which the zonal-flow energy does not see, and E_RH grows
+! through the run instead of relaxing.  The budget did close on that state
+! (4.6e-02 at nfield_periods = 2, both species on dPhi/dt = -i kx F to 1%),
+! but what it measured was a 6% remainder of two cancelling projections: on a
+! longer tube (nfield_periods = 4) the electron projection came off its drift
+! by 7x while the ion held to 20%, and the flow turned over only 0.43 times
+! in the suite's window, so the case would not have been asserted at all.
+! 'rh' weights the density perturbation by Z_s, so the two species carry the
+! same zonal charge, Phi_i(0) = 0.058 and Phi_e(0) = 0.060 add, and the flow
+! relaxes at P/2E = -5.4e-03 at t = 30 -- the same rate as case 1 on this
+! tube, -4.4e-03, as it should be for an ion-scale zonal flow.  The parallel
+! flow upar0 = 1 is kept for symmetry with case 1; without it the residual is
+! 9.3e-02 instead of 9.0e-02.
+!
+! The field line.  alpha0 = 0, not the 0.7 of the other W7-X decks, because
+! with kinetic electrons and no collisions the zonal mode on the alpha0 = 0.7
+! tube is numerically unstable and the budget cannot be measured at all.  A
+! W7-X flux tube along alpha0 = 0.7 does not close on itself, and the zonal
+! mode is periodic in z regardless: at the join the coefficients jump (one
+! field period: B 1.037 -> 1.026, gds22 0.0079 -> 0.0342, gbdrift0 +0.0029 ->
+! -0.0212, b.grad z -0.449 -> -0.467).  With adiabatic electrons that costs
+! the odd invariant its conservation (case 1) and nothing more.  With kinetic
+! electrons the zonal mode grows exponentially: |phi|^2 goes from 0.107 to
+! 2.7e+05 by t = 300 at nfield_periods = 8 (amplitude growth rate 0.025) and
+! to 7e+11 by t = 100 at nfield_periods = 1 (0.145); with 'rh' in place of
+! 'default' the rates are 0.026 and 0.147.  The suite's old reading of this
+! deck -- phi_RH residual 1.7e+01, Omega_RH 1.1e+03, electron projection off
+! by 48x -- was that growth, not the diagnostic.
+!
+! The growth is not in any one operator and is not a resolved mode.  It
+! survives xdriftknob = 0 (0.029 at nfp 8), include_mirror = .false. (0.047),
+! mirror_semi_lagrange = .false., drifts_implicit = .false. and upwinding of
+! 0.2 in z, vpa and t; it gets FASTER when the time step is halved (0.145 ->
+! 0.92), when the velocity grid is refined (the electron projection error
+! 47.6 -> 79.2 at 3x nvgrid) and at longer wavelength (0.84 at kx rho = 0.05,
+! ~0.1 at 0.5 and 1.0); it is 0.31 at m_e = 1e-2.  It is absent with adiabatic
+! electrons on the same tube (case 1 closes at 2.5e-02 there), absent with
+! collisions (case 5, nu_e = 12, closes at 1.7e-02), and absent at alpha0 = 0,
+! the stellarator-symmetric line, on which B, gds22 and b.grad z match across
+! the join and the odd coefficients gbdrift0 and gds21 are antisymmetric:
+! there |phi|^2 decays (rate -0.002) and at xdriftknob = 0 both projections
+! hold to 5e-04 over t = 75.  Cases 3, 6, 9 and 10 in W7-X share the tube and
+! the electrons; case 3 at alpha0 = 0 no longer grows but still fails on its
+! dApar transient (see its deck).
+!
+! Tube length and tolerance.  alpha0 = 0 makes the transit-averaged drift of
+! every passing particle vanish, so the drive is trapped particles alone and
+! the odd invariant is not driven at all: Omega_RH turns over 0.01 times and
+! is vacuous here, as it is in Miller.  The phi_RH residual is the parallel
+! discretisation error known from case 1, which on this tube reads 0.13 for
+! case 1 and 9.0e-02 here (|z| = 1.12 ion, 0.90 electron); at nzed 256 and
+! nvgrid 96 they go to 0.091 and 6.2e-02 (1.08, 0.97), and neither moves with
+! delt (nfield_periods = 2: 0.176 at delt 0.05 and 0.025, 0.113 at the finer
+! grid).  Two field periods are worse, 0.176, as for case 1 (0.25).  The
+! tolerance is 0.12 rather than case 1's 0.08 because case 1 gets its 0.08 on
+! alpha0 = 0.7, where passing particles carry most of the drive, and that line
+! is not available here.
 !
 ! Miller is linear, collisionless and axisymmetric here, so every flux channel
 ! is identically zero and the budget reduces to the statement that the RH
@@ -31,7 +98,7 @@
   nakx = 1
 /
 &init_g_knobs
-  ginit_option = 'default'
+  ginit_option = 'rh'
   phiinit = 1.0
   den0 = 1.0
   upar0 = 1.0
@@ -69,7 +136,7 @@
 /
 &knobs
   delt = 0.05
-  nstep = 6000
+  nstep = 2000
   print_extra_info_to_terminal = .false.
   drifts_implicit = .true.
 /
@@ -84,9 +151,9 @@
   geo_option = 'vmec'
 /
 &vmec_parameters
-  nfield_periods = 8
+  nfield_periods = 1
   torflux = 0.5
-  alpha0 = 0.7
+  alpha0 = 0.0
   vmec_filename = 'wout_w7x_standard.nc'
 /
 &dissipation

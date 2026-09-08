@@ -31,15 +31,21 @@
 ! t = 300.  That is structural rather than a matter of length: the secular drift
 ! is carried mostly by trapped particles and W^[Omega] vanishes on trapped
 ! orbits, so the drift channel has very little purchase on the odd invariant.
-! Case 1: linear, collisionless.
-! W7-X, zonal mode at kx rho = 0.2.
-! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
-! collisional damping.  A single zonal mode initialised with ginit_option='rh'
-! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
-! fluxes vanish and the budget is driven by the collisional channel together
-! with the magnetic-drift channel, which is what distinguishes this from the
-! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
-! vanishes and P_drift with it, while here it is the dominant source.
+!
+! The field line.  This deck sits on alpha0 = 0.7, and the electrostatic twin
+! (case 2) has since shown that the zonal mode with kinetic electrons and no
+! collisions is numerically unstable on that tube, with or without dApar:
+! amplitude growth rate 0.025 at nfield_periods = 8.  That is the likely
+! reason the turnover above was not reproducible between invocations: a
+! round-off difference between two runs grows at the same rate.
+! Case 2 now runs on alpha0 = 0, where the mode is stable.  This deck does not
+! follow it, because on alpha0 = 0 the budget still fails, on the dApar
+! transient rather than on growth: 2.1e+01 at nfield_periods = 8 (|z| = 36 for
+! the electrons on dPhi/dt = -i kx F) and 8.0e-01 at nfield_periods = 1, with
+! no exponential growth to t = 300 at either.  So the finite beta is at least
+! part of the failure bounded in the test file, and until it is understood the
+! tube stays where the bound was measured.  See the case-2 deck for the
+! instability.
 &parameters_physics
   nonlinear = .false.
   vnew_ref = 0.1

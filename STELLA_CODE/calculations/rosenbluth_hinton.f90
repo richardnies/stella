@@ -3198,6 +3198,29 @@ contains
    !> minimum and that is exactly the case); and the classification of orbits
    !> against maxval(bmag) is a single global threshold on a line with many
    !> wells.
+   !>
+   !> W7-X case 2 (kinetic electrons, electrostatic, collisionless) failed on
+   !> the same tube for a different reason, which is also not the diagnostic:
+   !> with kinetic electrons and no collisions the zonal mode on alpha0 = 0.7 is
+   !> numerically unstable.  |phi|^2 grows from 0.107 to 2.7e+05 by t = 300 at
+   !> nfield_periods = 8 (amplitude rate 0.025) and to 7e+11 by t = 100 at
+   !> nfield_periods = 1 (0.145), and the old reading of the case -- phi_RH
+   !> residual 1.7e+01, electron projection off its drift by 48x -- was that
+   !> growth.  It is not one operator: it survives xdriftknob = 0, mirror off,
+   !> the semi-Lagrangian mirror off, explicit drifts and upwinding, gets faster
+   !> at half the time step (0.92) and with a finer velocity grid, and is absent
+   !> with adiabatic electrons, with collisions (case 5, nu_e = 12) and on
+   !> alpha0 = 0, where the even coefficients match across the join and the odd
+   !> ones are antisymmetric.  The suite's deck now runs there and closes at
+   !> 9.0e-02 (6.2e-02 at twice nzed and nvgrid), which is the parallel
+   !> discretisation error above on a trapped-only line; case 1 reads 0.13 on
+   !> it.  Two more things about that deck: ginit_option = 'default' gives every
+   !> species the same density perturbation, which with two kinetic species is a
+   !> neutral perturbation whose zonal flow is a 6% polarisation remainder, so
+   !> the deck uses 'rh', where the perturbation is weighted by Z_s; and on
+   !> alpha0 = 0 nothing drives the odd invariant, so Omega_RH is vacuous.
+   !> Cases 3, 6, 9 and 10 in W7-X keep the alpha0 = 0.7 tube and the electrons;
+   !> case 3 on alpha0 = 0 does not grow and still fails, on its dApar transient.
    !============================================================================
    subroutine interp_monotone(x, y, xi, yi)
 

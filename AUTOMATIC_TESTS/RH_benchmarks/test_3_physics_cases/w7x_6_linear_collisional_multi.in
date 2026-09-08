@@ -12,15 +12,6 @@
 ! which is what identified the momentum inertia's missing parallel-velocity
 ! normalisation.  A single-species linear case cannot see that error, because for
 ! m = T = 1 the wrong coefficient and the right one are the same number.
-! Case 2: linear, collisional.
-! W7-X, zonal mode at kx rho = 0.2.
-! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
-! collisional damping.  A single zonal mode initialised with ginit_option='rh'
-! and relaxed by Dougherty collisions.  The run is linear, so the nonlinear RH
-! fluxes vanish and the budget is driven by the collisional channel together
-! with the magnetic-drift channel, which is what distinguishes this from the
-! tokamak benchmark: in an axisymmetric field the bounce-averaged radial drift
-! vanishes and P_drift with it, while here it is the dominant source.
 &parameters_physics
   nonlinear = .false.
   vnew_ref = 0.1
