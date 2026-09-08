@@ -66,6 +66,7 @@ contains
       !> Parameters
       use parameters_physics, only: include_apar, include_bpar
       use parameters_physics, only: full_flux_surface
+      use parameters_numerical, only: enforce_periodic_fields
       !> Grids
       use zgrid, only: nzgrid
       !> Routines from other field modules
@@ -92,6 +93,11 @@ contains
          !> as well as any radial variation effects
          if (debug) write (*, *) 'fields::advance_fields_vmulo::get_fields_fluxtube'
          call advance_fields_fluxtube(g, phi, apar, bpar, dist)
+         !> The pdf of a periodic (zonal) mode is identified between the two ends of the
+         !> flux tube, but the field solve is local in z and the geometry at z = +pi need
+         !> not match that at z = -pi, so the fields it returns need not be periodic.
+         !> Optionally identify them as well, as invert_parstream_response does.
+         if (enforce_periodic_fields) call make_fields_periodic(phi, apar, bpar)
       else 
          !> This is if Full Flux Surface effects are included
          !> This routine is only needed in the 'implicit_solve' algorithm 
@@ -113,6 +119,36 @@ contains
       if (proc0) call time_message(.false., time_field_solve(:, 1), ' fields')
 
    end subroutine advance_fields
+
+   !============================================================================
+   !========================== MAKE FIELDS PERIODIC ============================
+   !============================================================================
+   !> For every periodic mode (the zonal modes, and all modes for periodic
+   !> boundary conditions), overwrite the fields at z = +pi with the phase-shifted
+   !> fields at z = -pi, so that the fields entering the parallel streaming source
+   !> are periodic in the same way as the pdf they act on.
+   !============================================================================
+   subroutine make_fields_periodic(phi, apar, bpar)
+
+      use parameters_physics, only: include_apar, include_bpar
+      use parameters_kxky_grids, only: naky
+      use zgrid, only: nzgrid
+      use extended_zgrid, only: periodic, phase_shift
+
+      implicit none
+
+      complex, dimension(:, :, -nzgrid:, :), intent(in out) :: phi, apar, bpar
+
+      integer :: iky
+
+      do iky = 1, naky
+         if (.not. periodic(iky)) cycle
+         phi(iky, :, nzgrid, :) = phi(iky, :, -nzgrid, :) / phase_shift(iky)
+         if (include_apar) apar(iky, :, nzgrid, :) = apar(iky, :, -nzgrid, :) / phase_shift(iky)
+         if (include_bpar) bpar(iky, :, nzgrid, :) = bpar(iky, :, -nzgrid, :) / phase_shift(iky)
+      end do
+
+   end subroutine make_fields_periodic
 
 
 !###############################################################################

@@ -17,6 +17,7 @@ module parameters_numerical
    public :: drifts_implicit
    public :: fully_implicit, fully_explicit
    public :: maxwellian_inside_zed_derivative, use_deltaphi_for_response_matrix
+   public :: enforce_periodic_fields
    public :: split_parallel_dynamics
    
    public :: maxwellian_normalization
@@ -64,6 +65,13 @@ module parameters_numerical
    logical :: mirror_implicit, mirror_semi_lagrange, mirror_linear_interp
    logical :: drifts_implicit, fully_implicit, fully_explicit
    logical :: maxwellian_inside_zed_derivative, use_deltaphi_for_response_matrix
+   ! if enforce_periodic_fields = .true., the fields returned by the field solve are made
+   ! periodic for the periodic (zonal) modes by copying the value at z = -pi to z = +pi,
+   ! as the field solve after the implicit streaming step already does; this removes the
+   ! spurious parallel electric field in the last cell of a flux tube whose two ends
+   ! have different geometry (kperp2, B), which drives a numerical instability of the
+   ! zonal mode with kinetic electrons
+   logical :: enforce_periodic_fields
    ! if split_parallel_dynamics = .true. (default), use operator splitting
    ! to treat parallel streaming and mirror term separately
    logical :: split_parallel_dynamics
@@ -158,6 +166,7 @@ contains
          mirror_linear_interp = .false. 
          maxwellian_inside_zed_derivative = .false. 
          use_deltaphi_for_response_matrix = .false.
+         enforce_periodic_fields = .false.
          split_parallel_dynamics = .true.
          maxwellian_normalization = .false. 
          zed_upwind = 0.02
@@ -241,6 +250,7 @@ contains
             driftkinetic_implicit, mirror_implicit, mirror_semi_lagrange, mirror_linear_interp, &
             drifts_implicit, fully_implicit, fully_explicit, & 
             maxwellian_inside_zed_derivative, use_deltaphi_for_response_matrix, &
+            enforce_periodic_fields, &
             maxwellian_normalization, zed_upwind, vpa_upwind, time_upwind, &
             fphi, nstep, delt, tend, delt_option, lu_option, avail_cpu_time, & 
             cfl_cushion_upper, cfl_cushion_middle, cfl_cushion_lower, delt_max, delt_min, &
@@ -420,7 +430,7 @@ contains
               cfl_cushion_upper, cfl_cushion_middle, cfl_cushion_lower, &
               stream_implicit, mirror_implicit, &
               drifts_implicit, use_deltaphi_for_response_matrix, &
-              maxwellian_normalization, &
+              enforce_periodic_fields, maxwellian_normalization, &
               stream_matrix_inversion, maxwellian_inside_zed_derivative, &
               mirror_semi_lagrange, mirror_linear_interp, &
               zed_upwind, vpa_upwind, time_upwind, &
@@ -497,6 +507,7 @@ contains
 
          call broadcast(maxwellian_inside_zed_derivative)
          call broadcast(use_deltaphi_for_response_matrix)
+         call broadcast(enforce_periodic_fields)
          call broadcast(split_parallel_dynamics)
          call broadcast(maxwellian_normalization)
 
