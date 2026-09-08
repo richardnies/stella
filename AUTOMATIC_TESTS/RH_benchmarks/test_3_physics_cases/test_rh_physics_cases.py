@@ -75,9 +75,9 @@ def stella_version(pytestconfig):
 #>          failure, set of configurations where the case is vacuous)
 #>
 #> A `None` momentum tolerance records a case that does NOT close and is not
-#> expected to: case 5 in Miller and case 6 in both geometries.  They are
-#> asserted to stay bad rather than silently ignored, so that a fix shows up
-#> here as a failure and gets read.
+#> expected to: cases 1 and 10.  They are asserted to stay bad rather than
+#> silently ignored, through the two-sided bounds in KNOWN_MOMENTUM_FAILURES,
+#> so that a fix shows up here as a failure and gets read.
 CASES = {
     1:  ('linear_collisionless',         0.08, None, {'miller'}),
     2:  ('linear_collisionless_kinetic', 0.08, 0.08, {'miller'}),   # w7x: see below
@@ -111,6 +111,21 @@ CASES = {
 #> beta.  Whether that is a defect of the diagnostic or of the truncation is not
 #> yet established, so it is bounded rather than tolerated.
 KNOWN_MOMENTUM_FAILURES = {
+    #> W7-X case 1's momentum budget does not close, and it is the flux tube
+    #> rather than the diagnostic.  The tube along alpha0 = 0.7 does not close
+    #> on itself -- B jumps by 1% across the periodic join and kperp2 by a
+    #> factor of four -- and the zonal mode is periodic in z regardless.  The
+    #> odd invariant is carried entirely by passing particles, which cross the
+    #> join once per transit, and E_Omega is not conserved by that dynamics: it
+    #> swings between 0.36 and 1.0 of its initial value with a period of 39,
+    #> undamped to t = 300, while the drift source integrates to a smooth
+    #> -0.29.  The swing does not move with nzed or nvgrid, and it vanishes at
+    #> alpha0 = 0, where the tube closes exactly and E_Omega is conserved to
+    #> 2%.  At nfield_periods = 8 it was hidden inside a 3% drift of E_Omega
+    #> over the run, which is what made the channel read as vacuous.  See the
+    #> deck.  Measured 2.9 at t = 100 with drive 0.31; bounded, so that a
+    #> change to the zonal boundary treatment shows up here.
+    ('w7x', 1):     (1.0, 8.0),
     #> Case 10's potential-like budget closes in both geometries -- 4.8e-02 in
     #> Miller and 6.8e-02 in W7-X, at turnovers of 17 and 6 -- so the
     #> electromagnetic nonlinear machinery works once the nonlinear term is

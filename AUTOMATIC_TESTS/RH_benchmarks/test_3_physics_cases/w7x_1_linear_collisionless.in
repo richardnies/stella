@@ -51,11 +51,27 @@
 ! 0.39 at nfp = 8, for the same discretisation reason with the smoother half
 ! of the drive removed; at alpha0 = 0.7 both populations drive.
 !
-! Omega_RH is not asserted for this case.  The secular drift is carried mostly
-! by trapped particles and the odd weight has little purchase on them, so the
-! momentum projection is weakly driven -- drive 0.31 at t = 100, turnover
-! 0.88 -- and its residual (2.9 at t = 100, 1.0 at t = 300) is a ratio of small
-! numbers rather than a measurement.
+! Omega_RH does not close here, and is bounded as a known failure rather than
+! asserted.  It is the tube, not the diagnostic: a W7-X flux tube along
+! alpha0 = 0.7 does not close on itself, and the zonal mode is periodic in z
+! regardless, so a passing particle crossing the join sees B jump by 1% and
+! the FLR strength kperp2 by a factor of four.  The odd invariant is carried
+! entirely by passing particles, every one of which crosses the join once per
+! transit, and E_Omega is simply not conserved by that dynamics: it swings
+! between 0.36 and 1.0 of its initial value with a period of 39, undamped
+! through t = 300 (the tube is 14.5 a long, so a thermal particle transits it
+! 2.7 times per period), while the integrated drift source is a smooth -0.29
+! by t = 100.  The swing is independent of resolution (nzed 512 and nvgrid 96
+! at nfield_periods = 2 reproduce it to three digits), is larger still at
+! nfield_periods = 2 (E_Omega reaches 2.6 times its initial value), and
+! vanishes where the tube closes exactly: at alpha0 = 0, the
+! stellarator-symmetric line, B and kperp2 match across the join and E_Omega
+! is conserved to 2%.  The even invariant, which the trapped particles carry
+! as well and they never cross the join, is far less exposed: phi_RH closes
+! at 2.5e-02 on the same run.  At nfield_periods = 8 the same effect is
+! present but E_Omega moves by only 3% in t = 100, which is what made the
+! channel look vacuous there.  The residual reads 2.9 at t = 100 (drive 0.31,
+! turnover 0.88) and 1.0 at t = 300.
 &parameters_physics
   adiabatic_option = 'field-line-average-term'
   nonlinear = .false.
