@@ -87,12 +87,16 @@ def _field_line_average(ncdata, name, weight):
     return array
 
 
-def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
+def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None,
+                  interior=True):
     '''Return (time, E_RH, dE_RH/dt, P_RH, P_RH_nonlinear, P_RH_collisional,
     P_RH_drift), all summed over kx.
 
     dE_RH/dt is a centred difference, so it is defined on the interior points;
-    P_RH is returned on the same points.
+    P_RH is returned on the same points.  interior=False keeps the two end
+    points as well, with a one-sided difference there: that is what a
+    conservation ratio E(T)/E(0) needs, since a run whose first step moves the
+    projection -- as the two-species decks do -- is misread from t_1 onwards.
     '''
     ncdata = Dataset(netcdf_file)
 
@@ -179,7 +183,7 @@ def get_rh_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     E_RH_total = E_RH.sum(axis=1)
     dE_RH_dt = np.gradient(E_RH_total, time)
 
-    interior = slice(1, -1)
+    interior = slice(1, -1) if interior else slice(None)
     time, E_RH_total, dE_RH_dt = time[interior], E_RH_total[interior], dE_RH_dt[interior]
     P_nonlinear = P_RH_nonlinear[interior].sum(axis=1)
     P_collisional = P_RH_collisional[interior].sum(axis=1)
@@ -306,10 +310,12 @@ def _field_line_average_per_species(ncdata, name, weight):
     return array
 
 
-def get_rh_omega_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
+def get_rh_omega_budget(netcdf_file, time_min=None, time_max=None, kx_max=None,
+                        interior=True):
     '''The toroidal-momentum RH budget.
 
     Returns (time, E_uRH, dE_uRH_dt, P_total, P_nonlinear, P_collisional, P_drift).
+    interior=False keeps the end points, as for get_rh_budget.
     '''
     ncdata = Dataset(netcdf_file)
 
@@ -358,7 +364,7 @@ def get_rh_omega_budget(netcdf_file, time_min=None, time_max=None, kx_max=None):
     E_total = E.sum(axis=(1, 2))
     dE_dt = np.gradient(E_total, time)
 
-    interior = slice(1, -1)
+    interior = slice(1, -1) if interior else slice(None)
     time, E_total, dE_dt = time[interior], E_total[interior], dE_dt[interior]
     P_nl, P_coll, P_dr = (P[interior].sum(axis=(1, 2)) for P in (P_nl, P_coll, P_dr))
 

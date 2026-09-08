@@ -1,4 +1,4 @@
-! Case 5: nonlinear, kinetic ions and electrons.
+! Case 9: nonlinear, kinetic ions and electrons.
 ! W7-X, zonal mode at kx rho = 0.2, turbulence at ky rho = 0.2.
 ! Rosenbluth-Hinton energy budget in W7X geometry: minimal nonlinear
 ! electrostatic run.  CBC-like gradients drive an ITG mode whose saturation

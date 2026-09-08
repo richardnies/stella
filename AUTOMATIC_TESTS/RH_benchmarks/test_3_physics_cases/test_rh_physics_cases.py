@@ -41,7 +41,7 @@
 # last 40% of the run, restricted to where |sum P| is within two decades of its
 # peak.  A relative L2 norm is unusable on these runs: the electromagnetic cases
 # grow through six decades before the CFL condition stops them, so an L2 norm is
-# set by a handful of points.  On Miller case 7 it reads 0.99, of which a single
+# set by a handful of points.  On Miller case 11 it reads 0.99, of which a single
 # time step contributes 86%, while the budget closes to 1.3e-02 at the median.
 #
 # TURNOVER.  A residual means nothing if the flow did not move.  Cases whose
@@ -96,11 +96,18 @@ CASES = {
     #> tolerance is never actually asserted; it is the W7-X member that tests
     #> anything here.  Left as is rather than lengthened, because what this pair
     #> exists to isolate is visible in W7-X, and a longer Miller run costs more
-    #> than it proves.
-    5:  ('linear_collisional_kinetic',   0.08, 0.08, set()),
-    6:  ('linear_collisional_multi',     0.30, 0.30, set()),
-    7:  ('nl_modified_adiabatic',        0.08, 0.20, {'w7x'}),
-    8:  ('nl_adiabatic',                 0.08, 0.08, {'w7x'}),
+    #> than it proves.  Recorded as vacuous so that it cannot pass by default.
+    5:  ('linear_collisional_kinetic',   0.08, 0.08, {'miller'}),
+    #> Case 6 in Miller is the same: turnovers of 0.39 and 0.22, so neither
+    #> channel is asserted there and it is the W7-X potential bound that holds
+    #> the electromagnetic member.  Recorded as vacuous for the same reason.
+    6:  ('linear_collisional_multi',     0.30, 0.30, {'miller'}),
+    #> Cases 7 and 8 in W7-X start their noise at phiinit = 1.0 and run to
+    #> t = 100, because from 0.01 the ITG mode on that tube has not saturated by
+    #> the Miller decks' t = 50 and the window measured only the collisional
+    #> decay of the noise (turnovers 0.05 to 0.47).  See the two decks.
+    7:  ('nl_modified_adiabatic',        0.08, 0.20, set()),
+    8:  ('nl_adiabatic',                 0.08, 0.08, set()),
     9:  ('nl_kinetic',                   0.08, 0.05, set()),
     10: ('nl_em_apar',                   0.12, None, set()),
     11: ('nl_em_apar_bpar',              0.08, 0.20, set()),
@@ -108,16 +115,16 @@ CASES = {
 
 #> The momentum budget does not close in these, and the bound is two-sided so
 #> that neither a regression nor a fix passes unnoticed.
-#> Case 7 in Miller used to be here at (0.10, 0.80).  It was the momentum
+#> Case 9 in Miller used to be here at (0.10, 0.80).  It was the momentum
 #> inertia missing its parallel-velocity normalisation, which made the electron
 #> inertia 61 times too small and let the electrons carry the whole of
 #> E_Omega_RH; it now closes at 1.4e-02 and is asserted normally.
 #>
-#> Case 8 remains, and only at beta = 1e-2.  At beta = 1e-3 and 3e-3 cases 8 and
-#> 9 give comparable residuals, 6e-02 to 1e-01; it is at 1e-2 that case 6 alone
-#> diverges, and there its energy turnover is 131 against case 7's 13 -- the run
-#> is doing something qualitatively different when dBpar is dropped at that
-#> beta.  Whether that is a defect of the diagnostic or of the truncation is not
+#> Case 10 remains, and only at beta = 1e-2.  At beta = 1e-3 and 3e-3 cases 10
+#> and 11 give comparable residuals, 6e-02 to 1e-01; it is at 1e-2 that case 10
+#> alone diverges, and there its energy turnover is 131 against case 11's 13 --
+#> the run is doing something qualitatively different when dBpar is dropped at
+#> that beta.  Whether that is a defect of the diagnostic or of the truncation is not
 #> yet established, so it is bounded rather than tolerated.
 KNOWN_MOMENTUM_FAILURES = {
     #> W7-X case 1's momentum budget does not close, and it is the flux tube
@@ -239,9 +246,11 @@ KNOWN_PHI_FAILURES = {
 #>     3.2.  That is not a stellarator effect and not a W7-X peculiarity; it is
 #>     the electromagnetic multi-species physics itself, which supports treating
 #>     cases 3, 6 and the momentum channel of case 10 as one defect.
-#>   - the multi-species electrostatic case (2) also fails in every geometry
-#>     except QH.  So the electron-channel defect first seen in W7-X is general,
-#>     not specific to that equilibrium.
+#>   - the multi-species electrostatic case (2) also failed in every geometry
+#>     except QH, on the decks of the time (alpha0 = 0.7-style tubes, ginit
+#>     'default').  What that was measuring turned out not to be the diagnostic
+#>     -- see the case-2 deck -- and the four unasserted decks have not been
+#>     revisited since.
 CONFIGURATIONS = ('miller', 'w7x')
 
 #> Below this, |P| is too small a rate of change of E_RH for a residual divided

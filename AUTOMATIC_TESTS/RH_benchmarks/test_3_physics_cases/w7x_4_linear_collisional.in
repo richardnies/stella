@@ -1,4 +1,4 @@
-! Case 2: linear, collisional.
+! Case 4: linear, collisional.
 ! W7-X, zonal mode at kx rho = 0.2.
 ! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
 ! collisional damping.  A single zonal mode initialised with ginit_option='rh'

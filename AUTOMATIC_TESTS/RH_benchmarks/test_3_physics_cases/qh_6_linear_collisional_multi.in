@@ -12,7 +12,7 @@
 ! which is what identified the momentum inertia's missing parallel-velocity
 ! normalisation.  A single-species linear case cannot see that error, because for
 ! m = T = 1 the wrong coefficient and the right one are the same number.
-! Case 2: linear, collisional.
+! Case 4: linear, collisional.
 ! W7-X, zonal mode at kx rho = 0.2.
 ! Rosenbluth-Hinton energy budget in W7X geometry: linear zonal flow with
 ! collisional damping.  A single zonal mode initialised with ginit_option='rh'

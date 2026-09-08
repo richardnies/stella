@@ -1,4 +1,4 @@
-! Case 4: nonlinear, adiabatic electrons.
+! Case 8: nonlinear, adiabatic electrons.
 ! Miller tokamak, zonal mode at kx rho = 0.2, turbulence at ky rho = 0.2.
 ! Rosenbluth-Hinton energy budget: minimal nonlinear electrostatic run with
 ! MODIFIED adiabatic electrons (the flux-surface-average term is retained).

@@ -1,4 +1,4 @@
-! Case 7: nonlinear electromagnetic, dApar and dBpar.
+! Case 11: nonlinear electromagnetic, dApar and dBpar.
 ! W7-X, zonal mode at kx rho = 0.2, turbulence at ky rho = 0.2.
 ! Rosenbluth-Hinton energy budget in W7X geometry: minimal nonlinear
 ! electrostatic run.  CBC-like gradients drive an ITG mode whose saturation

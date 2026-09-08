@@ -721,30 +721,42 @@ def figure_stress_channels(netcdf_file, outfile, time_min, time_max, title=''):
     return outfile
 
 
-#> Convergence data measured in the runs recorded in the write-up.  Kept here so
-#> the figure and the text cannot drift apart, and so the point is made by a
-#> picture rather than by two eight-column tables.
-ONE_GRID_AT_A_TIME = {          # nzed only, others held fixed
+#> Convergence data, remeasured on 2026-09-08 with the current binary.  The
+#> deck is Miller (rhoc 0.5, shat 0.796, q 1.4, circular), a single zonal mode
+#> on the range grid, ginit 'default' with den0 = upar0 = 1 and phiinit 15,
+#> unconnected boundary, no collisions, drifts implicit, run to t = 20 with
+#> nwrite 1.  The ladder is nzed 48 / nmu 6 / nvgrid 24 / dt 0.05 at level 1,
+#> every one of them doubled (dt halved) per level; the one-grid scan holds
+#> nmu 12, nvgrid 48, dt 0.05 and varies nzed; the pure-flow scan is the level
+#> 2 deck with den0 = 0 and the nzed / dt shown.  "Conservation error" is the
+#> largest departure of the invariant from its initial value over the run,
+#> max_t |E(t)/E(0) - 1|.
+#> The final value was used before and is fooled by an invariant that swings
+#> and comes back: at nzed = 48, k_x rho = 0.5, phi_RH departs by 0.38 and ends
+#> within 1e-2 of where it started.  Kept here so the figure and the text
+#> cannot drift apart, and so the point is made by a picture rather than by
+#> two eight-column tables.
+ONE_GRID_AT_A_TIME = {          # nzed only; nmu 12, nvgrid 48, dt 0.05 fixed
     'nzed': [48, 96, 192, 384],
-    'phi': {0.05: [8.3e-3, 5.6e-3, 4.7e-3, 4.0e-3],
-            0.5:  [1.0e-2, 1.5e-1, 2.4e-1, 2.6e-1],
-            2.0:  [1.1e-1, 5.4e-2, 4.7e-2, 4.7e-2]},
-    'U':   {0.05: [7.0e-3, 3.9e-3, 2.8e-3, 1.4e-3],
-            0.5:  [1.3e-3, 1.4e-3, 9.5e-4, 4.7e-4],
-            2.0:  [1.4e-2, 1.6e-2, 9.8e-3, 5.4e-3]},
+    'phi': {0.05: [8.33e-3, 5.64e-3, 4.73e-3, 4.01e-3],
+            0.5:  [3.83e-1, 1.55e-1, 2.41e-1, 2.65e-1],
+            2.0:  [1.40e-1, 5.45e-2, 4.72e-2, 4.68e-2]},
+    'U':   {0.05: [1.62e-2, 1.45e-2, 1.42e-2, 1.31e-2],
+            0.5:  [2.62e-3, 2.27e-3, 1.67e-3, 1.20e-3],
+            2.0:  [2.60e-2, 1.25e-2, 6.12e-3, 7.94e-3]},
 }
-ALL_GRIDS = {                   # nzed / nvpa / nmu / dt refined together
+ALL_GRIDS = {                   # nzed 48 / nmu 6 / nvgrid 24 / dt 0.05, refined together
     'level': [1, 2, 4, 8],
-    'phi': {0.05: [2.3e-2, 5.5e-3, 1.5e-3, 4.5e-4],
-            2.0:  [5.6e-1, 5.5e-2, 2.2e-2, 6.0e-3]},
-    'U':   {0.05: [4.4e-2, 6.3e-3, 1.1e-4, 1.8e-3],
-            2.0:  [2.6e-2, 1.6e-2, 9.4e-3, 5.0e-3]},
+    'phi': {0.05: [2.27e-2, 5.50e-3, 1.53e-3, 4.60e-4],
+            2.0:  [7.95e-1, 5.49e-2, 2.20e-2, 6.03e-3]},
+    'U':   {0.05: [4.48e-2, 1.07e-2, 5.48e-3, 3.32e-3],
+            2.0:  [3.64e-2, 1.24e-2, 7.45e-3, 4.13e-3]},
 }
 
 
 CONSERVATION_REFINE = {         # linear collisionless, pure upar init, kx rho = 0.05
     'label': ['96\n0.05', '192\n0.05', '192\n0.025', '384\n0.0125'],
-    'U':   [1.44e-3, 1.29e-3, 1.14e-3, 9.69e-4],
+    'U':   [1.44e-3, 1.29e-3, 1.14e-3, 9.68e-4],
     'phi': [3.46e-3, 2.57e-3, 2.51e-3, 2.02e-3],
 }
 
@@ -752,11 +764,13 @@ CONSERVATION_REFINE = {         # linear collisionless, pure upar init, kx rho =
 def figure_convergence(outfile):
     """Does the construction converge?  Yes, if every grid is refined together.
 
-    Left: refining the parallel grid alone.  The flow invariant falls, the
-    potential-like one flattens and at k_x rho = 0.5 climbs -- which looks like a
-    defect and is not one.  Right: refining nzed, nvpa, nmu and dt together, the
-    same quantity falls by nearly two orders.  The weight depends on all four
-    grids, so refining one leaves the error floored by the other three.
+    Left: refining the parallel grid alone.  The errors flatten, and two of
+    them turn back up at the finest grid -- which looks like a defect and is
+    not one.  Centre: refining nzed, nvpa, nmu and dt together, the
+    potential-like invariant falls by two orders and the flow invariant by one.
+    The weight depends on all four grids, so refining one leaves the error
+    floored by the other three.  Right: both invariants under refinement of
+    nzed and dt in a run started with a pure parallel flow.
     """
     fig, (ax, ax2, ax3) = plt.subplots(1, 3, figsize=(13.4, 3.6))
     colours = {0.05: PHI, 0.5: '#7d3c6b', 2.0: UPA}
@@ -768,6 +782,8 @@ def figure_convergence(outfile):
         ax.loglog(n, ONE_GRID_AT_A_TIME['U'][kx], 's--', color=c, lw=1.2, ms=4, alpha=0.75)
     ax.set_xlabel(r'$n_{\rm zed}$  (other grids fixed)')
     ax.set_ylabel('conservation error')
+    ax.set_xticks(n); ax.set_xticklabels([str(v) for v in n]); ax.minorticks_off()
+    ax.set_ylim(2.5e-4, 8e-1)
     ax.set_title('Refining one grid: misleading', fontsize=10.5, loc='left')
     ax.legend(frameon=True, framealpha=0.92, edgecolor='none',
               fontsize=9, ncol=1, loc='lower left')
@@ -778,8 +794,10 @@ def figure_convergence(outfile):
                    label=rf'$\varphi_{{\rm RH}}$, $k_x\rho={kx}$')
         ax2.loglog(lv, ALL_GRIDS['U'][kx], 's--', color=c, lw=1.2, ms=4, alpha=0.75)
     ref = np.array(lv, dtype=float)
-    ax2.loglog(ref, 5.6e-1 * (ref / ref[0])**-2, ':', color=GREY, lw=1.3, label=r'$\propto h^{2}$')
+    ax2.loglog(ref, 7.95e-1 * (ref / ref[0])**-2, ':', color=GREY, lw=1.3, label=r'$\propto h^{2}$')
+    ax2.loglog(ref, 4.48e-2 * (ref / ref[0])**-1, ':', color=GREY, lw=1.0, alpha=0.7, label=r'$\propto h$')
     ax2.set_xlabel(r'refinement of $n_{\rm zed}$, $n_{v_\parallel}$, $n_\mu$, $\Delta t$ together')
+    ax2.set_xticks(lv); ax2.set_xticklabels([str(v) for v in lv]); ax2.minorticks_off()
     ax2.set_title('Refining all four: it converges', fontsize=10.5, loc='left')
     ax2.legend(frameon=False, fontsize=9.5)
 
@@ -1295,7 +1313,13 @@ def _budget_series(netcdf_file, which, window=None, **kw):
     scale = E.mean() / max(t[-1] - t[0], 1e-30)
     conserved = np.linalg.norm(P) < 1e-6 * np.sqrt(len(P)) * abs(scale)
     if conserved:
-        resid = (E.max() - E.min()) / max(abs(E.mean()), 1e-300)
+        #> End points included: the two-species decks move the projection on
+        #> the first step, and the flatness figure should see that.
+        t_all, E_all = fn(netcdf_file, kw.get('time_min'), kw.get('time_max'),
+                          kw.get('kx_max'), interior=False)[:2]
+        if window is not None and len(t_all) > 4:
+            E_all = E_all[t_all >= t_all[0] + (1.0 - window) * (t_all[-1] - t_all[0])]
+        resid = (E_all.max() - E_all.min()) / max(abs(E_all.mean()), 1e-300)
     else:
         #> The median pointwise relative error, over the points where the signal
         #> is within two decades of its peak.
@@ -1425,56 +1449,56 @@ def figure_case_budget(runs, outfile, case_title=''):
 
 
 
-#> The seven cases, both configurations, as reported by the run of
-#> test_rh_physics_cases.py that asserts them (14 passed, 35 min).  A `False` in the
-#> last two slots marks a panel whose energy turnover is below 0.5: the budget is
-#> then satisfied by a correct diagnostic and a broken one alike, so the number
-#> is drawn hollow and is not a result.
-CASE_SUMMARY = [
-    #  label                                          phi      Om     phi ok  Om ok
-    ('1  linear collisionless / Miller',            9.20e-3, 9.12e-3, False, False),
-    ('1  linear collisionless / W7-X',              1.47e-1, 1.01e+1, True,  False),
-    ('2  linear collisionless, 2sp, EM / Miller',   6.54e+0, 1.40e-3, True,  False),
-    ('2  linear collisionless, 2sp, EM / W7-X',     5.72e+0, 2.90e+3, True,  True),
-    ('3  linear collisional / Miller',              9.16e-3, 3.48e-2, True,  False),
-    ('3  linear collisional / W7-X',                2.23e-3, 2.35e-2, True,  False),
-    ('4  linear collisional, 2sp, EM / Miller',     2.83e+1, 7.07e+1, True,  True),
-    ('4  linear collisional, 2sp, EM / W7-X',       1.05e+0, 3.69e+2, True,  True),
-    ('5  NL modified-adiabatic / Miller',           2.27e-2, 4.62e-2, True,  True),
-    ('5  NL modified-adiabatic / W7-X',             1.35e-2, 1.12e-1, False, False),
-    ('6  NL adiabatic / Miller',                    1.10e-2, 3.10e-2, True,  True),
-    ('6  NL adiabatic / W7-X',                      7.25e-3, 1.56e-1, False, False),
-    ('7  NL kinetic / Miller',                      1.28e-2, 1.38e-2, True,  True),
-    ('7  NL kinetic / W7-X',                        8.47e-4, 1.62e-2, True,  True),
-    ('8  NL EM, dApar / Miller',                    4.77e-2, 1.16e+0, True,  True),
-    ('8  NL EM, dApar / W7-X',                      6.78e-2, 5.07e+0, True,  True),
-    ('9  NL EM, both / Miller',                     4.05e-2, 1.32e-2, True,  True),
-    ('9  NL EM, both / W7-X',                       2.86e-2, 1.03e-1, True,  True),
-]
-
-
-def figure_case_summary(cases, outfile):
+def figure_case_summary(rows, outfile):
     """Every case and configuration on one axis, with the vacuous ones marked.
 
-    Hollow bars are panels whose energy turnover is below 0.5.  They are shown
-    rather than dropped, because which cases fail to drive the flow is itself
-    information -- W7-X without the flux-surface-average term, and a
-    momentum-conserving collision operator acting on a momentum invariant.
+    `rows` come from make_case_figures.summary_rows: for each (case,
+    configuration) the two residuals, whether each was tested (energy turnover
+    at or above the floor), and what the suite asserts on each -- a tolerance,
+    a (low, high) bound for a known failure, or None.
+
+    Hollow bars are panels whose energy turnover is below the floor.  They are
+    shown rather than dropped, because which cases fail to drive the flow is
+    itself information.  The tick against each solid bar is the tolerance the
+    suite asserts on it; a bracket is a two-sided bound on a known failure.
+    A run with no source has no residual; its row carries E(T)/E(0) as text,
+    end points included, in bold where it is more than 5% from unity -- which
+    for Miller case 3 is the conservation failure the residual cannot show.
     """
-    labels = [c[0] for c in cases]
-    y = np.arange(len(cases))
-    fig, ax = plt.subplots(figsize=(8.2, 0.34 * len(cases) + 1.5))
+    labels = [r[0] for r in rows]
+    y = np.arange(len(rows))
+    fig, ax = plt.subplots(figsize=(8.2, 0.34 * len(rows) + 1.5))
     h = 0.38
-    for off, idx, ok_idx, colour, name in ((+h/2, 1, 3, PHI, r'$\varphi_{\rm RH}$'),
-                                           (-h/2, 2, 4, UPA, r'$\Omega_{\rm RH}$')):
-        vals = [c[idx] for c in cases]
-        oks = [c[ok_idx] for c in cases]
+    for off, idx, ok_idx, b_idx, c_idx, colour, name in (
+            (-h/2, 1, 3, 5, 11, PHI, r'$\varphi_{\rm RH}$'),
+            (+h/2, 2, 4, 6, 12, UPA, r'$\Omega_{\rm RH}$')):
+        vals = [r[idx] for r in rows]
+        oks = [r[ok_idx] for r in rows]
         ax.barh(y + off, vals, height=h, label=name,
                 color=[colour if o else 'none' for o in oks],
                 edgecolor=colour, linewidth=1.1,
                 hatch=[None if o else '///' for o in oks])
-    ax.axvline(0.08, color=GREY, ls='--', lw=1.1)
-    ax.text(0.088, -0.72, 'benchmark tolerance', fontsize=9, color=GREY, va='top')
+        for yi, r in zip(y + off, rows):
+            if r[c_idx] is not None:
+                ratio = r[c_idx]
+                #> usetex ignores fontweight; bold has to be written in.
+                if abs(ratio - 1.0) > 0.05:
+                    text = r'\textbf{no source: $\mathbf{E(T)/E(0) = ' + f'{ratio:.3f}' + '}$}'
+                else:
+                    text = f'no source: $E(T)/E(0) = {ratio:.3f}$'
+                ax.text(1.0, yi, text,
+                        transform=ax.get_yaxis_transform(), fontsize=7.5,
+                        va='center', ha='right', color=colour)
+                continue
+            bound = r[b_idx]
+            if bound is None or not r[ok_idx]:
+                continue
+            if isinstance(bound, tuple):
+                ax.plot(bound, [yi, yi], color='k', lw=1.0, solid_capstyle='butt')
+                ax.plot([bound[0]] * 2, [yi - h/2, yi + h/2], color='k', lw=1.0)
+                ax.plot([bound[1]] * 2, [yi - h/2, yi + h/2], color='k', lw=1.0)
+            else:
+                ax.plot([bound] * 2, [yi - h/2, yi + h/2], color='k', lw=1.4)
     ax.set_xscale('log')
     ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=9.5)
     ax.invert_yaxis()
@@ -1483,8 +1507,10 @@ def figure_case_summary(cases, outfile):
               bbox_to_anchor=(0.5, 1.01))
     ax.grid(axis='y', alpha=0)
     ax.text(0.5, -0.135, 'hollow: energy turnover below 0.5, so the budget is satisfied '
-                         'whether the diagnostic is right or not',
-            transform=ax.transAxes, fontsize=9.5, color='#444', ha='center')
+                         'whether the diagnostic is right or not;  '
+                         'tick: asserted tolerance;  bracket: two-sided bound;  '
+                         'no bar: no source, only conservation',
+            transform=ax.transAxes, fontsize=9, color='#444', ha='center')
     fig.tight_layout()
     fig.savefig(outfile)
     plt.close(fig)
@@ -1505,7 +1531,6 @@ STANDALONE_FIGURES = {
     'fig_projection_lock.pdf': 'figure_projection_lock',
     'fig_geometry_factors.pdf': 'figure_geometry_factors',
     'fig_stress_and_species.pdf': 'figure_stress_and_species',
-    'fig_case_summary.pdf': lambda out: figure_case_summary(CASE_SUMMARY, out),
 }
 
 if __name__ == '__main__':

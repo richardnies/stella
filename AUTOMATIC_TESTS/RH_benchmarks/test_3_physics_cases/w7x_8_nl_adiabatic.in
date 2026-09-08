@@ -1,9 +1,24 @@
-! Case 4: nonlinear, adiabatic electrons.
+! Case 8: nonlinear, adiabatic electrons.
 ! W7-X, zonal mode at kx rho = 0.2, turbulence at ky rho = 0.2.
 ! Rosenbluth-Hinton energy budget in W7X geometry: minimal nonlinear
 ! electrostatic run.  CBC-like gradients drive an ITG mode whose saturation
 ! feeds a genuine nonlinearly driven zonal flow, so the nonlinear RH flux
 ! channel is exercised in a field where the drift channel is also active.
+! Case 7 with the flux-surface-average term dropped from the electron
+! response.
+!
+! Amplitude and run length, as for case 7.  From phiinit = 0.01 the ITG mode
+! on this tube does not saturate before t = 100, so at nstep = 2500 (t = 50)
+! the measured window is the collisional decay of the initial noise:
+! turnovers 0.05 and 0.29, below the floor of 0.5.  That used to be read as
+! the physics of this closure -- "the zonal flow is barely driven without the
+! flux-surface-average term" -- and it was the run length: once the
+! turbulence saturates the flow here is driven harder than in case 7, with
+! E_RH thirty times larger.  With phiinit = 1.0 and nstep = 5000 (t = 100)
+! saturation arrives by t = 80 and the window t = 60-100 reads turnovers 15
+! and 14, drives 3.7 and 4.5, residuals 2.1e-02 and 2.5e-02.  The original
+! deck run to t = 150 reads 3.5e-02 and 2.7e-02 for twice the time; tprim = 12
+! at t = 100 reads 1.0e-01 and 7.0e-02.  Six minutes on 16 processes.
 &parameters_physics
   adiabatic_option = 'no-field-line-average-term'
   nonlinear = .true.
@@ -19,7 +34,7 @@
 /
 &init_g_knobs
   ginit_option = 'noise'
-  phiinit = 0.01
+  phiinit = 1.0
   width0 = 1.0
 /
 &species_knobs
@@ -49,7 +64,7 @@
   ! would not be reproducible between invocations of the same deck.
   rng_seed = 1
   delt = 0.02
-  nstep = 2500
+  nstep = 5000
   print_extra_info_to_terminal = .false.
   drifts_implicit = .true.
 /

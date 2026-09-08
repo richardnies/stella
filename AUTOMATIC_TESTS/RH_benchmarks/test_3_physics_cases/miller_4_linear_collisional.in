@@ -1,4 +1,4 @@
-! Case 2: linear, collisional.
+! Case 4: linear, collisional.
 ! Miller tokamak, zonal mode at kx rho = 0.2.
 ! Rosenbluth-Hinton energy budget: linear zonal flow with collisional damping.
 !

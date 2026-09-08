@@ -1,9 +1,26 @@
-! Case 3: nonlinear, modified-adiabatic electrons.
+! Case 7: nonlinear, modified-adiabatic electrons.
 ! W7-X, zonal mode at kx rho = 0.2, turbulence at ky rho = 0.2.
 ! Rosenbluth-Hinton energy budget in W7X geometry: minimal nonlinear
 ! electrostatic run.  CBC-like gradients drive an ITG mode whose saturation
 ! feeds a genuine nonlinearly driven zonal flow, so the nonlinear RH flux
 ! channel is exercised in a field where the drift channel is also active.
+!
+! Amplitude and run length.  On this tube the ITG mode gains a decade in
+! |phi|^2 every seven time units, so from phiinit = 0.01 (|phi|^2 = 5e-09) it
+! does not saturate before t = 100.  At the Miller deck's nstep = 2500
+! (t = 50) the run is still linear, |phi|^2 = 7e-07, and the last 40% that the
+! suite measures sees nothing but the collisional decay of the initial noise:
+! turnovers 0.47 and 0.37, below the floor of 0.5, so for some time this deck
+! asserted nothing and its W7-X row was misread as the physics of the closure.
+! Starting the noise at phiinit = 1.0 skips four decades of that growth;
+! saturation (|phi|^2 ~ 100) arrives by t = 80, and nstep = 5000 (t = 100)
+! leaves the measured window t = 60-100 half in the end of the growth and
+! half in saturated turbulence, with the nonlinear channel carrying the
+! budget: turnovers 25 and 17, drives 10 and 4, residuals 2.8e-02 and
+! 3.1e-02.  The alternatives cost more or close worse: the original deck run
+! to t = 150 reads 6.2e-02 and 5.2e-02 for twice the time, and a steeper
+! gradient (tprim = 12, t = 100) saturates earlier but at this resolution
+! reads 1.0e-01 and 9.5e-02.  Six minutes on 16 processes.
 &parameters_physics
   adiabatic_option = 'field-line-average-term'
   nonlinear = .true.
@@ -19,7 +36,7 @@
 /
 &init_g_knobs
   ginit_option = 'noise'
-  phiinit = 0.01
+  phiinit = 1.0
   width0 = 1.0
 /
 &species_knobs
@@ -49,7 +66,7 @@
   ! would not be reproducible between invocations of the same deck.
   rng_seed = 1
   delt = 0.02
-  nstep = 2500
+  nstep = 5000
   print_extra_info_to_terminal = .false.
   drifts_implicit = .true.
 /
