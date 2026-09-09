@@ -81,17 +81,22 @@ module geometry
    !> Geometry factor in the Rosenbluth-Hinton drift-orbit phase
    !>     Q_s = i kx (v_par / Omega_s) * RH_drift_phase_fac
    !> which is the quantity that makes the transit average annihilate the
-   !> radial magnetic drift.  In a quasisymmetric field it is (MG+NI)/(N-iota*M)
-   !> with M, N the helicities and G, I the enclosed currents; in a tokamak that
-   !> reduces to -q R Btor.  Only the geometry module knows how to build it, so
-   !> it is filled here rather than in the diagnostics, exactly as
-   !> b_dot_grad_zeta_RR is for the momentum flux.
+   !> radial magnetic drift.  Only the geometry module can build it, so it is
+   !> filled here rather than in the diagnostics, exactly as b_dot_grad_zeta_RR
+   !> is for the momentum flux.
    !>
-   !> <RH_drift_phase_defined> says whether the active geometry knows how: it is
-   !> false until some path fills the array, and the Rosenbluth-Hinton
-   !> initialisation refuses to run without it.  That way the guard lifts by
-   !> itself when a geometry learns to provide it, rather than by editing a list
-   !> of geometry options somewhere else.
+   !> Only the axisymmetric case is implemented: there the factor is I = R Btor,
+   !> and Miller fills it.  The general quasisymmetric form, (MG+NI)/(N-iota*M)
+   !> with M, N the helicities and G, I the enclosed currents, is not built by
+   !> any geometry here -- a stellarator integrates Q along the field line
+   !> instead, which needs no such constant.
+   !>
+   !> <RH_drift_phase_defined> says whether the active geometry filled it.  It
+   !> is false until some path does, and the Rosenbluth-Hinton initialisation
+   !> then takes the numerical phase; only an explicit request for the closed
+   !> form aborts.  That way the analytic path becomes available by itself when
+   !> a geometry learns to provide the factor, rather than by editing a list of
+   !> geometry options somewhere else.
    real, dimension(:), allocatable :: RH_drift_phase_fac
    logical :: RH_drift_phase_defined = .false.
 
@@ -139,11 +144,10 @@ module geometry
    !>
    !> A flow purely along the symmetry direction is V = omega R^2 grad zeta in a
    !> tokamak, and its parallel projection is omega I / B.  So the profile is
-   !> I/B, with I the current combination that the symmetry picks out: for a
-   !> quasisymmetric field (MG+NI)/(N-iota*M), which reduces to R Btor in a
-   !> tokamak.  That is exactly the quantity RH_drift_phase_fac already holds,
-   !> up to constant factors that cancel in the normalisation below, so this
-   !> costs no new geometry.
+   !> I/B, with I the current combination the symmetry picks out.  That
+   !> combination is a flux function, so it is constant along the field line and
+   !> cancels against the flux-surface average below: only 1/B is ever
+   !> evaluated, and no geometry has to supply the currents.
    !>
    !> Normalised to 2q in the flux-surface average, which makes it identically
    !> 2q at large aspect ratio: there I/B -> R0, a constant, and the profile

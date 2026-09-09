@@ -328,8 +328,9 @@ contains
                   ! Split into contributions that are even and odd in vpa
                   RH_integrand_even(ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls+integrand_tmp_min)
                   RH_integrand_odd( ikx,iz,it,ivmu) = 0.5*(integrand_tmp_pls-integrand_tmp_min)
-                  !> Apply the geometric factor I; only the geometry knows it, and
-                  !> for a quasisymmetric field it is (MG+NI)/(N-iota M).
+                  !> Apply the geometric factor I, which only the geometry can
+                  !> supply: the axisymmetric R Btor under Miller, and 1
+                  !> elsewhere, where the budget is invariant under rescaling it.
                   RH_omega_weight(   ikx,iz,it,ivmu) = integrand_tmp_v * RH_omega_geo_fac(iz)
 
                   if (write_RH_asymptotics) then
@@ -3158,9 +3159,12 @@ contains
    !>     Q_s = i kx (v_par / Omega_s) * RH_drift_phase_fac
    !>
    !> The geometry-dependent half is <RH_drift_phase_fac>, which the geometry
-   !> module builds -- in a quasisymmetric field it is (MG+NI)/(N-iota*M), and in
-   !> a tokamak that reduces to the q R Btor form.  Keeping it there rather than
-   !> here means this routine does not care which equilibrium it is looking at,
+   !> module builds.  Only the axisymmetric case is implemented: Miller fills it
+   !> with the q R Btor form, and the general quasisymmetric (MG+NI)/(N-iota*M)
+   !> is built by no geometry here, so a stellarator reaches this routine only
+   !> if the closed form was asked for explicitly.  Keeping the factor there
+   !> rather than here means this routine does not care which equilibrium it is
+   !> looking at,
    !> and a geometry that learns to provide the factor needs no change to the
    !> Rosenbluth-Hinton code.  Compare diagnostics_fluxes_fluxtube, which consumes
    !> b_dot_grad_zeta_RR the same way.
