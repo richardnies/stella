@@ -197,6 +197,10 @@ module geometry
   
    logical :: geoinit = .false.
    logical :: set_bmag_const
+   !> If .true., dB/dz at the two ends of the flux tube is a one-sided
+   !> difference rather than a centred difference that reaches across the
+   !> join, on a tube whose two ends do not carry the same B.  See get_dzed.
+   logical :: one_sided_dbdz_at_ends
    
 
 contains
@@ -225,7 +229,13 @@ contains
 
       integer, intent(in) :: nalpha, naky
       real :: bmag_z0
+      real :: bmag_jump
       integer :: iy, ia, iz 
+
+      !> Relative mismatch of B between the two ends of the tube above which
+      !> the tube is reported as not closing on itself.  Loose enough not to
+      !> fire on round-off in a tube that does close.
+      real, parameter :: bmag_jump_warning = 1.0e-6
 
       !---------------------------------------------------------------------- 
 
@@ -340,6 +350,20 @@ contains
       do iy = 1, nalpha
          call get_dzed(nzgrid, delzed, bmag(iy, :), dbdzed(iy, :))
       end do
+
+      !> Say so when the tube does not close on itself.  Every quantity that
+      !> identifies the two ends -- the pdf of a zonal mode, the field solve,
+      !> the mirror coefficients -- is then making a modelling choice rather
+      !> than stating a fact, and it is worth knowing before reading a result.
+      bmag_jump = maxval(abs(bmag(:, nzgrid) - bmag(:, -nzgrid))) / maxval(abs(bmag))
+      if (bmag_jump > bmag_jump_warning) then
+         write (*, '(a,f7.3,a)') &
+            'WARNING: B differs by ', 100.0 * bmag_jump, &
+            ' per cent between the two ends of the flux tube, so it does not close on itself.'
+         if (.not. one_sided_dbdz_at_ends) write (*, '(a)') &
+            '         dB/dz at the end nodes is a centred difference across the join, which assumes it does;' // &
+            ' set one_sided_dbdz_at_ends = .true. in geo_knobs for a one-sided difference there instead.'
+      end if
 
       ! Change the boundary conditions if the shear is too low or if |∇x . ∇y| is too low at the ends of the field line 
       select case (boundary_option_switch)
@@ -1122,7 +1146,8 @@ contains
       ! Define the variables in the namelist
       namelist /geo_knobs/ geo_option, geo_file, overwrite_bmag, overwrite_b_dot_grad_zeta, &
          overwrite_gds2, overwrite_gds21, overwrite_gds22, overwrite_gds23, overwrite_gds24, &
-         overwrite_gbdrift, overwrite_cvdrift, overwrite_gbdrift0, q_as_x, set_bmag_const
+         overwrite_gbdrift, overwrite_cvdrift, overwrite_gbdrift0, q_as_x, set_bmag_const, &
+         one_sided_dbdz_at_ends
 
       ! Assign default variables
       geo_option = 'local'
@@ -1137,6 +1162,7 @@ contains
       overwrite_cvdrift = .false.
       overwrite_gbdrift0 = .false.
       set_bmag_const = .false.
+      one_sided_dbdz_at_ends = .false.
       geo_file = 'input.geometry'
 
       ! The following is True by default in radial variation runs
@@ -1175,6 +1201,7 @@ contains
       ! Flags 
       call broadcast(q_as_x)
       call broadcast(set_bmag_const)
+      call broadcast(one_sided_dbdz_at_ends)
 
       ! Switch between coordinates
       call broadcast(clebsch_factor)
@@ -1292,12 +1319,27 @@ contains
 
    end subroutine communicate_geo_multibox
 
-   !============================================================================ 
+   !============================================================================
    !============================== CALCULATE DZED ==============================
    !============================================================================
-   ! given function f(z:-pi->pi), calculate z derivative
-   ! second order accurate, with equal grid spacing assumed
-   ! assumes periodic in z -- may need to change this in future
+   !> The parallel derivative of a field-line quantity, second order in dz,
+   !> with equal grid spacing assumed.
+   !>
+   !> The interior is a centred difference.  At the two end nodes the centred
+   !> difference has to reach across the join, and doing so presumes that the
+   !> two ends of the tube are the same physical point -- that f is periodic.
+   !> That is true of a tube that closes on itself, and false of one that does
+   !> not: on the W7-X alpha0 = 0.7 line B differs by about one per cent
+   !> between the ends, and up to fourteen per cent in other equilibria, so the
+   !> derivative there is not merely inaccurate but of the wrong sign and size.
+   !> It feeds the mirror term, which uses dB/dz at every z including the ends.
+   !>
+   !> With <one_sided_dbdz_at_ends> the end nodes of a tube that does not close
+   !> instead take a second-order one-sided difference, which needs nothing
+   !> from beyond the tube.  A tube that does close is bit-for-bit unchanged
+   !> either way: the periodicity test below decides, not the flag alone, so
+   !> turning the flag on cannot move a closed-tube result.
+   !============================================================================
    subroutine get_dzed(nz, dz, f, df)
 
       implicit none
@@ -1306,17 +1348,28 @@ contains
       real, dimension(-nz:), intent(in) :: dz, f
       real, dimension(-nz:), intent(out) :: df
 
+      !> f(+pi) and f(-pi) closer than this, relative to the size of f, is
+      !> taken to mean the tube closes on itself.
+      real, parameter :: periodicity_tolerance = 1.0e-8
+
+      logical :: f_is_periodic
+
       df(-nz + 1:nz - 1) = (f(-nz + 2:) - f(:nz - 2)) / (dz(:nz - 2) + dz(-nz + 1:nz - 1))
 
-      ! TODO-GA hack to avoid non-periodicity in full-flux-surface case
-		! if (full_flux_surface .and. .not. const_alpha_geo) then
-      !   df(-nz) = (f(-nz + 1) - f(-nz)) / dz(-nz)
-      !  df(nz) = (f(nz) - f(nz - 1)) / dz(nz - 1)
-      !else
-      ! assume periodicity in the B-field
-      df(-nz) = (f(-nz + 1) - f(nz - 1)) / (dz(-nz) + dz(nz - 1))
-      df(nz) = df(-nz)
-   	!end if
+      f_is_periodic = abs(f(nz) - f(-nz)) <= periodicity_tolerance * maxval(abs(f))
+
+      if (one_sided_dbdz_at_ends .and. .not. f_is_periodic) then
+         !> Second-order one-sided differences.  The denominators are the sum
+         !> of the two intervals spanned, as in the centred formula above.
+         df(-nz) = (-3.0 * f(-nz) + 4.0 * f(-nz + 1) - f(-nz + 2)) &
+                   / (dz(-nz) + dz(-nz + 1))
+         df(nz) = (3.0 * f(nz) - 4.0 * f(nz - 1) + f(nz - 2)) &
+                  / (dz(nz - 1) + dz(nz - 2))
+      else
+         ! assume periodicity in the B-field
+         df(-nz) = (f(-nz + 1) - f(nz - 1)) / (dz(-nz) + dz(nz - 1))
+         df(nz) = df(-nz)
+      end if
 
    end subroutine get_dzed
 
