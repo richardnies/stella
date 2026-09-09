@@ -46,15 +46,11 @@ module parameters_physics
    public :: freeze_zonal_factor
    public :: freeze_zonal_kmin
    public :: freeze_zonal_kmax
-   public :: triangular_ZF
-   public :: cos_ZF 
-   public :: triangular_ZF_RH
    public :: RH_analytic_drift_phase, RH_analytic_drift_phase_specified
-   public :: triangular_ZF_flow
-   public :: triangular_ZF_flow_PS, triangular_ZF_flow_sym
-   public :: triangular_ZF_upar_fac
-   public :: triangular_ZF_g_exb
-   public :: triangular_ZF_nkx
+   public :: zonal_flow_PS, zonal_flow_sym
+   public :: zonal_upar_fac
+   public :: zonal_g_exb
+   public :: zonal_nkx
    
    !> Large scale physics options of the system - e.g. whether we have full flux effects, 
    !> electromagnetic effects, or radially global effects.
@@ -74,8 +70,6 @@ module parameters_physics
    real :: xdriftknob, ydriftknob, wstarknob
  
    !> How the zonal profile is launched, and what distribution is put under it.
-   !> These replace the booleans triangular_ZF, cos_ZF, triangular_ZF_RH and
-   !> triangular_ZF_flow, which are still read but deprecated.
    character(20) :: zonal_init_option, zonal_closure_option
    integer :: zonal_init_option_switch, zonal_closure_option_switch
    integer, parameter :: zonal_init_none = 1, &
@@ -100,9 +94,6 @@ module parameters_physics
    logical :: only_zonal_interaction
    logical :: freeze_nonzonal
    logical :: freeze_zonal
-   logical :: triangular_ZF
-   logical :: cos_ZF
-   logical :: triangular_ZF_RH
 
    !> How the Rosenbluth-Hinton drift-orbit phase Q is obtained.  True takes the
    !> closed form the theory gives for a quasisymmetric field; false integrates
@@ -116,11 +107,9 @@ module parameters_physics
    !> overriding the user.
    logical :: RH_analytic_drift_phase
    logical :: RH_analytic_drift_phase_specified
-   logical :: triangular_ZF_specified, cos_ZF_specified
-   logical :: triangular_ZF_RH_specified, triangular_ZF_flow_specified
    !> Initialise the zonal distribution as a Maxwellian carrying a parallel
-   !> flow, u_par = triangular_ZF_flow_PS * PS_flow_fac
-   !>             + triangular_ZF_flow_sym * sym_flow_fac,
+   !> flow, u_par = zonal_flow_PS * PS_flow_fac
+   !>             + zonal_flow_sym * sym_flow_fac,
    !> the two profiles being the Pfirsch-Schlueter return flow and the flow
    !> along the direction of symmetry (see geometry).  Together they span every
    !> divergence-free parallel flow that can accompany the ExB flow, so the two
@@ -130,11 +119,10 @@ module parameters_physics
    !>     (1, 0)  pure Pfirsch-Schlueter flow          (the default)
    !>     (0, 1)  flow along the symmetry direction, toroidal in a tokamak
    !>
-   !> This replaces the separate triangular_ZF_PS and triangular_ZF_upar flags,
-   !> which were the (1,0) and (0,1) corners evaluated in the large-aspect-ratio
-   !> limit -- 2 q cos(theta) and a constant respectively.
-   logical :: triangular_ZF_flow
-   real :: triangular_ZF_flow_PS, triangular_ZF_flow_sym
+   !> These replace the separate booleans that used to select one corner each,
+   !> evaluated in the large-aspect-ratio limit -- 2 q cos(theta) for the
+   !> Pfirsch-Schlueter one and a constant for the symmetry one.
+   real :: zonal_flow_PS, zonal_flow_sym
    
    logical :: full_flux_surface
    logical :: include_apar
@@ -143,14 +131,14 @@ module parameters_physics
 
    real :: beta, zeff, tite, nine, rhostar, irhostar, vnew_ref
    real :: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
-   real :: triangular_ZF_g_exb, triangular_ZF_upar_fac 
+   real :: zonal_g_exb, zonal_upar_fac 
    !> radial harmonic index carrying the prescribed zonal profile.  1 (the
    !> default) puts it on the lowest kx, so the zonal wavelength equals the
    !> box length and CANNOT be varied independently of Lx.  Setting it to n
    !> puts the profile on kx = n*dkx, so raising jtwist and n together holds
    !> the zonal wavelength -- hence u_Z(0) and the flow shear -- fixed while
    !> the box grows.  That is what a box-length convergence test needs.
-   integer :: triangular_ZF_nkx
+   integer :: zonal_nkx
    real :: freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax
    logical :: initialised = .false.
 
@@ -219,16 +207,12 @@ contains
       freeze_zonal_kmax = 1e10
       zonal_init_option = 'default'
       zonal_closure_option = 'default'
-      triangular_ZF = .false.
-      cos_ZF = .false.
-      triangular_ZF_RH   = .true.
       RH_analytic_drift_phase = .true.
-      triangular_ZF_flow = .false.
-      triangular_ZF_flow_PS  = 1.0
-      triangular_ZF_flow_sym = 0.0
-      triangular_ZF_g_exb    = 0.0
-      triangular_ZF_nkx      = 1
-      triangular_ZF_upar_fac = 1.0
+      zonal_flow_PS  = 1.0
+      zonal_flow_sym = 0.0
+      zonal_g_exb    = 0.0
+      zonal_nkx      = 1
+      zonal_upar_fac = 1.0
       
       full_flux_surface = .false.
       include_apar = .false.
@@ -288,8 +272,6 @@ contains
       integer :: ierr, in_file
       logical :: nml_exist
       logical :: probe_analytic_drift_phase
-      logical :: probe_triangular_ZF, probe_cos_ZF
-      logical :: probe_triangular_ZF_RH, probe_triangular_ZF_flow
 
       namelist /parameters_physics/ include_parallel_streaming, include_mirror, nonlinear, &
         xdriftknob, ydriftknob, wstarknob, adiabatic_option, prp_shear_enabled, &
@@ -297,9 +279,9 @@ contains
         include_parallel_nonlinearity, suppress_zonal_interaction, only_zonal_interaction, freeze_nonzonal, freeze_zonal, &
         freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
         zonal_init_option, zonal_closure_option, &
-        triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
+        zonal_g_exb, &
         RH_analytic_drift_phase, &
-        triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac, triangular_ZF_nkx, &
+        zonal_flow_PS, zonal_flow_sym, zonal_upar_fac, zonal_nkx, &
         full_flux_surface, include_apar, include_bpar, radial_variation, &
         beta, zeff, tite, nine, rhostar, vnew_ref, &
         g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -315,26 +297,13 @@ contains
      !> two different defaults.  Everything else keeps the value it already has,
      !> so the second read changes nothing but this.
      RH_analytic_drift_phase_specified = .false.
-     triangular_ZF_specified = .false.; cos_ZF_specified = .false.
-     triangular_ZF_RH_specified = .false.; triangular_ZF_flow_specified = .false.
      if (nml_exist) then
         probe_analytic_drift_phase = RH_analytic_drift_phase
-        probe_triangular_ZF = triangular_ZF; probe_cos_ZF = cos_ZF
-        probe_triangular_ZF_RH = triangular_ZF_RH; probe_triangular_ZF_flow = triangular_ZF_flow
         RH_analytic_drift_phase = .not. probe_analytic_drift_phase
-        triangular_ZF = .not. probe_triangular_ZF; cos_ZF = .not. probe_cos_ZF
-        triangular_ZF_RH = .not. probe_triangular_ZF_RH
-        triangular_ZF_flow = .not. probe_triangular_ZF_flow
         rewind (in_file)
         read (unit=in_file, nml=parameters_physics)
         RH_analytic_drift_phase_specified = (RH_analytic_drift_phase .eqv. probe_analytic_drift_phase)
-        triangular_ZF_specified = (triangular_ZF .eqv. probe_triangular_ZF)
-        cos_ZF_specified = (cos_ZF .eqv. probe_cos_ZF)
-        triangular_ZF_RH_specified = (triangular_ZF_RH .eqv. probe_triangular_ZF_RH)
-        triangular_ZF_flow_specified = (triangular_ZF_flow .eqv. probe_triangular_ZF_flow)
         RH_analytic_drift_phase = probe_analytic_drift_phase
-        triangular_ZF = probe_triangular_ZF; cos_ZF = probe_cos_ZF
-        triangular_ZF_RH = probe_triangular_ZF_RH; triangular_ZF_flow = probe_triangular_ZF_flow
      end if
 
      call check_backwards_compatability
@@ -354,55 +323,9 @@ contains
      call get_option_value &
        (zonal_closure_option, zonalclosureopts, zonal_closure_option_switch, &
          ierr, "zonal_closure_option in parameters_physics")
-     call map_deprecated_zonal_flags
 
    end subroutine
 
-   !**********************************************************************
-   !              DEPRECATED ZONAL-PROFILE BOOLEANS                      !
-   !**********************************************************************
-   !> The zonal profile used to be selected by four booleans.  They are still
-   !> read, so decks written against the old names keep running, but a run that
-   !> uses them says so.  Only flags the input file actually mentions are mapped:
-   !> triangular_ZF_RH defaulted to .true., so acting on its value
-   !> unconditionally would silently override an explicit zonal_closure_option.
-   !>
-   !> The precedence reproduces the old branch order in init_gxyz, where the
-   !> Rosenbluth-Hinton closure was tested before the parallel-flow one.
-   subroutine map_deprecated_zonal_flags
-
-      use mp, only: proc0
-
-      implicit none
-
-      if (.not. (triangular_ZF_specified .or. cos_ZF_specified &
-           .or. triangular_ZF_RH_specified .or. triangular_ZF_flow_specified)) return
-
-      if (triangular_ZF_specified .and. triangular_ZF) then
-         zonal_init_option_switch = zonal_init_triangular
-      else if (cos_ZF_specified .and. cos_ZF) then
-         zonal_init_option_switch = zonal_init_cosine
-      else if (triangular_ZF_specified .or. cos_ZF_specified) then
-         zonal_init_option_switch = zonal_init_none
-      end if
-
-      if (triangular_ZF_RH_specified .and. triangular_ZF_RH) then
-         zonal_closure_option_switch = zonal_closure_rh
-      else if (triangular_ZF_flow_specified .and. triangular_ZF_flow) then
-         zonal_closure_option_switch = zonal_closure_flow
-      else if (triangular_ZF_RH_specified) then
-         zonal_closure_option_switch = zonal_closure_density
-      end if
-
-      if (proc0) then
-         write (*, *) 'WARNING: triangular_ZF, cos_ZF, triangular_ZF_RH and'
-         write (*, *) 'triangular_ZF_flow are deprecated.  Use zonal_init_option'
-         write (*, *) "('none', 'cosine', 'triangular') and zonal_closure_option"
-         write (*, *) "('density', 'rh', 'flow') instead.  The old flags have been"
-         write (*, *) 'mapped onto them for this run.'
-      end if
-
-   end subroutine map_deprecated_zonal_flags
 
    !**********************************************************************
    !                    CHECK BACKWARDS COMPATIBILITY                    !
@@ -432,9 +355,9 @@ contains
          adiabatic_option, const_alpha_geo, suppress_zonal_interaction, only_zonal_interaction, &
          freeze_nonzonal, freeze_zonal, freeze_zonal_factor, freeze_zonal_kmin, freeze_zonal_kmax, &
          zonal_init_option, zonal_closure_option, &
-         triangular_ZF, cos_ZF, triangular_ZF_RH, triangular_ZF_flow, triangular_ZF_g_exb, &
+         zonal_g_exb, &
          RH_analytic_drift_phase, &
-         triangular_ZF_flow_PS, triangular_ZF_flow_sym, triangular_ZF_upar_fac, triangular_ZF_nkx
+         zonal_flow_PS, zonal_flow_sym, zonal_upar_fac, zonal_nkx
 
       namelist /parameters/ beta, zeff, tite, nine, rhostar, vnew_ref, &
          g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -545,21 +468,17 @@ contains
      call broadcast(freeze_zonal_factor)
      call broadcast(freeze_zonal_kmin)
      call broadcast(freeze_zonal_kmax)
-     call broadcast(triangular_ZF)
-     call broadcast(cos_ZF)
-     call broadcast(triangular_ZF_RH)
      !> Both of these must be broadcast: only proc0 reads the input file, and
      !> <use_analytic_drift_phase> in rosenbluth_hinton gates a reduction, so a
      !> rank that disagrees about them deadlocks the run rather than getting a
      !> wrong answer.
      call broadcast(RH_analytic_drift_phase)
      call broadcast(RH_analytic_drift_phase_specified)
-     call broadcast(triangular_ZF_flow)
-     call broadcast(triangular_ZF_flow_PS)
-     call broadcast(triangular_ZF_flow_sym)
-     call broadcast(triangular_ZF_g_exb)
-     call broadcast(triangular_ZF_nkx)
-     call broadcast(triangular_ZF_upar_fac)
+     call broadcast(zonal_flow_PS)
+     call broadcast(zonal_flow_sym)
+     call broadcast(zonal_g_exb)
+     call broadcast(zonal_nkx)
+     call broadcast(zonal_upar_fac)
      
      call broadcast(full_flux_surface)
      call broadcast(include_apar)

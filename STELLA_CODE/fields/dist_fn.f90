@@ -44,9 +44,9 @@ contains
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
-      use parameters_physics, only: triangular_ZF_g_exb, triangular_ZF_nkx
-      use parameters_physics, only: triangular_ZF_flow_PS, triangular_ZF_flow_sym
-      use parameters_physics, only: triangular_ZF_upar_fac
+      use parameters_physics, only: zonal_g_exb, zonal_nkx
+      use parameters_physics, only: zonal_flow_PS, zonal_flow_sym
+      use parameters_physics, only: zonal_upar_fac
       use parameters_physics, only: zonal_init_option_switch, zonal_init_none, zonal_init_triangular
       use parameters_physics, only: zonal_closure_option_switch, zonal_closure_rh, zonal_closure_flow
       use grids_kxky, only: akx
@@ -71,12 +71,12 @@ contains
          !> Refuse rather than return zero: a geometry that cannot supply one of
          !> these profiles leaves its factor at zero, and a silently absent
          !> parallel flow looks exactly like a deliberate one.
-         if (abs(triangular_ZF_flow_PS) > epsilon(0.) .and. .not. PS_flow_defined) call mp_abort &
+         if (abs(zonal_flow_PS) > epsilon(0.) .and. .not. PS_flow_defined) call mp_abort &
             ('the Pfirsch-Schlueter flow profile is not defined for this geometry; aborting')
-         if (abs(triangular_ZF_flow_sym) > epsilon(0.) .and. .not. sym_flow_defined) call mp_abort &
+         if (abs(zonal_flow_sym) > epsilon(0.) .and. .not. sym_flow_defined) call mp_abort &
             ('the symmetry-direction flow profile is not defined for this geometry; aborting')
-         u_parallel_ZF = triangular_ZF_flow_PS * PS_flow_fac &
-                       + triangular_ZF_flow_sym * sym_flow_fac
+         u_parallel_ZF = zonal_flow_PS * PS_flow_fac &
+                       + zonal_flow_sym * sym_flow_fac
       end if
 
       if (gxyz_initialized) return
@@ -128,29 +128,29 @@ contains
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
                   !> Set up the fundamental harmonic of the prescribed zonal profile.
-                  !> <triangular_ZF_nkx> selects WHICH radial harmonic carries it:
-                  !> the profile sits on kx = triangular_ZF_nkx * dkx, i.e. array
-                  !> index 1 + triangular_ZF_nkx.  With the default of 1 this is the
+                  !> <zonal_nkx> selects WHICH radial harmonic carries it:
+                  !> the profile sits on kx = zonal_nkx * dkx, i.e. array
+                  !> index 1 + zonal_nkx.  With the default of 1 this is the
                   !> lowest kx and the zonal wavelength is the box length, so it
                   !> cannot be varied independently of Lx -- raising jtwist then
                   !> rescales u_Z(0) and the flow shear along with the box, which
                   !> makes a box-length convergence test meaningless.  Raising
-                  !> jtwist and triangular_ZF_nkx together keeps kx_Z, and hence
+                  !> jtwist and zonal_nkx together keeps kx_Z, and hence
                   !> both u_Z(0) = 2*g_exb/kx_Z and the shear, fixed.
-                  ikx_ZF = 1 + triangular_ZF_nkx
+                  ikx_ZF = 1 + zonal_nkx
                   !> akx and phi_ZF run 1:nakx, so a harmonic index at or beyond
                   !> nakx would index past the end of both.
-                  if (triangular_ZF_nkx < 1 .or. ikx_ZF > nakx) call mp_abort &
-                     ('triangular_ZF_nkx must be at least 1 and less than nakx; aborting')
+                  if (zonal_nkx < 1 .or. ikx_ZF > nakx) call mp_abort &
+                     ('zonal_nkx must be at least 1 and less than nakx; aborting')
                   phi_ZF(:, :) = 0
-                  phi_ZF(ikx_ZF, :) = zi*triangular_ZF_g_exb / akx(ikx_ZF)**2
+                  phi_ZF(ikx_ZF, :) = zi*zonal_g_exb / akx(ikx_ZF)**2
 
                   if (zonal_init_option_switch == zonal_init_triangular) then
                      !> A triangular wave is the ODD harmonics of the fundamental
                      !> falling off as 1/m^3, so step through m = 3, 5, 7, ... of
                      !> the chosen fundamental rather than of the lowest kx.
                      do m_ZF = 3, nakx, 2
-                        ikx = 1 + m_ZF * triangular_ZF_nkx
+                        ikx = 1 + m_ZF * zonal_nkx
                         if (ikx > nakx / 2 + 1) exit
                         phi_ZF(ikx, :) = phi_ZF(ikx_ZF, :) / (akx(ikx)/akx(ikx_ZF))**3
                      end do
@@ -171,7 +171,7 @@ contains
                         if (zonal_closure_option_switch == zonal_closure_rh) then
                            ! Rosenbluth-Hinton profile, with <H> = F_M * I_RH to satisfy quasineutrality
                            gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) &
-                              * (2*(1-aj0x(1,ikx,iz,ivmu)) + triangular_ZF_upar_fac*(aj0x(1,ikx,iz,ivmu)-2 &
+                              * (2*(1-aj0x(1,ikx,iz,ivmu)) + zonal_upar_fac*(aj0x(1,ikx,iz,ivmu)-2 &
                                    + conjg(RH_integrand_even(ikx,iz,it,ivmu)+RH_integrand_odd(ikx,iz,it,ivmu)) &
                                    + real(RH_inertia(ikx,iz,it,is))) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)

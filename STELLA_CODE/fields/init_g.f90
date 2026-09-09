@@ -223,7 +223,7 @@ contains
       use arrays_dist_fn, only: gvmu
       use stella_layouts, only: kxkyz_lo, iz_idx, ikx_idx, iky_idx, is_idx
       use ran, only: ranf
-      use parameters_physics, only: zonal_init_option_switch, zonal_init_triangular, triangular_ZF_g_exb
+      use parameters_physics, only: zonal_init_option_switch, zonal_init_triangular, zonal_g_exb
 
       implicit none
 
@@ -263,7 +263,7 @@ contains
          if (zonal_init_option_switch == zonal_init_triangular) then
 
             !Setup lowest kx of zonal flow profile
-            phi(1, 2, :) = zi*0.5*triangular_ZF_g_exb
+            phi(1, 2, :) = zi*0.5*zonal_g_exb
 
             ! Triangular v_ZF, adjust k > kmin modes accordingly
             do ikx = 3, nakx / 2 + 1
@@ -438,7 +438,7 @@ contains
       integer :: ikxkyz, iz, it, iky, ikx, is, ie, iseg, ia
       integer :: itmod
 
-      !> RN: <triangular_ZF>/<cos_ZF> used to force the fallback to ginit_default here,
+      !> RN: a prescribed zonal profile used to force the fallback to ginit_default here,
       !> but dist_fn::init_gxyz overwrites the whole zonal component of g with the
       !> prescribed profile after ginit has run, so noise cannot corrupt the zonal
       !> background any more. Noise is the useful seed for a tertiary run: it is broad

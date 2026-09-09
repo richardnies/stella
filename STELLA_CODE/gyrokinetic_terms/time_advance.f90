@@ -2016,7 +2016,7 @@ contains
       !> advection does. With the override in place a tertiary run kept the
       !> timestep it was given at initialisation no matter how strong the
       !> prescribed flow was -- measured advective CFL numbers of 0.78, 1.56 and
-      !> 2.34 at triangular_ZF_g_exb = 6.4, 12.8 and 19.2, all at an unchanged
+      !> 2.34 at zonal_g_exb = 6.4, 12.8 and 19.2, all at an unchanged
       !> dt = 1.2467e-2. The ExB estimate is now respected in this case too.
 
 
