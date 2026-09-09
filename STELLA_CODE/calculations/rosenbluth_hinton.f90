@@ -103,7 +103,7 @@ module rosenbluth_hinton
    !> precision.  1e-8 sits near the sqrt(epsilon) sweet spot for both.
    real, parameter :: kxsmall = 1.e-8
 
-   ! Has this module been initialised?
+   ! Set once init_rosenbluth_hinton has run.
    logical :: rosenbluth_hinton_initialized = .false.
 
    !> Whether Q comes from the closed form or from integration along the field
@@ -293,7 +293,7 @@ contains
             energyval = vpa(iv)**2 + vperp2(ia,iz,imu)
             muval     = mu(imu)
 
-            ! Is this particle trapped in the well?
+            ! Trapped if the particle cannot reach the maximum of B.
             trapped = energyval <= 2*muval*bmag_max
 
             !> The drift-orbit phase is linear in kx and, at fixed pitch angle,
@@ -397,7 +397,7 @@ contains
    end subroutine finish_rosenbluth_hinton
 
    !============================================================================
-   !=========== IS THE ROSENBLUTH-HINTON MACHINERY NEEDED AT ALL? ==============
+   !========== WHETHER THE ROSENBLUTH-HINTON MACHINERY IS NEEDED ===============
    !============================================================================
    !> Single source of truth for the init/finish guard, so the two can never
    !> disagree and leak the (large) response arrays.
@@ -1686,7 +1686,8 @@ contains
       Q_hat = 0.
       drift_average = 0.
 
-      !> Is this particle trapped, and if so, in which well?
+      !> Determine whether the particle is trapped and, if so, which well it
+      !> occupies.
       trapped = .false.
       if (lambda > epsilon(0.)) then
          B_c = 1. / (2.*lambda)
