@@ -65,7 +65,7 @@ module rosenbluth_hinton
    !> sigma-odd member of the same family of weights the linear streaming and
    !> radial drift annihilate; <RH_omega_inertia> is the same projection applied
    !> to a unit-flow shifted Maxwellian, so that the ratio of their field-line
-   !> averages is the parallel flow.  See DOCUMENTATION/stella_RH_report.
+   !> averages is the parallel flow.
    complex, dimension(:,:,:,:), allocatable :: RH_omega_weight
    complex, dimension(:,:,:,:), allocatable :: RH_omega_inertia
    ! (nakx, -nzgrid:nzgrid, ntubes, -vmu-layout-)
@@ -140,11 +140,11 @@ contains
    end subroutine normalise_RH_flux_by_ikx
 
 !###############################################################################
-!############################ INITALIZE & FINALIZE #############################
+!############################ INITIALIZE & FINALIZE ############################
 !###############################################################################
 
    !============================================================================
-   !======================== INITALIZE THE DIAGNOSTICS =========================
+   !======================== INITIALIZE THE DIAGNOSTICS ========================
    !============================================================================
    subroutine init_rosenbluth_hinton()
 
@@ -833,8 +833,7 @@ contains
          ! Note : extra factor of -1/(1j*kx) to match definition of nonlinear fluxes
          call normalise_RH_flux_by_ikx(RH_fluxes_coll)
 
-         !> The asymptotic versions need the same -1/(i kx) as the exact ones;
-         !> without it they are short by exactly a factor of kx.
+         !> The asymptotic versions take the same -1/(i kx) as the exact ones.
          if (do_coll_LW) then
             call normalise_RH_flux_by_ikx(RH_fluxes_coll_even_LW)
             call normalise_RH_flux_by_ikx(RH_fluxes_coll_odd_LW)
@@ -959,7 +958,7 @@ contains
  
 
    !============================================================================
-   !====================== GET RH_phi_I FOR THE FLUX TUBE ========================
+   !====================== GET RH_omega FOR THE FLUX TUBE ========================
    !============================================================================
    !> The toroidal-momentum inertia.  A rigid toroidal rotation of frequency
    !> omega has V_par = omega I/B, that is g = (m vpa/T)(omega I/B) F_M, so
@@ -998,22 +997,14 @@ contains
                !> The rotating state carries a further I/B, matching the one
                !> already inside the weight, so the inertia is quadratic in the
                !> geometric factor and the ratio returns a frequency.
-               integrand_vpamu(1, :, iz, it, ivmu) = RH_omega_weight(:, iz, it, ivmu) &
-               !> The rigidly rotating state is gbar = (m/T) omega vpar (I/B) F_M
-               !> with vpar PHYSICAL, but vpa(iv) here is stella's normalised
-               !> parallel velocity, in units of the species thermal speed.  The
-               !> conversion supplies one factor of stm = sqrt(T/m), so what
-               !> multiplies vpa(iv) is (m/T)*stm = sqrt(m/T), not m/T.
                !>
-               !> For a single ion species with m = T = 1 the two are the same
-               !> number, which is why this went unnoticed, and why the
-               !> calibration <I_Omega> -> 1/2 is unaffected.  Between species
-               !> they differ by sqrt(m_s/T_s): with kinetic electrons the
-               !> electron inertia came out 61 times too small, so Omega_RH,e
-               !> was 61 times too large and its share of E_Omega_RH, which goes
-               !> as the square, too large by 3700.  The electrons then carried
-               !> essentially all of E and the budget inherited their
-               !> discretisation error in place of the ions'.
+               !> The state is gbar = (m/T) omega vpar (I/B) F_M with vpar
+               !> physical, while vpa(iv) is normalised to the species thermal
+               !> speed.  The conversion supplies one stm = sqrt(T/m), so the
+               !> coefficient of vpa(iv) is (m/T)*stm = sqrt(m/T), not m/T.  The
+               !> two coincide only for m = T = 1; between species they differ
+               !> by sqrt(m_s/T_s).
+               integrand_vpamu(1, :, iz, it, ivmu) = RH_omega_weight(:, iz, it, ivmu) &
                     * vpa(iv) * spec(is)%mass / spec(is)%temp * spec(is)%stm_psi0 &
                     * RH_omega_geo_fac(iz) / bmag(ia, iz)
                !> integrate_vmu folds the Maxwellian into its own weights when
@@ -1199,10 +1190,9 @@ contains
       if (nonlinear) then
          integrand = 0.
          if (do_field_split) then
-            !> Explicit bounds, not source=integrand.  `integrand` is the shared
-            !> module scratch g0 aliased in above, and allocating from it left
-            !> these three with bounds that did not match the dummy argument's
-            !> in omega_flux_piece, which crashed with SIGBUS.
+            !> Explicit bounds, not source=integrand: `integrand` is the shared
+            !> module scratch g0 aliased in above, whose bounds need not match
+            !> what omega_flux_piece declares.
             allocate (int_phi(naky, nakx, -nzgrid:nzgrid, ntubes, &
                               vmu_lo%llim_proc:vmu_lo%ulim_alloc))
             allocate (int_apar(naky, nakx, -nzgrid:nzgrid, ntubes, &
@@ -1220,9 +1210,8 @@ contains
                   !> h_s, not g_s and not gbar_s.  The gyrokinetic nonlinearity
                   !> is {<chi_s>_R, h_s}; see rh_g_to_h_slice.  gbar is a
                   !> different object again -- it belongs to the parallel
-                  !> streaming solve and to the conserved projection, and
-                  !> substituting it here was tried and makes the
-                  !> electromagnetic budget worse (0.29 -> 0.44).
+                  !> streaming solve and to the conserved projection, not to
+                  !> the nonlinearity.
                   call rh_g_to_h_slice(iz, it, ivmu, g, h_slice)
                   call transform_kx2x_xfirst(h_slice, g_ky_x)
 
@@ -1411,12 +1400,9 @@ contains
       RH_integrand_tmp = 0.
       RH_integrand_tmp(1,:,:,:,:) = RH_integrand_even+RH_integrand_odd
 
-      !> Weighted by Z_s n_s, as the inertia and every flux are.  This carried
-      !> only Z_s, so RH_phi_I was short a density factor relative to everything
-      !> it is paired with -- invisible wherever dens = 1, wrong otherwise, and
-      !> exactly the kind of mismatch that stops RH_phi_I being the inertia times
-      !> phi.  It cancels from the budget slope, appearing in dE_RH/dt and in
-      !> P_RH alike, which is why the benchmarks never saw it.
+      !> Weighted by Z_s n_s, as the inertia and every flux are, so that
+      !> RH_phi_I is the inertia times phi.
+
       !> gbar, not g.  stella's own time advance says so -- "convert from g to
       !> gbar ... as gbar appears in time derivative" -- and the derivation
       !> agrees: substituting h = g + (Z/T)J0 phi F_M into the gyrokinetic
@@ -1458,8 +1444,6 @@ contains
 
    end subroutine get_RH_phi_I_fluxtube
 
-   !==============================================
-   !============== BOUNCE AVERAGES ===============
    !============================================================================
    !=========== BOUNCE INTEGRALS WITH THE TURNING POINTS RESOLVED ==============
    !============================================================================
@@ -1506,11 +1490,9 @@ contains
       !> Three interior points is the working floor.  Two is the hard limit --
       !> the endpoint values of the well profiles are extrapolated from the two
       !> interior points nearest each turning point, so a well holding only one
-      !> of them cannot be built at all -- but admitting two-point wells was
-      !> measured and is not worth it: over the five configurations they are
-      !> 0.01-0.6% of trapped orbits, and the four-node spline they produce is a
-      !> poor enough interpolant that the budget closes marginally *less* well
-      !> than when they take the caller's fallback instead.
+      !> of them cannot be built at all -- but a two-point well is a negligible
+      !> fraction of trapped orbits and the four-node spline it produces is a
+      !> poorer interpolant than the caller's fallback, so it is refused.
       !>
       !> The two rejections that do carry weight are both correct as they stand.
       !> A well running off the end of the tube is not a complete bounce and
@@ -1639,6 +1621,7 @@ contains
    !> The integration constant is irrelevant: Q enters only as
    !> <J0 exp(-Q)>_tau exp(+Q), so a shift Q -> Q + c cancels between the two
    !> factors.  The integral is therefore started wherever is convenient.
+
    !> The geometric part of the drift-orbit phase Q.
    !>
    !> Q is linear in kx, and at fixed pitch angle lambda = mu / energy it scales
@@ -1694,10 +1677,9 @@ contains
       !> q_as_x.  The time step belongs to the time advance, not to the orbit,
       !> but the knob does: it scales the drift the equations are actually
       !> solving, so a run with xdriftknob = 0 has no drift and hence no
-      !> drift-orbit phase.  tz does not belong here -- the phase needs
-      !> v_drift / v_par,
-      !> and tz / stm is precisely smz, which the caller applies -- carrying tz
-      !> here as well would count the same factor twice.
+      !> drift-orbit phase.  tz does not belong here: the phase needs
+      !> v_drift / v_par, and tz / stm is precisely smz, which the caller
+      !> applies, so carrying tz here too would count the same factor twice.
       drift_norm = 0.5 * xdriftknob
       if (.not. q_as_x) drift_norm = drift_norm / geo_surf%shat
 
@@ -1807,21 +1789,11 @@ contains
          den_well(i) = drift_norm / gradpar(iz)
       end do
 
-      !> g at the turning points is the limit |dB/dz| / (z_r - z_l); the numerator
-      !> is smooth there and is extrapolated from the two nearest interior points,
-      !> since copying the neighbour would be a first-order error sitting exactly
-      !> where the weight is largest.
-      !> g at the turning points, where its own definition is 0/0 and its limit
-      !> is |dB/dz| / (z_r - z_l).  The difference quotient across the bracketing
-      !> cell returns dB/dz at that cell's midpoint rather than at the turning
-      !> point, which is first order and sits exactly where 1/sqrt(g) weights the
-      !> integrand most heavily -- it was the leading error of the whole scheme.
-      !> A quadratic through B on the bracket is second order and, just as
-      !> importantly, stays local: it never reads a value from outside the well,
-      !> so it returns the same number however many poloidal turns the flux tube
-      !> spans.  Neither splining g nor reading the grid's own dbdzed can promise
-      !> that, since the turning points of the barely trapped sit at the maximum
-      !> of B, which for a single-turn tube is the end of the domain.
+      !> The numerator is smooth at the turning points and is extrapolated from
+      !> the two nearest interior points; copying the neighbour would be a
+      !> first-order error sitting exactly where the weight is largest.
+      !> g at the turning points, its definition there being 0/0.  See
+      !> <bounce_ints_in_well> for why dB/dz is taken from a local quadratic.
       g_well(1) = abs(dbdz_local(z_l, iz_lo - 1, iz_lo, iz_lo + 1)) / (z_r - z_l)
       g_well(n_well) = abs(dbdz_local(z_r, iz_hi - 1, iz_hi, iz_hi + 1)) / (z_r - z_l)
       num_well(1) = extrapolate(z_well(1), z_well(2), z_well(3), num_well(2), num_well(3))
@@ -2031,17 +2003,8 @@ contains
          weight_well(i) = 1.0 / abs(gradpar(iz))
       end do
 
-      !> g at the turning points, where its own definition is 0/0 and its limit
-      !> is |dB/dz| / (z_r - z_l).  The difference quotient across the bracketing
-      !> cell returns dB/dz at that cell's midpoint rather than at the turning
-      !> point, which is first order and sits exactly where 1/sqrt(g) weights the
-      !> integrand most heavily -- it was the leading error of the whole scheme.
-      !> A quadratic through B on the bracket is second order and, just as
-      !> importantly, stays local: it never reads a value from outside the well,
-      !> so it returns the same number however many poloidal turns the flux tube
-      !> spans.  Neither splining g nor reading the grid's own dbdzed can promise
-      !> that, since the turning points of the barely trapped sit at the maximum
-      !> of B, which for a single-turn tube is the end of the domain.
+      !> g at the turning points, its definition there being 0/0.  See
+      !> <bounce_ints_in_well> for why dB/dz is taken from a local quadratic.
       g_well(1) = abs(dbdz_local(z_l, iz_lo - 1, iz_lo, iz_lo + 1)) / (z_r - z_l)
       g_well(n_well) = abs(dbdz_local(z_r, iz_hi - 1, iz_hi, iz_hi + 1)) / (z_r - z_l)
 
@@ -2082,6 +2045,7 @@ contains
    !> The bounce-time integrand is 1/|vpa|, which does not depend on the sign of
    !> vpa, so the two calls to eval_transit_ints return the same bounce time and
    !> only one is kept.
+
    !> The transit average the toroidal-momentum invariant needs.  The flow part
    !> of the canonical toroidal angular momentum projects onto the field line as
    !> R v_zeta = vpar R B_zeta / B = vpar I / B, with I = R B_zeta a flux
@@ -2141,9 +2105,8 @@ contains
          end if
          kperp2 = max(kperp2, 0.)
          aj0 = j0(sqrt(kperp2*vperp2) * spec(is)%bess_fac * spec(is)%smz_psi0 / bmag(ia, iz))
-         !> dl = (dl/B) * B, matching the convention of eval_transit_ints.
          !> The 1/B of the toroidal projection cancels the B of the arc-length
-         !> measure, dl = (dl/B) * B.
+         !> measure, dl = (dl/B) * B, matching eval_transit_ints.
          T_v = T_v + sigma * aj0 * exp(-Q_profile(iz)) * dl_over_b(ia, iz)
       end do
 
@@ -2153,9 +2116,8 @@ contains
       !> ratio is right.  The trapped branch, bounce_ints_in_well, weights by
       !> 1/|gradpar| instead, which does not -- the two differ by the constant
       !>     S = (dz/|gradpar|) / (B dl_over_b),
-      !> the sum that normalises dl_over_b to unity.  Left uncorrected the
-      !> trapped part of the momentum weight is too small by that factor, which
-      !> is of order a hundred in the stellarator equilibria here.
+      !> the sum that normalises dl_over_b to unity.  The trapped branch is
+      !> rescaled by S so that both branches carry the same normalisation.
       if (trapped) then
          measure_scale = (zed(1) - zed(0)) / (abs(gradpar(0)) * bmag(ia, 0) * dl_over_b(ia, 0))
          T_v = T_v * measure_scale
@@ -2434,6 +2396,7 @@ contains
       !> Walk the interior of the orbit looking for sign changes of dx', and fit
       !> a parabola through each bracket to place the stationary point and to
       !> read off dx'' there.
+      !>
       !> A circulating orbit runs right round the line, so its stationary points
       !> have to be looked for periodically: for an axisymmetric tube the maximum
       !> of B sits at z = +-pi, which is the domain edge, and an interior-only
@@ -2487,6 +2450,7 @@ contains
          !> top of it.  The Gaussian form then diverges as 1/sqrt(|vpa|), because
          !> the amplitude blows up as 1/|vpa| faster than sqrt(1/|dx''|) can
          !> shrink.  Use the uniform Bessel form there instead, which is finite.
+         !>
          !> A stationary point where |dx| is a maximum is a minimum of B: |vpa| is
          !> largest there, no turning point is near, and the Gaussian is right.
          if (dx_s * curv > 0.) then
@@ -2711,7 +2675,6 @@ contains
 
    !==============================================
 
-   ! Evaluate RH transit averages
    !> Transit (passing) or bounce (trapped) integrals of exp(-Q) J0 and of unity.
    !>
    !> A passing particle samples the whole domain and |vpa| never vanishes, so the
@@ -2805,8 +2768,8 @@ contains
       complex, intent(in), optional :: Q_at_z
       !> See eval_transit_int_integrand_RH: 0 or absent gives J0 exp(-Q), 1 and 2
       !> give the radial excursion and its square, which the long-wavelength
-      !> expansion needs.  Without this the trapped branch silently returned the
-      !> exact integrand for a moment request.
+      !> expansion needs.  The trapped branch has to pass it on, or it returns
+      !> the exact integrand whatever was asked for.
       integer, intent(in), optional :: moment
 
       real    :: vpa2, vpa, vperp2, kperp2, aj0x_local, dxloc
@@ -3037,24 +3000,21 @@ contains
       end do
 
       !> g at the turning points, where its own definition is 0/0 and its limit
-      !> is |dB/dz| / (z_r - z_l).  The difference quotient across the bracketing
-      !> cell returns dB/dz at that cell's midpoint rather than at the turning
-      !> point, which is first order and sits exactly where 1/sqrt(g) weights the
-      !> integrand most heavily -- it was the leading error of the whole scheme.
-      !> A quadratic through B on the bracket is second order and, just as
-      !> importantly, stays local: it never reads a value from outside the well,
-      !> so it returns the same number however many poloidal turns the flux tube
-      !> spans.  Neither splining g nor reading the grid's own dbdzed can promise
-      !> that, since the turning points of the barely trapped sit at the maximum
-      !> of B, which for a single-turn tube is the end of the domain.
+      !> is |dB/dz| / (z_r - z_l).  dB/dz comes from a quadratic through B on
+      !> the bracketing cell: second order, where the difference quotient across
+      !> the cell is only first order and sits exactly where 1/sqrt(g) weights
+      !> the integrand most heavily.  The quadratic also stays local, never
+      !> reading a value from outside the well, so it returns the same number
+      !> however many poloidal turns the tube spans -- which neither splining g
+      !> nor the grid's own dbdzed can promise, since the turning points of the
+      !> barely trapped sit at the maximum of B, the end of a single-turn tube.
       g_well(1) = abs(dbdz_local(z_l, iz_lo - 1, iz_lo, iz_lo + 1)) / (z_r - z_l)
       g_well(n_well) = abs(dbdz_local(z_r, iz_hi - 1, iz_hi, iz_hi + 1)) / (z_r - z_l)
 
       !> The smooth quantities at the turning points, by linear extrapolation from
       !> the two nearest interior points.  Copying the neighbour instead is an
-      !> O(dz) error, and since it sits right where the quadrature weight is
-      !> largest it dominates everything else -- it held the whole scheme to
-      !> first order.
+      !> O(dz) error sitting right where the quadrature weight is largest, which
+      !> holds the whole scheme to first order.
       weight_well(1) = extrapolate(z_well(1), z_well(2), z_well(3), weight_well(2), weight_well(3))
       weight_well(n_well) = extrapolate(z_well(n_well), z_well(n_well - 1), z_well(n_well - 2), &
                                         weight_well(n_well - 1), weight_well(n_well - 2))
@@ -3104,7 +3064,6 @@ contains
    end subroutine bounce_ints_in_well
 
 
-   ! Evaluate integrand in RH transit average
    !> <moment> selects what is transit-averaged: absent or 0 gives the
    !> Rosenbluth-Hinton integrand J_0 exp(-Q), 1 gives the radial excursion
    !> delta_x = Q/(i kx), and 2 gives delta_x^2.  The last two are what the
@@ -3192,7 +3151,6 @@ contains
 
    end subroutine eval_transit_int_integrand_RH
 
-   ! Evaluate Q factor (i*kx*vmx = vpa*nabla_par(Q))
    !> Drift-orbit phase Q_s, defined so that transit-averaging annihilates the
    !> radial magnetic drift:
    !>
@@ -3221,11 +3179,9 @@ contains
       integer :: ia
       ia = 1
 
-      !> The normalisation is checked against the phase integrated along the
-      !> field line, which is built from the geometry independently of this
-      !> closed form: in a Miller tokamak the two agree on the coefficient of
-      !> v_par / B to 0.06%, and the resulting RH inertia to 0.014% at nzed = 48
-      !> and 0.0019% at nzed = 256.  RH_drift_phase_fac is q * btor * Rmajor /
+      !> The normalisation agrees with the phase integrated along the field
+      !> line, which is built from the geometry independently of this closed
+      !> form.  RH_drift_phase_fac is q * btor * Rmajor /
       !> rhoc, which is q * bi / rhoc and so constant on the surface; smz = sqrt(m
       !> T) / Z is what converts v_drift / v_par into a radial excursion in units
       !> of rho_ref, and carrying tz here as well would count that factor twice.

@@ -843,6 +843,7 @@ contains
    !> wavelength the two halves order oppositely: the collision operator
    !> conserves particles, so the even part loses its leading term exactly and
    !> is O(kx), while the odd part is O(1).
+
    !> The same fluxes formed with the long-wavelength weights.  Comparing them
    !> with the exact ones tests the expansion independently of the turbulence:
    !> both are driven by identical fields, so the difference is the weight alone.

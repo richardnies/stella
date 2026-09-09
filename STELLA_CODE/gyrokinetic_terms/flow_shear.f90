@@ -106,9 +106,9 @@ contains
                                       * (btor(iz) * rmajor(iz) / bmag(ia, iz)) * (spec(is)%mass / spec(is)%temp)
             !> Include the Pfirsch-Schlueter contribution.  PS_flow_fac is the
             !> parallel return flow per unit dphi/dx, built by integrating the
-            !> radial grad-B drift along the field line, so it is valid at finite
-            !> aspect ratio and in a stellarator; at large aspect ratio it
-            !> reduces to the 2 q cos(theta) form that stood here.
+            !> radial grad-B drift along the field line, so it is valid at
+            !> finite aspect ratio and in a stellarator; 2 q cos(theta) is its
+            !> large-aspect-ratio limit.
             if (abs(omprimfac_PS) > epsilon(0.)) then
 
                prl_shear(ia, iz, ivmu) = prl_shear(ia, iz, ivmu) &

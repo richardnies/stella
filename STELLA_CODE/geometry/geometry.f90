@@ -1599,8 +1599,7 @@ contains
       !> is therefore computable in any geometry.
       !>
       !> Normalised to 2q in the mean, so it is identically 2q once the aspect
-      !> ratio is large enough that 1/B stops varying -- the constant parallel
-      !> flow this replaced.
+      !> ratio is large enough that 1/B stops varying.
       if (.not. allocated(sym_flow_fac)) allocate (sym_flow_fac(-nzgrid:nzgrid))
       sym_flow_fac = 1. / bmag(ia, :)
       mean = sum(dl_over_b(ia, :) * sym_flow_fac) / sum(dl_over_b(ia, :))

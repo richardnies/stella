@@ -211,9 +211,8 @@ contains
       if (write_g2_vs_zmus) deallocate (g2_vs_zmus)  
       if (write_g2_vs_kxkyzs) deallocate (g2_vs_zkykxs)   
       if (write_g2_vs_zvpamus) deallocate (g2_vs_zvpamus)  
-      !> The g2nozonal arrays were allocated alongside the g2 ones above and
-      !> were never released, leaking (nvpa*nmu + nzed*nvpa + nzed*nmu +
-      !> nzed*nvpa*nmu)*nspec reals on every call.
+      !> The g2nozonal arrays are allocated alongside the g2 ones above and
+      !> are released with them.
       if (write_g2_vs_vpamus) deallocate (g2nozonal_vs_vpamus) 
       if (write_g2_vs_zvpas) deallocate (g2nozonal_vs_zvpas)
       if (write_g2_vs_zmus) deallocate (g2nozonal_vs_zmus)  
