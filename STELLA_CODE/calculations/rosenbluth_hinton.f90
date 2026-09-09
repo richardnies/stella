@@ -113,6 +113,38 @@ module rosenbluth_hinton
 
 contains
 
+   !============================================================================
+   !====================== -1/(i kx) FLUX NORMALISATION ========================
+   !============================================================================
+   !> Apply the extra factor of -1/(i kx) that puts an RH flux on the same
+   !> footing as the nonlinear fluxes.  Every RH flux -- exact, split, or
+   !> asymptotic -- needs it, so it lives in one place: the kx = 0 convention
+   !> below is a choice, and it should only ever have to be made once.
+   !>
+   !> <flux> is (kx, z, tube, species).
+   subroutine normalise_RH_flux_by_ikx(flux)
+
+      use constants, only: zi
+      use grids_kxky, only: akx
+
+      implicit none
+
+      complex, dimension(:, :, :, :), intent(in out) :: flux
+
+      integer :: ikx_first
+
+      !> On a box grid the first slot is kx = 0, where -1/(i kx) is undefined;
+      !> that mode carries no flux, so zero it and normalise the rest.
+      ikx_first = 1
+      if (abs(akx(1)) < epsilon(0.)) then
+         flux(1, :, :, :) = 0.0
+         ikx_first = 2
+      end if
+
+      flux(ikx_first:, :, :, :) = -flux(ikx_first:, :, :, :) &
+         / (zi * spread(spread(spread(akx(ikx_first:), 2, size(flux, 2)), 3, size(flux, 3)), 4, size(flux, 4)))
+
+   end subroutine normalise_RH_flux_by_ikx
 
 !###############################################################################
 !############################ INITALIZE & FINALIZE #############################
@@ -501,7 +533,7 @@ contains
       use vpamu_grids, only: vpa, mu, vperp2, integrate_vmu
       use vpamu_grids, only: maxwell_mu, ztmax, maxwell_fac, maxwell_vpa
       use parameters_kxky_grids, only: naky, nakx, nx
-      use grids_kxky, only: aky, akx
+      use grids_kxky, only: aky
       use calculations_kxky, only: multiply_by_rho
       use stella_layouts, only: vmu_lo
       use stella_layouts, only: iv_idx, imu_idx, is_idx
@@ -602,12 +634,13 @@ contains
       !> The caller passes these arrays whether or not it means to write them,
       !> so present() alone is always true and the extra work would be done on
       !> every step regardless.  Gate on the diagnostic flags as well.
-      logical :: do_LW, do_stress
+      logical :: do_LW, do_coll_LW, do_stress
 
       ! We only have one field line because <full_flux_surface> = .false.
       ia = 1
 
       do_LW = write_RH_asymptotics .and. present(RH_fluxes_phi_even_LW)
+      do_coll_LW = write_RH_asymptotics .and. present(RH_fluxes_coll_even_LW)
       do_stress = write_RH_stress_split .and. present(RH_fluxes_phi_even_rey)
 
       !> Allocated here rather than lower down: the nonlinear block below is the
@@ -818,7 +851,7 @@ contains
          RH_fluxes_coll_even = 0.; RH_fluxes_coll_odd = 0.
          allocate (work_coll(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
       end if
-      if (present(RH_fluxes_coll_even_LW)) then
+      if (do_coll_LW) then
          RH_fluxes_coll_even_LW = 0.; RH_fluxes_coll_odd_LW = 0.
       end if
 
@@ -876,7 +909,7 @@ contains
             work_coll = 1/code_dt * integrand_even * spread(RH_integrand_odd, 1, naky)
             call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
             RH_fluxes_coll_odd = RH_fluxes_coll_tmp(1,:,:,:,:)
-            if (present(RH_fluxes_coll_even_LW)) then
+            if (do_coll_LW) then
                work_coll = 1/code_dt * integrand_even * spread(RH_LW_even, 1, naky)
                call integrate_vmu(work_coll, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
                RH_fluxes_coll_even_LW = RH_fluxes_coll_tmp(1,:,:,:,:)
@@ -900,55 +933,20 @@ contains
          RH_fluxes_coll = RH_fluxes_coll_tmp(1,:,:,:,:)
 
          ! Note : extra factor of -1/(1j*kx) to match definition of nonlinear fluxes
-         if (abs(akx(1)) < epsilon(0.)) then
-             RH_fluxes_coll(1, :,:,:) = 0.0
-             RH_fluxes_coll(2:,:,:,:) = -RH_fluxes_coll(2:,:,:,:)/(zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-         else
-             RH_fluxes_coll(1:,:,:,:) = -RH_fluxes_coll(1:,:,:,:)/(zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-         end if
+         call normalise_RH_flux_by_ikx(RH_fluxes_coll)
 
          !> The asymptotic versions need the same -1/(i kx) as the exact ones;
          !> without it they are short by exactly a factor of kx.
-         if (present(RH_fluxes_coll_even_LW)) then
-            if (abs(akx(1)) < epsilon(0.)) then
-               RH_fluxes_coll_even_LW(1,:,:,:) = 0.; RH_fluxes_coll_odd_LW(1,:,:,:) = 0.
-               RH_fluxes_coll_even_LW(2:,:,:,:) = -RH_fluxes_coll_even_LW(2:,:,:,:) &
-                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd_LW(2:,:,:,:) = -RH_fluxes_coll_odd_LW(2:,:,:,:) &
-                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-            else
-               RH_fluxes_coll_even_LW = -RH_fluxes_coll_even_LW &
-                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd_LW = -RH_fluxes_coll_odd_LW &
-                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-            end if
-            if (abs(akx(1)) < epsilon(0.)) then
-               RH_fluxes_coll_even_SW(1,:,:,:) = 0.; RH_fluxes_coll_odd_SW(1,:,:,:) = 0.
-               RH_fluxes_coll_even_SW(2:,:,:,:) = -RH_fluxes_coll_even_SW(2:,:,:,:) &
-                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd_SW(2:,:,:,:) = -RH_fluxes_coll_odd_SW(2:,:,:,:) &
-                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-            else
-               RH_fluxes_coll_even_SW = -RH_fluxes_coll_even_SW &
-                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd_SW = -RH_fluxes_coll_odd_SW &
-                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-            end if
+         if (do_coll_LW) then
+            call normalise_RH_flux_by_ikx(RH_fluxes_coll_even_LW)
+            call normalise_RH_flux_by_ikx(RH_fluxes_coll_odd_LW)
+            call normalise_RH_flux_by_ikx(RH_fluxes_coll_even_SW)
+            call normalise_RH_flux_by_ikx(RH_fluxes_coll_odd_SW)
          end if
 
          if (present(RH_fluxes_coll_even)) then
-            if (abs(akx(1)) < epsilon(0.)) then
-               RH_fluxes_coll_even(1,:,:,:) = 0.; RH_fluxes_coll_odd(1,:,:,:) = 0.
-               RH_fluxes_coll_even(2:,:,:,:) = -RH_fluxes_coll_even(2:,:,:,:) &
-                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd(2:,:,:,:) = -RH_fluxes_coll_odd(2:,:,:,:) &
-                  / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-            else
-               RH_fluxes_coll_even = -RH_fluxes_coll_even &
-                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-               RH_fluxes_coll_odd = -RH_fluxes_coll_odd &
-                  / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-            end if
+            call normalise_RH_flux_by_ikx(RH_fluxes_coll_even)
+            call normalise_RH_flux_by_ikx(RH_fluxes_coll_odd)
          end if
 
          deallocate(RH_fluxes_coll_tmp)
@@ -1244,7 +1242,7 @@ contains
       use vpamu_grids, only: vpa, mu, vperp2, integrate_vmu
       use vpamu_grids, only: maxwell_mu, maxwell_fac, maxwell_vpa
       use parameters_kxky_grids, only: naky, nakx, nx
-      use grids_kxky, only: aky, akx
+      use grids_kxky, only: aky
       use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
       use gyro_averages, only: gyro_average, gyro_average_j1, aj0x
       use arrays_fields, only: phi, apar, bpar
@@ -1404,14 +1402,7 @@ contains
          RH_omega_flux_coll = flux_tmp(1,:,:,:,:)
 
          !> -1/(i kx), matching the nonlinear flux convention.
-         if (abs(akx(1)) < epsilon(0.)) then
-            RH_omega_flux_coll(1, :,:,:) = 0.0
-            RH_omega_flux_coll(2:,:,:,:) = -RH_omega_flux_coll(2:,:,:,:) &
-               / (zi*spread(spread(spread(akx(2:),2,2*nzgrid+1),3,ntubes),4,nspec))
-         else
-            RH_omega_flux_coll(1:,:,:,:) = -RH_omega_flux_coll(1:,:,:,:) &
-               / (zi*spread(spread(spread(akx(1:),2,2*nzgrid+1),3,ntubes),4,nspec))
-         end if
+         call normalise_RH_flux_by_ikx(RH_omega_flux_coll)
       end if
 
       !------------------------------- drift ---------------------------------

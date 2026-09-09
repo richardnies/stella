@@ -356,7 +356,7 @@ contains
       !> the mirror coefficients -- is then making a modelling choice rather
       !> than stating a fact, and it is worth knowing before reading a result.
       bmag_jump = maxval(abs(bmag(:, nzgrid) - bmag(:, -nzgrid))) / maxval(abs(bmag))
-      if (bmag_jump > bmag_jump_warning) then
+      if (proc0 .and. bmag_jump > bmag_jump_warning) then
          write (*, '(a,f7.3,a)') &
             'WARNING: B differs by ', 100.0 * bmag_jump, &
             ' per cent between the two ends of the flux tube, so it does not close on itself.'

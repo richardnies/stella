@@ -56,10 +56,10 @@ contains
 
       real :: corr
       integer :: ivmu, is, imu, iv, it, iz, ia, ikx
-      integer :: ikx_ZF, m_ZF
+      integer :: ikx_ZF, ikx_ZF_max, m_ZF
       real, dimension(:, :), allocatable :: energy
       complex, dimension(:, :), allocatable :: g0k
-      complex, dimension(nakx, -nzgrid:nzgrid) :: phi_ZF
+      complex, dimension(nakx) :: phi_ZF
       real, dimension(-nzgrid:nzgrid) :: u_parallel_ZF
       logical, intent(in) :: restarted
 
@@ -132,45 +132,56 @@ contains
       ! Treat zonal g differently for triangular ZF case
       ! We put this here because ginit uses layout in xyz
       if (zonal_init_option_switch /= zonal_init_none) then
+         !> Set up the fundamental harmonic of the prescribed zonal profile.
+         !> <zonal_nkx> selects WHICH radial harmonic carries it:
+         !> the profile sits on kx = zonal_nkx * dkx, i.e. array
+         !> index 1 + zonal_nkx.  With the default of 1 this is the
+         !> lowest kx and the zonal wavelength is the box length, so it
+         !> cannot be varied independently of Lx -- raising jtwist then
+         !> rescales u_Z(0) and the flow shear along with the box, which
+         !> makes a box-length convergence test meaningless.  Raising
+         !> jtwist and zonal_nkx together keeps kx_Z, and hence
+         !> both u_Z(0) = 2*g_exb/kx_Z and the shear, fixed.
+         !>
+         !> The profile is the same on every field-line point and for every
+         !> velocity-space point, so build it once out here rather than
+         !> rebuilding it inside the (ivmu, it, iz) loops below.
+         !> A harmonic is only usable if it has a conjugate partner in the
+         !> negative-kx half, which the loop below fills from slots
+         !> 2 : nakx-ikx_max+1.  Anything above that is either the unpaired
+         !> Nyquist mode -- purely imaginary here, so the real-space profile
+         !> would not be real -- or already in the negative-kx half, where the
+         !> same loop would silently overwrite it with zero and leave no zonal
+         !> profile at all.  For odd nakx every positive kx is paired and this
+         !> is just ikx_max; for even nakx it is one less.
+         ikx_ZF_max = nakx - ikx_max + 1
+         ikx_ZF = 1 + zonal_nkx
+         if (zonal_nkx < 1 .or. ikx_ZF > ikx_ZF_max) call mp_abort &
+            ('zonal_nkx must be at least 1 and no larger than nakx-ikx_max; aborting')
+         phi_ZF(:) = 0
+         phi_ZF(ikx_ZF) = zi*zonal_g_exb / akx(ikx_ZF)**2
+
+         if (zonal_init_option_switch == zonal_init_triangular) then
+            !> A triangular wave is the ODD harmonics of the fundamental
+            !> falling off as 1/m^3, so step through m = 3, 5, 7, ... of
+            !> the chosen fundamental rather than of the lowest kx.
+            do m_ZF = 3, nakx, 2
+               ikx = 1 + m_ZF * zonal_nkx
+               if (ikx > ikx_ZF_max) exit
+               phi_ZF(ikx) = phi_ZF(ikx_ZF) / (akx(ikx)/akx(ikx_ZF))**3
+            end do
+         end if
+
+         do ikx = 1, nakx - ikx_max
+            phi_ZF(nakx - ikx + 1) = conjg(phi_ZF(ikx + 1))
+         end do
+
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             is = is_idx(vmu_lo, ivmu)
             imu = imu_idx(vmu_lo, ivmu)
             iv = iv_idx(vmu_lo, ivmu)
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
-                  !> Set up the fundamental harmonic of the prescribed zonal profile.
-                  !> <zonal_nkx> selects WHICH radial harmonic carries it:
-                  !> the profile sits on kx = zonal_nkx * dkx, i.e. array
-                  !> index 1 + zonal_nkx.  With the default of 1 this is the
-                  !> lowest kx and the zonal wavelength is the box length, so it
-                  !> cannot be varied independently of Lx -- raising jtwist then
-                  !> rescales u_Z(0) and the flow shear along with the box, which
-                  !> makes a box-length convergence test meaningless.  Raising
-                  !> jtwist and zonal_nkx together keeps kx_Z, and hence
-                  !> both u_Z(0) = 2*g_exb/kx_Z and the shear, fixed.
-                  ikx_ZF = 1 + zonal_nkx
-                  !> akx and phi_ZF run 1:nakx, so a harmonic index at or beyond
-                  !> nakx would index past the end of both.
-                  if (zonal_nkx < 1 .or. ikx_ZF > nakx) call mp_abort &
-                     ('zonal_nkx must be at least 1 and less than nakx; aborting')
-                  phi_ZF(:, :) = 0
-                  phi_ZF(ikx_ZF, :) = zi*zonal_g_exb / akx(ikx_ZF)**2
-
-                  if (zonal_init_option_switch == zonal_init_triangular) then
-                     !> A triangular wave is the ODD harmonics of the fundamental
-                     !> falling off as 1/m^3, so step through m = 3, 5, 7, ... of
-                     !> the chosen fundamental rather than of the lowest kx.
-                     do m_ZF = 3, nakx, 2
-                        ikx = 1 + m_ZF * zonal_nkx
-                        if (ikx > nakx / 2 + 1) exit
-                        phi_ZF(ikx, :) = phi_ZF(ikx_ZF, :) / (akx(ikx)/akx(ikx_ZF))**3
-                     end do
-                  end if
-
-                  do ikx = 1, nakx - ikx_max
-                     phi_ZF(nakx - ikx + 1, :) = conjg(phi_ZF(ikx + 1, :))
-                  end do
-
                   do ikx = 2, nakx
                      ! Modified adiabatic electron response => g = 0
                      ! TODO: implement properly to handle general case...
@@ -184,7 +195,7 @@ contains
                            !> quasineutrality, plus the symmetry-direction parallel flow of
                            !> <zonal_usym_fac>, which is v_parallel-odd and so leaves that
                            !> quasineutrality untouched.  Zero by default.
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) &
+                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx) &
                               * (2*(1-aj0x(1,ikx,iz,ivmu)) + zonal_rh_fac*(aj0x(1,ikx,iz,ivmu)-2 &
                                    + conjg(RH_integrand_even(ikx,iz,it,ivmu)+RH_integrand_odd(ikx,iz,it,ivmu)) &
                                    + real(RH_inertia(ikx,iz,it,is))) &
@@ -202,13 +213,13 @@ contains
                            !> aspect ratio; their large-aspect-ratio limits are
                            !> the 2 q cos(theta) and constant forms that separate
                            !> flags used to hardcode.
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
+                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
                                - aj0x(1,ikx,iz,ivmu)*zi*akx(ikx)*vpa(iv)*u_parallel_ZF(iz) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else
                            ! Choose g ~ phi*(1-J0) to satisfy quasineutrality
-                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) * 2*(1-aj0x(1,ikx,iz,ivmu) ) &
+                           gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx) * 2*(1-aj0x(1,ikx,iz,ivmu) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
                         end if
 
