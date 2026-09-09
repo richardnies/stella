@@ -45,8 +45,8 @@ contains
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
       use parameters_physics, only: zonal_g_exb, zonal_nkx
-      use parameters_physics, only: zonal_flow_PS, zonal_flow_sym
-      use parameters_physics, only: zonal_upar_fac
+      use parameters_physics, only: zonal_PS_fac, zonal_usym_fac
+      use parameters_physics, only: zonal_rh_fac
       use parameters_physics, only: zonal_init_option_switch, zonal_init_none, zonal_init_triangular
       use parameters_physics, only: zonal_closure_option_switch, zonal_closure_rh, zonal_closure_flow
       use grids_kxky, only: akx
@@ -66,17 +66,28 @@ contains
       !> The parallel flow the zonal Maxwellian carries, per unit dphi/dx.  Both
       !> profiles are available in any geometry; geometry warns if the symmetry
       !> one is being used where quasisymmetry does not hold.
+      !>
+      !> The Pfirsch-Schlueter weight belongs to the 'flow' closure alone, but
+      !> the symmetry-direction one is available under 'rh' as well: a flow
+      !> along the symmetry direction is divergence-free and carries no density,
+      !> so it can be added to the relaxed Rosenbluth-Hinton state without
+      !> disturbing the quasineutrality that state was built to satisfy.
       u_parallel_ZF = 0.
+
+      !> Refuse rather than return zero: a geometry that cannot supply one of
+      !> these profiles leaves its factor at zero, and a silently absent
+      !> parallel flow looks exactly like a deliberate one.
       if (zonal_closure_option_switch == zonal_closure_flow) then
-         !> Refuse rather than return zero: a geometry that cannot supply one of
-         !> these profiles leaves its factor at zero, and a silently absent
-         !> parallel flow looks exactly like a deliberate one.
-         if (abs(zonal_flow_PS) > epsilon(0.) .and. .not. PS_flow_defined) call mp_abort &
+         if (abs(zonal_PS_fac) > epsilon(0.) .and. .not. PS_flow_defined) call mp_abort &
             ('the Pfirsch-Schlueter flow profile is not defined for this geometry; aborting')
-         if (abs(zonal_flow_sym) > epsilon(0.) .and. .not. sym_flow_defined) call mp_abort &
+         u_parallel_ZF = u_parallel_ZF + zonal_PS_fac * PS_flow_fac
+      end if
+
+      if (zonal_closure_option_switch == zonal_closure_flow .or. &
+          zonal_closure_option_switch == zonal_closure_rh) then
+         if (abs(zonal_usym_fac) > epsilon(0.) .and. .not. sym_flow_defined) call mp_abort &
             ('the symmetry-direction flow profile is not defined for this geometry; aborting')
-         u_parallel_ZF = zonal_flow_PS * PS_flow_fac &
-                       + zonal_flow_sym * sym_flow_fac
+         u_parallel_ZF = u_parallel_ZF + zonal_usym_fac * sym_flow_fac
       end if
 
       if (gxyz_initialized) return
@@ -169,11 +180,15 @@ contains
                      else
 
                         if (zonal_closure_option_switch == zonal_closure_rh) then
-                           ! Rosenbluth-Hinton profile, with <H> = F_M * I_RH to satisfy quasineutrality
+                           !> Rosenbluth-Hinton profile, with <H> = F_M * I_RH to satisfy
+                           !> quasineutrality, plus the symmetry-direction parallel flow of
+                           !> <zonal_usym_fac>, which is v_parallel-odd and so leaves that
+                           !> quasineutrality untouched.  Zero by default.
                            gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx, iz) &
-                              * (2*(1-aj0x(1,ikx,iz,ivmu)) + zonal_upar_fac*(aj0x(1,ikx,iz,ivmu)-2 &
+                              * (2*(1-aj0x(1,ikx,iz,ivmu)) + zonal_rh_fac*(aj0x(1,ikx,iz,ivmu)-2 &
                                    + conjg(RH_integrand_even(ikx,iz,it,ivmu)+RH_integrand_odd(ikx,iz,it,ivmu)) &
-                                   + real(RH_inertia(ikx,iz,it,is))) ) &
+                                   + real(RH_inertia(ikx,iz,it,is))) &
+                                 - aj0x(1,ikx,iz,ivmu)*zi*akx(ikx)*vpa(iv)*u_parallel_ZF(iz) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else if (zonal_closure_option_switch == zonal_closure_flow) then

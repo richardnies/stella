@@ -47,8 +47,8 @@ module parameters_physics
    public :: freeze_zonal_kmin
    public :: freeze_zonal_kmax
    public :: RH_analytic_drift_phase, RH_analytic_drift_phase_specified
-   public :: zonal_flow_PS, zonal_flow_sym
-   public :: zonal_upar_fac
+   public :: zonal_PS_fac, zonal_usym_fac
+   public :: zonal_rh_fac
    public :: zonal_g_exb
    public :: zonal_nkx
    
@@ -108,8 +108,8 @@ module parameters_physics
    logical :: RH_analytic_drift_phase
    logical :: RH_analytic_drift_phase_specified
    !> Initialise the zonal distribution as a Maxwellian carrying a parallel
-   !> flow, u_par = zonal_flow_PS * PS_flow_fac
-   !>             + zonal_flow_sym * sym_flow_fac,
+   !> flow, u_par = zonal_PS_fac * PS_flow_fac
+   !>             + zonal_usym_fac * sym_flow_fac,
    !> the two profiles being the Pfirsch-Schlueter return flow and the flow
    !> along the direction of symmetry (see geometry).  Together they span every
    !> divergence-free parallel flow that can accompany the ExB flow, so the two
@@ -122,7 +122,7 @@ module parameters_physics
    !> These replace the separate booleans that used to select one corner each,
    !> evaluated in the large-aspect-ratio limit -- 2 q cos(theta) for the
    !> Pfirsch-Schlueter one and a constant for the symmetry one.
-   real :: zonal_flow_PS, zonal_flow_sym
+   real :: zonal_PS_fac, zonal_usym_fac
    
    logical :: full_flux_surface
    logical :: include_apar
@@ -131,7 +131,7 @@ module parameters_physics
 
    real :: beta, zeff, tite, nine, rhostar, irhostar, vnew_ref
    real :: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
-   real :: zonal_g_exb, zonal_upar_fac 
+   real :: zonal_g_exb, zonal_rh_fac 
    !> radial harmonic index carrying the prescribed zonal profile.  1 (the
    !> default) puts it on the lowest kx, so the zonal wavelength equals the
    !> box length and CANNOT be varied independently of Lx.  Setting it to n
@@ -208,11 +208,11 @@ contains
       zonal_init_option = 'default'
       zonal_closure_option = 'default'
       RH_analytic_drift_phase = .true.
-      zonal_flow_PS  = 1.0
-      zonal_flow_sym = 0.0
+      zonal_PS_fac  = 1.0
+      zonal_usym_fac = 0.0
       zonal_g_exb    = 0.0
       zonal_nkx      = 1
-      zonal_upar_fac = 1.0
+      zonal_rh_fac = 1.0
       
       full_flux_surface = .false.
       include_apar = .false.
@@ -281,7 +281,7 @@ contains
         zonal_init_option, zonal_closure_option, &
         zonal_g_exb, &
         RH_analytic_drift_phase, &
-        zonal_flow_PS, zonal_flow_sym, zonal_upar_fac, zonal_nkx, &
+        zonal_PS_fac, zonal_usym_fac, zonal_rh_fac, zonal_nkx, &
         full_flux_surface, include_apar, include_bpar, radial_variation, &
         beta, zeff, tite, nine, rhostar, vnew_ref, &
         g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -357,7 +357,7 @@ contains
          zonal_init_option, zonal_closure_option, &
          zonal_g_exb, &
          RH_analytic_drift_phase, &
-         zonal_flow_PS, zonal_flow_sym, zonal_upar_fac, zonal_nkx
+         zonal_PS_fac, zonal_usym_fac, zonal_rh_fac, zonal_nkx
 
       namelist /parameters/ beta, zeff, tite, nine, rhostar, vnew_ref, &
          g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS, irhostar
@@ -474,11 +474,11 @@ contains
      !> wrong answer.
      call broadcast(RH_analytic_drift_phase)
      call broadcast(RH_analytic_drift_phase_specified)
-     call broadcast(zonal_flow_PS)
-     call broadcast(zonal_flow_sym)
+     call broadcast(zonal_PS_fac)
+     call broadcast(zonal_usym_fac)
      call broadcast(zonal_g_exb)
      call broadcast(zonal_nkx)
-     call broadcast(zonal_upar_fac)
+     call broadcast(zonal_rh_fac)
      
      call broadcast(full_flux_surface)
      call broadcast(include_apar)
