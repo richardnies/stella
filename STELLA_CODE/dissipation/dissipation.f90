@@ -11,12 +11,6 @@ module dissipation
    public :: hyper_dissipation
    public :: collisions_implicit
 
-   !> x-dependent Krook sponge used to localise tertiary modes about a single
-   !> zonal-flow extremum; the operator itself lives in tertiary_sponge.f90,
-   !> only the input parameters are read here
-   public :: include_tertiary_sponge
-   public :: nu_sponge, sponge_width, sponge_exponent, sponge_centre_frac
-   public :: sponge_zonal, write_sponge_profile
    public :: cfl_dt_mudiff, cfl_dt_vpadiff
 
    public :: time_collisions
@@ -30,11 +24,6 @@ module dissipation
    logical :: hyper_dissipation
 
    character(30) :: collision_model
-
-   logical :: include_tertiary_sponge
-   logical :: sponge_zonal
-   logical :: write_sponge_profile
-   real :: nu_sponge, sponge_width, sponge_exponent, sponge_centre_frac
 
    real :: cfl_dt_mudiff = huge(0.0), cfl_dt_vpadiff = huge(0.0)
    real, dimension(2, 2) :: time_collisions = 0.
@@ -95,9 +84,7 @@ contains
 
       implicit none
 
-      namelist /dissipation/ include_collisions, collisions_implicit, collision_model, hyper_dissipation, &
-         include_tertiary_sponge, nu_sponge, sponge_width, sponge_exponent, sponge_centre_frac, &
-         sponge_zonal, write_sponge_profile
+      namelist /dissipation/ include_collisions, collisions_implicit, collision_model, hyper_dissipation
 
       integer :: in_file
       logical :: dexist
@@ -108,15 +95,6 @@ contains
          collision_model = "dougherty"        ! dougherty or fokker-planck
          hyper_dissipation = .false.
 
-         !> tertiary-mode sponge; see tertiary_sponge.f90 for what each one means
-         include_tertiary_sponge = .false.
-         nu_sponge = 0.0
-         sponge_width = 0.5
-         sponge_exponent = 2.0
-         sponge_centre_frac = 0.5
-         sponge_zonal = .false.
-         write_sponge_profile = .true.
-
          in_file = input_unit_exist("dissipation", dexist)
          if (dexist) read (unit=in_file, nml=dissipation)
       end if
@@ -125,14 +103,6 @@ contains
       call broadcast(collisions_implicit)
       call broadcast(collision_model)
       call broadcast(hyper_dissipation)
-
-      call broadcast(include_tertiary_sponge)
-      call broadcast(nu_sponge)
-      call broadcast(sponge_width)
-      call broadcast(sponge_exponent)
-      call broadcast(sponge_centre_frac)
-      call broadcast(sponge_zonal)
-      call broadcast(write_sponge_profile)
 
       if (.not. include_collisions) collisions_implicit = .false.
 

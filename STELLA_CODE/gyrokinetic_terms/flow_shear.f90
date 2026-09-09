@@ -35,7 +35,7 @@ contains
       use arrays_fields, only: shift_state
       use geometry, only: q_as_x, geo_surf, bmag, btor, rmajor, dBdrho, dIdrho
       use geometry, only: dydalpha, drhodpsi
-      use geometry, only: PS_flow_fac
+      use geometry, only: PS_flow_fac, PS_flow_defined
       use parameters_physics, only: g_exb, g_exbfac, omprimfac, omprimfac_RH, omprimfac_PS
       use vpamu_grids, only: vperp2, vpa, mu
       use vpamu_grids, only: maxwell_vpa, maxwell_mu, maxwell_fac
@@ -43,6 +43,7 @@ contains
       use file_utils, only: runtype_option_switch, runtype_multibox
       use job_manage, only: njobs
       use mp, only: job, send, receive, crossdomprocs, subprocs, scope
+      use mp, only: mp_abort
       use parameters_numerical, only: maxwellian_normalization
       use rosenbluth_hinton, only: RH_U_parallel_fac
 
@@ -88,6 +89,11 @@ contains
 
       if (radial_variation .and. .not. allocated(prl_shear_p)) &
          allocate (prl_shear_p(nalpha, -nzgrid:nzgrid, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+
+      !> Refuse rather than silently contribute nothing: PS_flow_fac is left at
+      !> zero by a geometry that cannot supply the Pfirsch-Schlueter return flow.
+      if (abs(omprimfac_PS) > epsilon(0.) .and. .not. PS_flow_defined) call mp_abort &
+         ('omprimfac_PS is set but the Pfirsch-Schlueter flow profile is not defined for this geometry; aborting')
 
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
          is = is_idx(vmu_lo, ivmu)

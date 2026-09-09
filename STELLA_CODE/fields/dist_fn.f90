@@ -27,6 +27,7 @@ contains
 
       use arrays_dist_fn, only: gvmu, gold, gnew
       use redistribute, only: gather, scatter
+      use mp, only: mp_abort
       use dist_redistribute, only: kxkyz2vmu
       use parameters_physics, only: radial_variation
       use stella_layouts, only: vmu_lo, iv_idx, imu_idx, is_idx
@@ -39,6 +40,7 @@ contains
       use species, only: spec, pfac, electron_species, nspec
       use geometry, only: dBdrho, gfac, geo_surf
       use geometry, only: PS_flow_fac, sym_flow_fac
+      use geometry, only: PS_flow_defined, sym_flow_defined
       use gyro_averages, only: aj0x
       use arrays_dist_fn, only: kperp2
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd, RH_inertia
@@ -65,9 +67,17 @@ contains
       !> profiles are available in any geometry; geometry warns if the symmetry
       !> one is being used where quasisymmetry does not hold.
       u_parallel_ZF = 0.
-      if (zonal_closure_option_switch == zonal_closure_flow) &
+      if (zonal_closure_option_switch == zonal_closure_flow) then
+         !> Refuse rather than return zero: a geometry that cannot supply one of
+         !> these profiles leaves its factor at zero, and a silently absent
+         !> parallel flow looks exactly like a deliberate one.
+         if (abs(triangular_ZF_flow_PS) > epsilon(0.) .and. .not. PS_flow_defined) call mp_abort &
+            ('the Pfirsch-Schlueter flow profile is not defined for this geometry; aborting')
+         if (abs(triangular_ZF_flow_sym) > epsilon(0.) .and. .not. sym_flow_defined) call mp_abort &
+            ('the symmetry-direction flow profile is not defined for this geometry; aborting')
          u_parallel_ZF = triangular_ZF_flow_PS * PS_flow_fac &
                        + triangular_ZF_flow_sym * sym_flow_fac
+      end if
 
       if (gxyz_initialized) return
       gxyz_initialized = .false.
@@ -128,6 +138,10 @@ contains
                   !> jtwist and triangular_ZF_nkx together keeps kx_Z, and hence
                   !> both u_Z(0) = 2*g_exb/kx_Z and the shear, fixed.
                   ikx_ZF = 1 + triangular_ZF_nkx
+                  !> akx and phi_ZF run 1:nakx, so a harmonic index at or beyond
+                  !> nakx would index past the end of both.
+                  if (triangular_ZF_nkx < 1 .or. ikx_ZF > nakx) call mp_abort &
+                     ('triangular_ZF_nkx must be at least 1 and less than nakx; aborting')
                   phi_ZF(:, :) = 0
                   phi_ZF(ikx_ZF, :) = zi*triangular_ZF_g_exb / akx(ikx_ZF)**2
 

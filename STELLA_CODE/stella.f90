@@ -138,7 +138,6 @@ contains
       use ran, only: get_rnd_seed_length, init_ranf
       use dissipation, only: init_dissipation
       use sources, only: init_sources
-      use tertiary_sponge, only: init_tertiary_sponge
       use volume_averages, only: init_volume_averages, volume_average
       
       implicit none
@@ -155,12 +154,6 @@ contains
       integer, dimension(:), allocatable  :: seed
       integer :: i, n, ierr
       real :: delt_saved
-
-      !> RN: <restarted> is only actually determined later, in <ginit>. But <init_diagnostics>
-      !> was moved earlier (see call below) to give the RH diagnostics access to <gnew> before
-      !> <ginit>, so it needs a value here too. Default to .false. (fresh run) for that early
-      !> call; <ginit> still sets the real value afterwards for the rest of the program.
-      restarted = .false.
 
       !> initialize mpi message passing
       if (.not. mpi_initialized) call init_mp
@@ -303,8 +296,6 @@ contains
       call init_sources
       !> build the x-dependent Krook sponge used to localise tertiary modes
       !> about a single zonal-flow extremum (no-op unless requested)
-      if (debug) write (6, *) 'stella::init_stella::init_tertiary_sponge'
-      call init_tertiary_sponge
       !> allocate and initialise time-independent arrays needed to
       !> solve the field equations; e.g., sum_s (Z_s^2 n_s / T_s)*(1-Gamma0_s)
       if (debug) write (6, *) 'stella::init_stella::init_fields'
@@ -610,7 +601,6 @@ contains
       use mirror_terms, only: time_mirror
       use dissipation, only: time_collisions, include_collisions 
       use sources, only: finish_sources, time_sources, source_option_switch, source_option_none
-      use tertiary_sponge, only: finish_tertiary_sponge
       use init_g, only: finish_init_g
       use dist_fn, only: finish_dist_fn
       use dist_redistribute, only: finish_redistribute
@@ -647,8 +637,6 @@ contains
       call finish_time_advance
       if (debug) write (*, *) 'stella::finish_stella::finish_sources'
       call finish_sources
-      if (debug) write (*, *) 'stella::finish_stella::finish_tertiary_sponge'
-      call finish_tertiary_sponge
       if (debug) write (*, *) 'stella::finish_stella::finish_volume_averages'
       call finish_volume_averages
       if (debug) write (*, *) 'stella::finish_stella::finish_extended_zgrid'

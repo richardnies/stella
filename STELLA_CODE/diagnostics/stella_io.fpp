@@ -39,12 +39,10 @@ module stella_io
    public :: write_g2_vs_zmus_nc
    public :: write_g2_vs_zkykxs_nc
    public :: write_g2_vs_zvpamus_nc 
-   public :: write_g2_vs_kxvpamus_nc
    public :: write_g2nozonal_vs_vpamus_nc
    public :: write_g2nozonal_vs_zvpas_nc
    public :: write_g2nozonal_vs_zmus_nc 
    public :: write_g2nozonal_vs_zvpamus_nc 
-   public :: write_g2nozonal_vs_kxvpamus_nc
    public :: write_h2_vs_vpamus_nc
    public :: write_h2_vs_zvpas_nc
    public :: write_h2_vs_zmus_nc
@@ -786,90 +784,58 @@ contains
 
    end subroutine write_moments_nc
 
-   !----------------------- RH phi fluxes -----------------------
+   !----------------------- RH field fluxes -----------------------
+   !> The phi, apar and bpar RH fluxes are written identically apart from the
+   !> variable name and the field named in the long name, so the three share
+   !> one writer.
+   subroutine write_RH_fluxes_field_nc(nout, field, RH_fluxes_even, RH_fluxes_odd)
+      implicit none
+
+      integer, intent(in) :: nout
+      character(*), intent(in) :: field
+      complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_even, RH_fluxes_odd
+
+#ifdef NETCDF
+
+      ! Define the dimensions and starting pointer
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: start
+      start = [1, 1, 1, 1, 1, 1, nout]
+
+      ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
+      call netcdf_write_complex(ncid, "RH_fluxes_"//trim(field)//"_even", RH_fluxes_even, &
+               dim_names=dims, start=start, &
+               long_name="Rosenbluth-Hinton "//trim(field)// &
+                         " Fluxes to ZF with kx from NZ modes with ky, even in vparallel")
+
+      call netcdf_write_complex(ncid, "RH_fluxes_"//trim(field)//"_odd", RH_fluxes_odd, &
+               dim_names=dims, start=start, &
+               long_name="Rosenbluth-Hinton "//trim(field)// &
+                         " Fluxes to ZF with kx from NZ modes with ky, odd in vparallel")
+
+#endif
+
+   end subroutine write_RH_fluxes_field_nc
+
    subroutine write_RH_fluxes_phi_nc(nout, RH_fluxes_phi_even, RH_fluxes_phi_odd)
       implicit none
-
       integer, intent(in) :: nout
       complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_phi_even, RH_fluxes_phi_odd
-
-#ifdef NETCDF
-
-      ! Define the dimensions and starting pointer
-      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
-      integer, dimension(7) :: start
-      start = [1, 1, 1, 1, 1, 1, nout]
-
-      ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_even",  RH_fluxes_phi_even, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, even in vparallel")
-
-      call netcdf_write_complex(ncid, "RH_fluxes_phi_odd",  RH_fluxes_phi_odd, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton phi Fluxes to ZF with kx from NZ modes with ky, odd in vparallel")
-
-
-#endif
-
+      call write_RH_fluxes_field_nc(nout, "phi", RH_fluxes_phi_even, RH_fluxes_phi_odd)
    end subroutine write_RH_fluxes_phi_nc
 
-
-   !----------------------- RH apar fluxes -----------------------
    subroutine write_RH_fluxes_apar_nc(nout, RH_fluxes_apar_even, RH_fluxes_apar_odd)
       implicit none
-
       integer, intent(in) :: nout
       complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_apar_even, RH_fluxes_apar_odd
-
-#ifdef NETCDF
-
-      ! Define the dimensions and starting pointer
-      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
-      integer, dimension(7) :: start
-      start = [1, 1, 1, 1, 1, 1, nout]
-
-      ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_apar_even",  RH_fluxes_apar_even, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, even in vparallel")
-
-      call netcdf_write_complex(ncid, "RH_fluxes_apar_odd",  RH_fluxes_apar_odd, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton apar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel")
-
-
-#endif
-
+      call write_RH_fluxes_field_nc(nout, "apar", RH_fluxes_apar_even, RH_fluxes_apar_odd)
    end subroutine write_RH_fluxes_apar_nc
 
-
-   !----------------------- RH bpar fluxes -----------------------
    subroutine write_RH_fluxes_bpar_nc(nout, RH_fluxes_bpar_even, RH_fluxes_bpar_odd)
       implicit none
-
       integer, intent(in) :: nout
       complex, dimension(:, :, :, :, :), intent(in) :: RH_fluxes_bpar_even, RH_fluxes_bpar_odd
-
-#ifdef NETCDF
-
-      ! Define the dimensions and starting pointer
-      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
-      integer, dimension(7) :: start
-      start = [1, 1, 1, 1, 1, 1, nout]
-
-      ! Write the RH fluxes (ky,kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_bpar_even",  RH_fluxes_bpar_even, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, even in vparallel")
-
-      call netcdf_write_complex(ncid, "RH_fluxes_bpar_odd",  RH_fluxes_bpar_odd, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton bpar Fluxes to ZF with kx from NZ modes with ky, odd in vparallel")
-
-
-#endif
-
+      call write_RH_fluxes_field_nc(nout, "bpar", RH_fluxes_bpar_even, RH_fluxes_bpar_odd)
    end subroutine write_RH_fluxes_bpar_nc
 
 
@@ -1339,26 +1305,6 @@ contains
 
    end subroutine write_g2_vs_zvpamus_nc
 
-   !---------------------------- g2_vs_kxvpamus(kx,vpa,mu,s,t) -----------------------------
-   subroutine write_g2_vs_kxvpamus_nc(nout, g2_vs_kxvpamus)
-
-#ifdef NETCDF
-      use neasyf, only: neasyf_write
-#endif
-
-      implicit none
-
-      integer, intent(in) :: nout
-      real, dimension(:, :, :, :), intent(in) :: g2_vs_kxvpamus
-
-#ifdef NETCDF
-      call neasyf_write(ncid, "g2_vs_kxvpamus", g2_vs_kxvpamus, &
-               dim_names=[character(len=7)::"kx", "vpa", "mu", "species", "t"], &
-               start=[1, 1, 1, 1, nout], &
-               long_name="Guiding center distribution function averaged over y and theta")
-#endif
-
-   end subroutine write_g2_vs_kxvpamus_nc
 
 
    !---------------------------- g2nozonal_vs_vpamus(vpa,mu,s,t) -----------------------------
@@ -1444,26 +1390,6 @@ contains
 
    end subroutine write_g2nozonal_vs_zvpamus_nc
 
-   !---------------------------- g2nozonal_vs_kxvpamus(kx,vpa,mu,s,t) -----------------------------
-   subroutine write_g2nozonal_vs_kxvpamus_nc(nout, g2nozonal_vs_kxvpamus)
-
-#ifdef NETCDF
-      use neasyf, only: neasyf_write
-#endif
-
-      implicit none
-
-      integer, intent(in) :: nout
-      real, dimension(:, :, :, :), intent(in) :: g2nozonal_vs_kxvpamus
-
-#ifdef NETCDF
-      call neasyf_write(ncid, "g2nozonal_vs_kxvpamus", g2nozonal_vs_kxvpamus, &
-               dim_names=[character(len=7)::"kx", "vpa", "mu", "species", "t"], &
-               start=[1, 1, 1, 1, nout], &
-               long_name="Nonzonal guiding center distribution function averaged over y and theta")
-#endif
-
-   end subroutine write_g2nozonal_vs_kxvpamus_nc
 
 
    !---------------------------- h2_vs_vpamus(vpa,mu,s,t) -----------------------------

@@ -25,7 +25,7 @@ module init_g
    real :: den0, upar0, tpar0, tperp0
    real :: den1, upar1, tpar1, tperp1
    real :: den2, upar2, tpar2, tperp2
-   real :: tstart, scale, kxmax, kxmin, scale_zonal, scale_kmin, scale_kmax, kfilter_zonal
+   real :: tstart, scale, kxmax, kxmin
    logical :: chop_side, left, scale_to_phiinit, oddparity
    character(300), public :: restart_file
    character(len=150) :: restart_dir
@@ -96,10 +96,6 @@ contains
       call broadcast(read_many)
       call broadcast(scale_to_phiinit)
       call broadcast(scale)
-      call broadcast(scale_zonal)
-      call broadcast(scale_kmin)
-      call broadcast(scale_kmax)
-      call broadcast(kfilter_zonal)
       call broadcast(oddparity)
 
       call init_save(restart_file)
@@ -171,16 +167,11 @@ contains
          den1, upar1, tpar1, tperp1, &
          den2, upar2, tpar2, tperp2, &
          kxmax, kxmin, scale_to_phiinit, &
-         scale_zonal, scale_kmin, scale_kmax, kfilter_zonal, &
          oddparity
       integer :: ierr, in_file
 
       tstart = 0. ! Used for restarted simulations
-      scale = 1.0 ! Only applies to nonzonal modes, backwards-INcompatible with < 8th Nov 23
-      scale_zonal = 1.0
-      scale_kmin = -1
-      scale_kmax = 1e5
-      kfilter_zonal = 1e5
+      scale = 1.0 ! Rescales the restarted distribution; scale <= 0 means do not rescale
       ginit_option = "default" ! Select the <ginit_options> 
       width0 = -3.5 ! Used for <ginit_options> = {default, kpar}
       refac = 1. ! Used for <ginit_options> = {kpar}
@@ -731,7 +722,7 @@ contains
 
       ! should really check if profile_variation=T here but need
       ! to move profile_variation to module that is accessible here
-      call stella_restore(gvmu, scale, scale_zonal, scale_kmin, scale_kmax, kfilter_zonal, istatus)
+      call stella_restore(gvmu, scale, istatus)
 
       if (istatus /= 0) then
          ierr = error_unit()
