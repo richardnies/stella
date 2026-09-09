@@ -43,9 +43,6 @@ contains
 !###############################################################################
 
    !============================================================================
-   !========== CALCULATE AND WRITE RH_INTEGRANDS TO NETCDF FILE ================
-   !============================================================================
-   !============================================================================
    !=========== WRITE THE BOUNCE-AVERAGED RADIAL DRIFT TO NETCDF ===============
    !============================================================================
    !> Gathers RH_drift_bounce_avg from the vmu layout onto proc0 and writes it.
@@ -85,6 +82,9 @@ contains
 
    end subroutine write_RH_bounce_drift_to_netcdf_file
 
+   !============================================================================
+   !========== CALCULATE AND WRITE RH_INTEGRANDS TO NETCDF FILE ================
+   !============================================================================
    subroutine write_RH_integrands_to_netcdf_file()
 
       use rosenbluth_hinton, only: RH_integrand_even, RH_integrand_odd
@@ -368,7 +368,7 @@ contains
    
  
    !============================================================================
-   !========== CALCULATE AND WRITE RH_PHI TO NETCDF FILE =======================
+   !========== CALCULATE AND WRITE RH_OMEGA TO NETCDF FILE =====================
    !============================================================================
    !> The parallel-flow Rosenbluth-Hinton invariant and its inertia.  Same
    !> structure as write_RH_phi_I_to_netcdf_file; the inertia does not evolve, so
@@ -435,6 +435,9 @@ contains
    end subroutine write_RH_omega_to_netcdf_file
 
 
+   !============================================================================
+   !========== CALCULATE AND WRITE RH_PHI TO NETCDF FILE =======================
+   !============================================================================
    subroutine write_RH_phi_I_to_netcdf_file(nout, timer)
 
       use rosenbluth_hinton, only: get_RH_phi_I_fluxtube

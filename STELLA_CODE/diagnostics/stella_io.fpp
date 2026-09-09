@@ -991,7 +991,7 @@ contains
 
    end subroutine write_RH_phi_I_nc
 
-   !----------------------- RH inertia ----------------------
+   !----------------------- RH omega -----------------------
    subroutine write_RH_omega_nc(nout, umom, umom_g)
       implicit none
 
@@ -1100,7 +1100,6 @@ contains
    end subroutine write_RH_inertia_nc
 
 
-   !----------------------- RH integrands -------------------
    !----------------------- RH bounce-averaged drift -----------------------
    subroutine write_RH_bounce_drift_nc(RH_drift_bounce_avg)
 
@@ -1151,6 +1150,7 @@ contains
    end subroutine write_RH_LW_weights_nc
 
 
+   !----------------------- RH integrands -----------------------
    subroutine write_RH_integrands_nc(RH_integrand_even, RH_integrand_odd)
       implicit none
 

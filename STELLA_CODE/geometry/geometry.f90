@@ -1541,8 +1541,8 @@ contains
 
    end subroutine finish_init_geometry
 
-   !============================================================================ 
-   !============================ FINISH THE GEOMETRY ===========================
+   !============================================================================
+   !===================== ZONAL PARALLEL-FLOW PROFILES =========================
    !============================================================================
    !> Build the two zonal parallel-flow profiles, PS_flow_fac and sym_flow_fac.
    !> See their declarations for the derivations; this is the quadrature.
@@ -1623,6 +1623,9 @@ contains
 
    end subroutine init_zonal_flow_profiles
 
+   !============================================================================
+   !============================ FINISH THE GEOMETRY ===========================
+   !============================================================================
    subroutine finish_geometry
 
       implicit none

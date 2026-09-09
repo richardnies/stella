@@ -292,10 +292,11 @@ contains
       !> about chosen options to stdout
       if (debug) write (6, *) 'stella::init_stella::init_dissipation'
       call init_dissipation
-      if (debug) write (6, *) 'stella::init_stella::init_sources'
-      call init_sources
       !> build the x-dependent Krook sponge used to localise tertiary modes
       !> about a single zonal-flow extremum (no-op unless requested)
+      if (debug) write (6, *) 'stella::init_stella::init_sources'
+      call init_sources
+
       !> allocate and initialise time-independent arrays needed to
       !> solve the field equations; e.g., sum_s (Z_s^2 n_s / T_s)*(1-Gamma0_s)
       if (debug) write (6, *) 'stella::init_stella::init_fields'
