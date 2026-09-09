@@ -119,9 +119,8 @@ module parameters_physics
    !>     (1, 0)  pure Pfirsch-Schlueter flow          (the default)
    !>     (0, 1)  flow along the symmetry direction, toroidal in a tokamak
    !>
-   !> These replace the separate booleans that used to select one corner each,
-   !> evaluated in the large-aspect-ratio limit -- 2 q cos(theta) for the
-   !> Pfirsch-Schlueter one and a constant for the symmetry one.
+   !> Both profiles are built by the geometry module and hold at finite aspect
+   !> ratio; 2 q cos(theta) and a constant are their large-aspect-ratio limits.
    real :: zonal_PS_fac, zonal_usym_fac
    
    logical :: full_flux_surface

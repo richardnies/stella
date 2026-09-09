@@ -132,28 +132,12 @@ contains
       ! Treat zonal g differently for triangular ZF case
       ! We put this here because ginit uses layout in xyz
       if (zonal_init_option_switch /= zonal_init_none) then
-         !> Set up the fundamental harmonic of the prescribed zonal profile.
-         !> <zonal_nkx> selects WHICH radial harmonic carries it:
-         !> the profile sits on kx = zonal_nkx * dkx, i.e. array
-         !> index 1 + zonal_nkx.  With the default of 1 this is the
-         !> lowest kx and the zonal wavelength is the box length, so it
-         !> cannot be varied independently of Lx -- raising jtwist then
-         !> rescales u_Z(0) and the flow shear along with the box, which
-         !> makes a box-length convergence test meaningless.  Raising
-         !> jtwist and zonal_nkx together keeps kx_Z, and hence
-         !> both u_Z(0) = 2*g_exb/kx_Z and the shear, fixed.
-         !>
-         !> The profile is the same on every field-line point and for every
-         !> velocity-space point, so build it once out here rather than
-         !> rebuilding it inside the (ivmu, it, iz) loops below.
-         !> A harmonic is only usable if it has a conjugate partner in the
-         !> negative-kx half, which the loop below fills from slots
-         !> 2 : nakx-ikx_max+1.  Anything above that is either the unpaired
-         !> Nyquist mode -- purely imaginary here, so the real-space profile
-         !> would not be real -- or already in the negative-kx half, where the
-         !> same loop would silently overwrite it with zero and leave no zonal
-         !> profile at all.  For odd nakx every positive kx is paired and this
-         !> is just ikx_max; for even nakx it is one less.
+         !> Prescribed zonal profile on kx = zonal_nkx * dkx, i.e. array index
+         !> 1 + zonal_nkx.  Identical at every z and velocity-space point, so
+         !> build it once here.  The harmonic needs a conjugate partner in the
+         !> negative-kx half: past nakx-ikx_max+1 it is either the unpaired
+         !> Nyquist mode, which cannot carry an imaginary amplitude, or already
+         !> in that half, where the symmetry loop below overwrites it with zero.
          ikx_ZF_max = nakx - ikx_max + 1
          ikx_ZF = 1 + zonal_nkx
          if (zonal_nkx < 1 .or. ikx_ZF > ikx_ZF_max) call mp_abort &
@@ -162,9 +146,8 @@ contains
          phi_ZF(ikx_ZF) = zi*zonal_g_exb / akx(ikx_ZF)**2
 
          if (zonal_init_option_switch == zonal_init_triangular) then
-            !> A triangular wave is the ODD harmonics of the fundamental
-            !> falling off as 1/m^3, so step through m = 3, 5, 7, ... of
-            !> the chosen fundamental rather than of the lowest kx.
+            !> A triangular wave is the odd harmonics of the fundamental
+            !> falling off as 1/m^3.
             do m_ZF = 3, nakx, 2
                ikx = 1 + m_ZF * zonal_nkx
                if (ikx > ikx_ZF_max) exit
@@ -183,8 +166,6 @@ contains
             do it = 1, ntubes
                do iz = -nzgrid, nzgrid
                   do ikx = 2, nakx
-                     ! Modified adiabatic electron response => g = 0
-                     ! TODO: implement properly to handle general case...
                      if (spec(is)%type == electron_species) then
                         gnew(1, ikx, iz, it, ivmu) = 0.
 
@@ -203,16 +184,9 @@ contains
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)
 
                         else if (zonal_closure_option_switch == zonal_closure_flow) then
-                           !> A Maxwellian carrying a parallel flow.  The two
-                           !> profiles span every divergence-free parallel flow
-                           !> that can accompany the ExB flow, so the two scalars
-                           !> reach any of them: (0,0) leaves a density
-                           !> perturbation, (1,0) is pure Pfirsch-Schlueter,
-                           !> (0,1) is flow along the symmetry direction.  Both
-                           !> are built by the geometry module and hold at finite
-                           !> aspect ratio; their large-aspect-ratio limits are
-                           !> the 2 q cos(theta) and constant forms that separate
-                           !> flags used to hardcode.
+                           !> A Maxwellian carrying a parallel flow.  See
+                           !> <zonal_PS_fac> and <zonal_usym_fac> in
+                           !> parameters_physics for what the two weights select.
                            gnew(1, ikx, iz, it, ivmu) = spec(is)%z * phi_ZF(ikx) * ( 2*(1-aj0x(1,ikx,iz,ivmu) ) &
                                - aj0x(1,ikx,iz,ivmu)*zi*akx(ikx)*vpa(iv)*u_parallel_ZF(iz) ) &
                               * maxwell_mu(ia, iz, imu, is) * maxwell_vpa(iv, is) * maxwell_fac(is)

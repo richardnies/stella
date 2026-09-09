@@ -107,14 +107,12 @@ module parameters_diagnostics
    !> The RH transit-average integrands, resolved over the whole (kx, z, tube,
    !> species, vpa, mu) grid.  That array is large -- a few megabytes for a
    !> single-kx linear run, but hundreds for a nonlinear one with many kx, and it
-   !> is held twice -- so it has its own switch.  Left on by default, since it
-   !> was previously written whenever the RH diagnostics were.
+   !> is held twice -- so it has its own switch.  On by default.
    logical :: write_RH_integrands
 
    !> Write the long-wavelength (order kx^2) approximations to the projection
-   !> weights alongside the exact ones, so that an asymptotic claim can be
-   !> checked in the run that motivates it rather than argued about.  Off by
-   !> default: it costs a second pass over the transit averages.
+   !> weights alongside the exact ones.  Off by default: it costs a second pass
+   !> over the transit averages.
    !> Split the even/odd nonlinear channels into their Reynolds and
    !> diamagnetic halves, by rebuilding the flux with the adiabatic part of g
    !> in place of g.  Costs one extra transform per point in the nonlinear

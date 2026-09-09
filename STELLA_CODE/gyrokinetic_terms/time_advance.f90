@@ -2008,17 +2008,9 @@ contains
 
       if (runtype_option_switch == runtype_multibox) call scope(subprocs)
 
-      !> NOTE (corrected): this used to overwrite cfl_dt_ExB with cfl_dt_linear
-      !> whenever only_zonal_interaction .and. freeze_zonal, on the grounds that
-      !> a frozen zonal field needs no CFL. That is wrong. Freezing the zonal
-      !> field stops it EVOLVING; it does not stop it ADVECTING, and advection by
-      !> a prescribed flow constrains an explicit scheme exactly as any other
-      !> advection does. With the override in place a tertiary run kept the
-      !> timestep it was given at initialisation no matter how strong the
-      !> prescribed flow was -- measured advective CFL numbers of 0.78, 1.56 and
-      !> 2.34 at zonal_g_exb = 6.4, 12.8 and 19.2, all at an unchanged
-      !> dt = 1.2467e-2. The ExB estimate is now respected in this case too.
-
+      !> The ExB estimate applies even to a frozen zonal field: freezing stops
+      !> it evolving, not advecting, and advection by a prescribed flow
+      !> constrains an explicit scheme like any other.
 
       !> check estimated cfl_dt to see if the time step size needs to be changed
       cfl_dt = min(cfl_dt_ExB, cfl_dt_linear)

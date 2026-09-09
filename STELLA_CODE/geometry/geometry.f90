@@ -128,10 +128,9 @@ module geometry
    !>
    !> In a large-aspect-ratio circular tokamak gbdrift0 -> -2 shat sin(theta)/R0
    !> and b.grad z -> 1/(q R0), so I -> (2q/B0) cos(theta) and the whole thing
-   !> collapses to the familiar u_par = 2 q cos(theta) v_E.  That limit is what
-   !> the old hardcoded cos(zed) form was, and it is recovered here rather than
-   !> assumed, so the models built on it now hold at finite aspect ratio and in
-   !> a stellarator.
+   !> collapses to the familiar u_par = 2 q cos(theta) v_E.  That limit is
+   !> recovered rather than assumed, so this holds at finite aspect ratio and
+   !> in a stellarator.
    real, dimension(:), allocatable :: PS_flow_fac
    logical :: PS_flow_defined = .false.
 
@@ -148,9 +147,7 @@ module geometry
    !>
    !> Normalised to 2q in the flux-surface average, which makes it identically
    !> 2q at large aspect ratio: there I/B -> R0, a constant, and the profile
-   !> collapses to the constant parallel flow that used to stand in for it.
-   !> That constant was the large-aspect-ratio approximation of this, in the
-   !> same way that 2 q cos(theta) was of PS_flow_fac.
+   !> collapses to a constant parallel flow.
    !>
    !> Together the two profiles span every divergence-free parallel flow that
    !> can accompany a given ExB flow: any two differ by the homogeneous solution
@@ -351,10 +348,9 @@ contains
          call get_dzed(nzgrid, delzed, bmag(iy, :), dbdzed(iy, :))
       end do
 
-      !> Say so when the tube does not close on itself.  Every quantity that
+      !> Warn when the tube does not close on itself: every quantity that
       !> identifies the two ends -- the pdf of a zonal mode, the field solve,
-      !> the mirror coefficients -- is then making a modelling choice rather
-      !> than stating a fact, and it is worth knowing before reading a result.
+      !> the mirror coefficients -- is then making a modelling choice.
       bmag_jump = maxval(abs(bmag(:, nzgrid) - bmag(:, -nzgrid))) / maxval(abs(bmag))
       if (proc0 .and. bmag_jump > bmag_jump_warning) then
          write (*, '(a,f7.3,a)') &
@@ -1328,11 +1324,10 @@ contains
    !> The interior is a centred difference.  At the two end nodes the centred
    !> difference has to reach across the join, and doing so presumes that the
    !> two ends of the tube are the same physical point -- that f is periodic.
-   !> That is true of a tube that closes on itself, and false of one that does
-   !> not: on the W7-X alpha0 = 0.7 line B differs by about one per cent
-   !> between the ends, and up to fourteen per cent in other equilibria, so the
-   !> derivative there is not merely inaccurate but of the wrong sign and size.
-   !> It feeds the mirror term, which uses dB/dz at every z including the ends.
+   !> That is true of a tube that closes on itself and false of one that does
+   !> not, where B can differ by several per cent between the ends and the
+   !> derivative comes out the wrong sign and size.  It feeds the mirror term,
+   !> which uses dB/dz at every z including the ends.
    !>
    !> With <one_sided_dbdz_at_ends> the end nodes of a tube that does not close
    !> instead take a second-order one-sided difference, which needs nothing

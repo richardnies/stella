@@ -113,15 +113,8 @@ module rosenbluth_hinton
 
 contains
 
-   !============================================================================
-   !====================== -1/(i kx) FLUX NORMALISATION ========================
-   !============================================================================
-   !> Apply the extra factor of -1/(i kx) that puts an RH flux on the same
-   !> footing as the nonlinear fluxes.  Every RH flux -- exact, split, or
-   !> asymptotic -- needs it, so it lives in one place: the kx = 0 convention
-   !> below is a choice, and it should only ever have to be made once.
-   !>
-   !> <flux> is (kx, z, tube, species).
+   !> Apply the -1/(i kx) factor that puts an RH flux on the same footing as
+   !> the nonlinear fluxes.  <flux> is (kx, z, tube, species).
    subroutine normalise_RH_flux_by_ikx(flux)
 
       use constants, only: zi
@@ -133,8 +126,8 @@ contains
 
       integer :: ikx_first
 
-      !> On a box grid the first slot is kx = 0, where -1/(i kx) is undefined;
-      !> that mode carries no flux, so zero it and normalise the rest.
+      !> kx = 0 sits in the first slot on a box grid, carries no flux, and has
+      !> no -1/(i kx) to apply.
       ikx_first = 1
       if (abs(akx(1)) < epsilon(0.)) then
          flux(1, :, :, :) = 0.0
@@ -643,8 +636,8 @@ contains
       do_coll_LW = write_RH_asymptotics .and. present(RH_fluxes_coll_even_LW)
       do_stress = write_RH_stress_split .and. present(RH_fluxes_phi_even_rey)
 
-      !> Allocated here rather than lower down: the nonlinear block below is the
-      !> first user, and allocating after it segfaults.
+      !> Must be allocated before the nonlinear block below, which is the first
+      !> user of these arrays.
       if (do_stress) then
          RH_fluxes_phi_even_rey = 0.; RH_fluxes_phi_odd_rey = 0.
          RH_fluxes_phi_even_dia = 0.; RH_fluxes_phi_odd_dia = 0.
@@ -718,36 +711,16 @@ contains
                       SW_int_odd( :,:,iz,it,ivmu) = NL_term * spread(RH_SW_odd( :,iz,it,ivmu), 1, naky)
                    end if
                    if (do_stress) then
-                      !> The Reynolds half: the BARE velocity against the
-                      !> GYROAVERAGED distribution.
-                      !>
-                      !> Not the bare velocity against the bare distribution,
-                      !> which is what this used to be.  The full flux carries
-                      !> J0 at the ADVECTING mode's wavenumber k', while
-                      !> quasineutrality relates a moment of h to dphi only when
-                      !> the J0 sits at h's own wavenumber, the beat q.  Removing
-                      !> the gyroaverage entirely therefore does not leave the
-                      !> polarisation-charge flux; it leaves that plus an O(b)
-                      !> piece of the pressure moment, and the remainder called
-                      !> "diamagnetic" carried minus the same piece.  The two
-                      !> halves then cancelled: measured at kx = 0, where the
-                      !> total is 1.3e-20 by ambipolarity, each half was 4.4e-05
-                      !> -- nine times the largest value the total reaches at any
-                      !> kx.  They were two halves of one object cut in a place
-                      !> with no physical meaning, and the ratio and the
-                      !> anti-alignment measured from them were properties of the
-                      !> cut.
-                      !>
-                      !> Splitting the Bessel ARGUMENT instead of removing the
-                      !> Bessel fixes it.  gyro_average applies J0 at the
-                      !> wavenumber of the array it is handed, so gyroaveraging
-                      !> h_slice puts J0 at the beat, and the real-space product
-                      !> with the bare velocity is then exactly the flux of
-                      !> polarisation charge -- the Reynolds stress, with no
-                      !> expansion.  The remainder carries
-                      !> J0(k') - J0(q) = O(kx) and is a genuine FLR pressure
-                      !> stress.  Both halves now vanish separately at kx = 0, as
-                      !> a stress must.
+                      !> The Reynolds half: the bare velocity against the
+                      !> gyroaveraged distribution.  The split is in the Bessel
+                      !> ARGUMENT, not in whether a Bessel is applied.
+                      !> gyro_average applies J0 at the wavenumber of the array
+                      !> it is handed, so gyroaveraging h_slice puts J0 at the
+                      !> beat q and the real-space product with the bare
+                      !> velocity is exactly the flux of polarisation charge.
+                      !> The remainder carries J0(k') - J0(q) = O(kx) and is an
+                      !> FLR pressure stress.  Both halves vanish separately at
+                      !> kx = 0, as a stress must.
                       vchix_bare = zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it)
                       call transform_kx2x_xfirst(vchix_bare, vchix_bare_ky_x)
                       call gyro_average(h_slice, iz, ivmu, h_gyro)
@@ -870,13 +843,10 @@ contains
          !> Evaluate dt * collision operator (stored in integrand_even).
          !>
          !> <advance_collisions_implicit> is a time-advance routine, not a
-         !> side-effect-free evaluation of C[g]: it declares phi, apar and bpar
-         !> intent(in out) and updates them as part of the implicit solve, and it
-         !> overwrites the module-level <gvmu> through the scatter/gather to the
-         !> kxkyz layout.  Calling it here with the live fields let a diagnostic
-         !> corrupt the simulation state.  Electrostatically the damage was
-         !> survivable, but with apar evolving it produced NaNs within ten steps.
-         !> So hand it copies and put <gvmu> back afterwards.
+         !> side-effect-free evaluation of C[g]: it updates phi, apar and bpar
+         !> as part of the implicit solve and overwrites the module-level <gvmu>
+         !> through the scatter/gather to the kxkyz layout.  A diagnostic must
+         !> not do that to the live state, so hand it copies and restore <gvmu>.
          if (collisions_implicit) then
             allocate (phi_copy, source=phi)
             allocate (apar_copy, source=apar)
@@ -970,6 +940,7 @@ contains
       !> source term.  Here the source is itself -i kx sum_s Z_s n_s
       !> integral(W <v_Mx>_b g), so the two factors of kx cancel and what is left
       !> is a plain velocity integral.
+
       !> Only where Q was integrated along the field line.  The closed form is
       !> derived on the assumption that the transit-averaged drift vanishes, so
       !> pairing it with a numerically non-zero one would leave the cancellation
@@ -1616,12 +1587,10 @@ contains
       !> than when they take the caller's fallback instead.
       !>
       !> The two rejections that do carry weight are both correct as they stand.
-      !> A well running off the end of the tube (1.7% of orbits in ITER, 14% in
-      !> W7-X and TJ-II, 33% in QA) is not a complete bounce and cannot honestly
-      !> be integrated.  A well spanning a single cell -- 6.7% in TJ-II, under
-      !> 0.3% elsewhere -- has the fallback as its exact limit, not as an
-      !> approximation: the drift at the point the particle sits, and no phase
-      !> accumulated across a vanishing well.
+      !> A well running off the end of the tube is not a complete bounce and
+      !> cannot honestly be integrated.  A well spanning a single cell has the
+      !> fallback as its exact limit, not as an approximation: the drift at the
+      !> point the particle sits, and no phase across a vanishing well.
       well_found = (iz_lo > -nzgrid) .and. (iz_hi < nzgrid) .and. (iz_hi - iz_lo >= 2)
 
    end subroutine find_well
@@ -1825,9 +1794,9 @@ contains
       !> under the two-sign average the caller applies to trapped particles.
       !>
       !> The drift average is a different matter.  Zero is not its limit -- these
-      !> orbits are counted as trapped by the flux split, so reporting nothing for
-      !> them dilutes the trapped drive by their share of it, which is 14% of
-      !> trapped weight in W7-X and 27% in TJ-II.  What can be had is the average
+      !> orbits are counted as trapped by the flux split, so reporting nothing
+      !> for them dilutes the trapped drive by their share of it, which can be a
+      !> quarter of the trapped weight.  What can be had is the average
       !> over the part of the orbit that does lie inside the domain, which
       !> find_well returns in iz_lo and iz_hi whether or not it closed the well.
       !> That is the honest estimate at both extremes: for a well spanning barely
@@ -1944,16 +1913,8 @@ contains
       end do
       call geo_spline(z_well, num_well, z_theta, num_theta)
       call geo_spline(z_well, den_well, z_theta, den_theta)
-      !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
-      !> construction, but its cubic spline is not.  Where the well contains
-      !> interior maxima of B lying just below B_c -- the ordinary situation on a
-      !> stellarator field line, and where g varies over orders of magnitude --
-      !> the spline overshoots and returns negative values, and the integrand
-      !> carries 1/sqrt(g).  A monotone cubic is bounded on each interval by the
-      !> data either side of it, so it cannot overshoot and needs no repair
-      !> afterwards -- which matters for more than robustness: the clamp that
-      !> used to sit here was an O(1) edit over an O(dz) stretch of the well and
-      !> cost the trapped channel a whole order of convergence.
+      !> g must stay positive: the integrand carries 1/sqrt(g).  See
+      !> <interp_monotone> for why an ordinary spline will not do.
       call interp_monotone(z_well, g_well, z_theta, g_theta)
       num_theta = num_theta / sqrt(g_theta)
       den_theta = den_theta / sqrt(g_theta)
@@ -2176,16 +2137,8 @@ contains
       call geo_spline(z_well, weight_well, z_node, weight_node)
       call interp_monotone(z_well, g_well, z_node, g_node)
 
-      !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
-      !> construction, but its cubic spline is not.  Where the well contains
-      !> interior maxima of B lying just below B_c -- the ordinary situation on a
-      !> stellarator field line, and where g varies over orders of magnitude --
-      !> the spline overshoots and returns negative values, and the integrand
-      !> carries 1/sqrt(g).  A monotone cubic is bounded on each interval by the
-      !> data either side of it, so it cannot overshoot and needs no repair
-      !> afterwards -- which matters for more than robustness: the clamp that
-      !> used to sit here was an O(1) edit over an O(dz) stretch of the well and
-      !> cost the trapped channel a whole order of convergence.
+      !> g must stay positive: the integrand carries 1/sqrt(g).  See
+      !> <interp_monotone> for why an ordinary spline will not do.
       weight_node = weight_node / sqrt(g_node)
 
       drift_average = sum(drift_node * weight_node) / sum(weight_node)
@@ -2404,10 +2357,9 @@ contains
    !>
    !> Three things are worth saying about this.
    !>
-   !> The sum is kept coherent.  The modulus quoted in the write-up drops the
-   !> interference between stationary points, which is what survives averaging
-   !> over a Maxwellian -- but that averaging happens afterwards, in the
-   !> velocity integral, so a single particle's weight must keep its phases.
+   !> The sum is kept coherent.  Averaging over a Maxwellian happens afterwards,
+   !> in the velocity integral, so a single particle's weight must carry the
+   !> interference between stationary points rather than its modulus.
    !>
    !> The stationary points are located from dx itself rather than from B.
    !> Where dx ~ vpa/B the two coincide, since
@@ -2422,6 +2374,7 @@ contains
    !> regular in vpa, so the endpoint behaves as a plain Fourier integral with a
    !> linear phase and contributes at O(1/kx) -- down by kx^(-1/2) on the terms
    !> kept here.
+
    !> Y0 and K0, needed for the uniform (Bessel) form of the transit average
    !> near the trapped-passing boundary.  stella's spfunc carries only J0 and J1,
    !> and these are the standard Abramowitz & Stegun rational approximations
@@ -2974,245 +2927,19 @@ contains
 
    end subroutine eval_transit_int_numerator
 
-   !> Linear extrapolation of f to <z>, from its values at z1 and z2.
-   !============================================================================
-   !=========== SHAPE-PRESERVING INTERPOLATION OF THE WELL PROFILE =============
-   !============================================================================
    !> Monotone piecewise cubic (Fritsch-Carlson) interpolation of <y> at <xi>.
    !>
-   !> This exists for one quantity: g = (B_c - B) / ((z - z_l)(z_r - z)), the
-   !> smooth remainder after the turning-point singularity has been factored out
-   !> of a bounce integral.  g is positive throughout the well by construction,
-   !> but a cubic spline through it is not: where the well contains interior
-   !> maxima of B lying just below B_c -- the ordinary situation on a stellarator
-   !> field line, where g varies over orders of magnitude -- the spline
-   !> overshoots and returns negative values, and the integrand carries
-   !> 1/sqrt(g).
+   !> Used for g = (B_c - B) / ((z - z_l)(z_r - z)), the smooth remainder left
+   !> after the turning-point singularity is factored out of a bounce integral.
+   !> g is positive throughout the well by construction, but an ordinary cubic
+   !> spline through it is not: where the well has interior maxima of B just
+   !> below B_c -- the usual situation on a stellarator field line, where g
+   !> varies over orders of magnitude -- the spline overshoots to negative
+   !> values, and the integrand carries 1/sqrt(g).  A monotone cubic is bounded
+   !> on each interval by the data either side of it, so it cannot overshoot.
    !>
-   !> That used to be handled by clamping the spline into the range of its own
-   !> data afterwards.  Clamping works, in that nothing blows up, but it is an
-   !> O(1) correction applied over an O(dz) stretch of the well, so it costs a
-   !> whole order of accuracy: measured against the identity the budget rests
-   !> on, the trapped channel converged as dz while the circulating channel next
-   !> to it converged as dz^2.  A monotone cubic cannot overshoot in the first
-   !> place -- on each interval it is bounded by the data either side of it -- so
-   !> the clamp is unnecessary and the order is recovered.
-   !>
-   !> Interpolating log g instead also enforces positivity, and was tried: it is
-   !> unstable here, because g approaches zero at those interior barriers and its
-   !> logarithm spikes, which merely moves the overshoot into the exponent.
-   !>
-   !> This recovers part of the order but not all of it: measured on the W7-X
-   !> drift channel the trapped channel goes from 0.99 to 1.28, against the
-   !> circulating channel's 1.93, and the residual at production resolution moves
-   !> only from 1.257e-01 to 1.244e-01.  What is left is not these theta
-   !> quadratures -- refining n_theta and n_nodes fourfold changes the answer by
-   !> 6e-04 relative, so they are converged -- but the z-grid data fed to them:
-   !> the set of grid points the well happens to contain, and the treatment of
-   !> the cell adjoining each turning point, where the theta nodes cluster.
-   !> Fixing that means changing which nodes the well integral is built on, not
-   !> how they are interpolated.  Two further candidates have been tried and
-   !> measured, and neither is it: refining the theta and node quadratures
-   !> fourfold changes the answer by 6e-04 relative, and evaluating g at the
-   !> Chebyshev nodes directly from a spline of B -- which removes both the
-   !> supplied turning-point value and the interpolation across the cell beside
-   !> it -- reproduces the monotone-cubic answer to four digits (0.09187 against
-   !> 0.09190, order 1.29 against 1.28).  Raising the turning-point extrapolation
-   !> of <numerator_well> and <weight_well> from linear to quadratic is a no-op
-   !> as well (0.09195, order 1.28).
-   !>
-   !> A fifth was tried on the strength of an argument that the remaining error
-   !> had to be the well's node set -- z_well(1) is the turning point and
-   !> z_well(2) the first grid point inside, the gap between them is whatever the
-   !> grid leaves, and it jumps by a cell as B_c crosses a grid point, which is
-   !> first order and sits exactly where the Chebyshev nodes cluster.  Doing the
-   !> interpolation in theta instead of z removes that pathology completely: a
-   !> point a distance d inside a turning point maps to theta = sqrt(2d/half), so
-   !> the crowded cell is stretched and the node set varies smoothly with B_c.
-   !> It is also a no-op (0.09192, order 1.28).
-   !>
-   !> So the argument was wrong, and with it the claim that the node set is what
-   !> limits this.  Five candidates, four no-ops, and the one that helped was the
-   !> clamp.  Whatever is left is not in how <bounce_ints_in_well> interpolates
-   !> or extrapolates its well profile, because every part of that has now been
-   !> changed independently without moving the answer past the third digit.  The
-   !> next place to look is outside this routine.
-   !>
-   !> Note what the n_theta/n_nodes test already excludes, since it is easy to
-   !> propose again: the weight is integrated on 64 Chebyshev nodes here and the
-   !> drift-orbit phase on 512 uniform theta nodes in eval_Q_profile_hat, and
-   !> those being different rules cannot be the problem, because refining both
-   !> fourfold moves nothing.  Two converged rules compute the same integral
-   !> whatever their form.
-   !>
-   !> One more lead was written here and is also excluded, by a test above rather
-   !> than by a new one.  Q is built on theta nodes, stored on the z grid, and
-   !> interpolated back; and Q(z) has a square-root cusp at each turning point,
-   !> because z = mid + half cos(theta) makes dtheta/dz diverge there, so
-   !> interpolating Q in z is first order exactly where the weight is largest.
-   !> That is a good argument and it is still wrong: numerator_well carries
-   !> exp(-Q), and interpolating numerator_well in theta -- which removes that
-   !> error -- was the no-op listed above.
-   !>
-   !> And none of them could have worked, which is worth stating before anyone
-   !> spends more effort here.  The residual is independent of the time step:
-   !> at fixed final time, delt = 0.05, 0.025 and 0.0125 give 1.2444e-01,
-   !> 1.2387e-01 and 1.2358e-01, a ratio of 1.00 per halving.  Refining nzed
-   !> fourfold and the velocity grid fourfold, one at a time, left it equally
-   !> flat, and that was read at the time as excluding discretisation error
-   !> altogether.  That reading was wrong -- see the resolution at the end of
-   !> this note -- but the conclusion drawn from it for this routine stands:
-   !> the well quadrature is not what limits the budget.
-   !>
-   !> The case-1 residual was then read as a fixed absolute discrepancy in the
-   !> drift channel divided by the strength of the drive, on the strength of its
-   !> correlation with the turnover across the nfield_periods scan (-0.947; it
-   !> reads 1.5e-02 at nfp = 9, where the flow turns over 4.4 times, and
-   !> 1.2e-01 at nfp = 8, where it turns over 0.96).  Part of that is real --
-   !> the drive does vary sixfold with tube length -- but it is not the
-   !> explanation either; again see the end of this note.
-   !>
-   !> Two components of that flux have since been checked and are right.  The
-   !> Boltzmann part of h: the diagnostic does not feed back, so a run with the
-   !> term and one without have bit-identical dynamics and the flux is linear in
-   !> it, which makes its coefficient scannable exactly and offline.  Removing it
-   !> takes nfp = 9 from 1.6e-02 to 4.3e-01, and the optimum coefficient is
-   !> 1.000 there -- the coded value, with no improvement available -- against
-   !> 1.110 at nfp = 8.  A real coefficient error sits in the same place in both,
-   !> as the momentum inertia did; this does not.
-   !>
-   !> And the fallback for wells find_well rejects, which gives those orbits
-   !> Q = 0 while reporting a pointwise drift average -- a weight and a residual
-   !> from different orbits, and the most obvious remaining inconsistency in the
-   !> chain.  Across the nfield_periods scan the rejected fraction runs from 9%
-   !> to 52% while the residual runs from 1.5e-02 to 2.7e-01, and they correlate
-   !> at +0.12.  nfp = 5 rejects 52%, the most of any, and is second best;
-   !> nfp = 6 rejects 9%, the least, and is four times worse than nfp = 9 which
-   !> rejects 21%.  So the fallback is not what this is either.
-   !>
-   !> The defining relation has also been checked numerically against this
-   !> implementation, which is the strongest single statement available about
-   !> the construction.  Q is built so that
-   !>
-   !>     vMx = <vMx>_tau + vpar grad_par Q,
-   !>
-   !> and that holds here to roundoff in both branches: for passing orbits
-   !> Q(+L) - Q(-L) comes out at 1e-16 relative over lambda = 0 to 0.39, and for
-   !> trapped ones Psi at the far turning point comes out at 5e-17 relative.  It
-   !> is algebraic rather than accidental -- the passing average uses the same
-   !> trapezoid weights dz/(|gradpar| sqrt(vpa2)) that the cumulative Q integral
-   !> uses, and the trapped average is formed on the very theta nodes Psi is
-   !> integrated on -- which is what the comments beside each of them claim, now
-   !> confirmed rather than asserted.
-   !>
-   !> Checked with it: RH_drift_bounce_avg = energyval * drift_average is right
-   !> because the drift is linear in energy at fixed lambda; drift_norm matches
-   !> time_advance's fac, with tz in drift_weight and not in Q because the phase
-   !> needs v_drift/v_par and tz/stm is smz, which the caller applies; and the
-   !> Maxwellian weighting on the Boltzmann term matches wdriftx_phi's factor for
-   !> factor.  The annihilation then follows algebraically, since
-   !> <J0 exp(-Q)>_tau is constant along the orbit.
-   !>
-   !> So the drift-orbit phase and its consistency with <vMx> are excluded too.
-   !>
-   !> The J0 factors have been checked against stella's own as well, since the
-   !> closure test above cannot see them -- J0 cancels out of it.  This module
-   !> hand-rolls the Bessel argument in eval_transit_int_numerator rather than
-   !> reading gyro_averages::aj0x, and the two agree exactly for a zonal mode:
-   !> stella builds kperp2 = akx^2 gds22, divided by shat^2 unless q_as_x, which
-   !> is what is written here; both clamp it at zero; and the argument is
-   !> bess_fac * smz_psi0 * sqrt(vperp2 * kperp2) / bmag in both.  stella then
-   !> calls enforce_single_valued_kperp2, which this module does not, but that
-   !> acts only where nsegments > 1 and a zonal mode links to itself, so it is a
-   !> no-op here.
-   !>
-   !> That closes the audit.  Every factor in the chain from the geometry to the
-   !> flux has now been checked against either stella's own arithmetic or a
-   !> numerical test: the drift normalisation, the energy scaling, the Maxwellian
-   !> weighting, the Boltzmann coefficient, the drift-orbit phase, its
-   !> consistency with <vMx>, and the Bessel arguments.  The implementation is
-   !> faithful to the derivation in this note.  If a term is missing it is
-   !> missing from both, which is where anyone continuing should look.
-   !>
-   !> Resolution.  The discrepancy is not in this module at all; it is the
-   !> discretisation of stella's parallel dynamics acting on a distribution that
-   !> the grid no longer resolves, and the diagnostic reports it faithfully.
-   !>
-   !> The budget rests on the identity dPhi/dt = -i kx F, and that identity is
-   !> the statement that the streaming + mirror operator, projected on W,
-   !> annihilates everything except i kx <W (vMx - <vMx>_tau) h>.  It holds
-   !> exactly in the continuum, for any h.  Whether it holds for the code's
-   !> operators was measured directly by restarting W7-X case 1 at t = 30 with
-   !> one operator switched on at a time (the splitting is linear, and the three
-   !> pieces sum to the full dPhi/dt to 0.1%).  The drift projection agrees with
-   !> the continuum expression evaluated on the same h to five digits, so W, F,
-   !> <vMx>_tau and the drift term are mutually consistent -- which is what
-   !> every check above already said.  The streaming + mirror projection does
-   !> not: it misses the required value by 10% of |dPhi/dt|, and that
-   !> difference is the whole of the budget error (the energy budget sees it
-   !> amplified because only about a third of dPhi/dt changes the energy).  A
-   !> continuum operator built from splines of the same h does no better than
-   !> 7%: h itself carries structure at t = 30 that 128 points do not resolve.
-   !>
-   !> Where the structure is: W is discontinuous at the trapped-passing
-   !> boundary, and h develops fine scales there as it phase-mixes.  That is
-   !> consistent with the trapped channel converging at order 1.28 and the
-   !> circulating one at 1.93 in the same runs -- the barely trapped orbits are
-   !> the long ones -- and with the error growing in after t = 15 or so rather
-   !> than being present at t = 0, where the identity holds to 6% at nzed = 128
-   !> and 3% at 512 on the smooth initial condition.
-   !>
-   !> Why the earlier resolution scans looked flat: the error converges in nzed
-   !> and in the velocity grid jointly and slowly, roughly first order, and at
-   !> nfield_periods = 8 the field line is rugged enough (max |dB| per grid step
-   !> 0.049 at nzed = 128) that a fourfold refinement of one grid at a time does
-   !> not reach the asymptotic range.  At nfield_periods = 2 the ladder is
-   !> visible: nzed 64/128/256/512 give 0.083/0.058/0.042/0.038 and nvgrid
-   !> 48 -> 96 gives 0.058 -> 0.045.  And the residual is monotonic in the
-   !> ruggedness itself: at nzed = 128, nfield_periods 1/2/4/8 give max |dB| per
-   !> step 0.005/0.010/0.033/0.049 and residuals 0.025/0.058/0.086/0.150 at
-   !> t = 100.  It is independent of delt, of the mirror scheme (semi-Lagrange
-   !> against finite differences) and of implicit against explicit drifts, as a
-   !> spatial error should be.  The mismatch of B across the periodic join is
-   !> not it (nfield_periods = 2 has the same 9% jump as 8), and alpha0 = 0 is
-   !> not where the drift is significant but the stellarator-symmetric line,
-   !> where the transit-averaged drift of every passing particle vanishes by
-   !> symmetry, the drive is trapped-only, and the residual is worse (0.25 at
-   !> nfield_periods = 2, 0.39 at 8).
-   !>
-   !> The suite's W7-X case 1 therefore runs one field period, where the
-   !> cancellation holds to 2.5e-02, and is asserted normally.  Two things
-   !> remain worth doing here, neither of which changes the diagnostic: find_well
-   !> does not wrap across the periodic join, so a well straddling z = +-L is
-   !> rejected and takes the Q = 0 fallback (self-consistent, but it discards a
-   !> real well; at alpha0 = 0 on nfield_periods = 2 the join sits at a B
-   !> minimum and that is exactly the case); and the classification of orbits
-   !> against maxval(bmag) is a single global threshold on a line with many
-   !> wells.
-   !>
-   !> W7-X case 2 (kinetic electrons, electrostatic, collisionless) failed on
-   !> the same tube for a different reason, which is also not the diagnostic:
-   !> with kinetic electrons and no collisions the zonal mode on alpha0 = 0.7 is
-   !> numerically unstable.  |phi|^2 grows from 0.107 to 2.7e+05 by t = 300 at
-   !> nfield_periods = 8 (amplitude rate 0.025) and to 7e+11 by t = 100 at
-   !> nfield_periods = 1 (0.145), and the old reading of the case -- phi_RH
-   !> residual 1.7e+01, electron projection off its drift by 48x -- was that
-   !> growth.  It is not one operator: it survives xdriftknob = 0, mirror off,
-   !> the semi-Lagrangian mirror off, explicit drifts and upwinding, gets faster
-   !> at half the time step (0.92) and with a finer velocity grid, and is absent
-   !> with adiabatic electrons, with collisions (case 5, nu_e = 12) and on
-   !> alpha0 = 0, where the even coefficients match across the join and the odd
-   !> ones are antisymmetric.  The suite's deck now runs there and closes at
-   !> 9.0e-02 (6.2e-02 at twice nzed and nvgrid), which is the parallel
-   !> discretisation error above on a trapped-only line; case 1 reads 0.13 on
-   !> it.  Two more things about that deck: ginit_option = 'default' gives every
-   !> species the same density perturbation, which with two kinetic species is a
-   !> neutral perturbation whose zonal flow is a 6% polarisation remainder, so
-   !> the deck uses 'rh', where the perturbation is weighted by Z_s; and on
-   !> alpha0 = 0 nothing drives the odd invariant, so Omega_RH is vacuous.
-   !> Cases 3, 6, 9 and 10 in W7-X keep the alpha0 = 0.7 tube and the electrons;
-   !> case 3 on alpha0 = 0 does not grow and still fails, on its dApar transient.
-   !============================================================================
+   !> Interpolating log g also enforces positivity but is unstable here: g
+   !> approaches zero at those interior barriers and its logarithm spikes.
    subroutine interp_monotone(x, y, xi, yi)
 
       implicit none
@@ -3298,6 +3025,7 @@ contains
 
    end subroutine interp_monotone
 
+   !> Linear extrapolation of f to <z>, from its values at z1 and z2.
    pure real function extrapolate(z, z1, z2, f1, f2)
 
       implicit none
@@ -3429,16 +3157,8 @@ contains
       call interp_monotone(z_well, g_well, z_node, g_node)
       deallocate (tmp_real, tmp_imag)
 
-      !> g = (B_c - B)/((z-z_l)(z_r-z)) is positive throughout the well by
-      !> construction, but its cubic spline is not.  Where the well contains
-      !> interior maxima of B lying just below B_c -- the ordinary situation on a
-      !> stellarator field line, and where g varies over orders of magnitude --
-      !> the spline overshoots and returns negative values, and the integrand
-      !> carries 1/sqrt(g).  A monotone cubic is bounded on each interval by the
-      !> data either side of it, so it cannot overshoot and needs no repair
-      !> afterwards -- which matters for more than robustness: the clamp that
-      !> used to sit here was an O(1) edit over an O(dz) stretch of the well and
-      !> cost the trapped channel a whole order of convergence.
+      !> g must stay positive: the integrand carries 1/sqrt(g).  See
+      !> <interp_monotone> for why an ordinary spline will not do.
       node_weight = 1.0 / sqrt(g_node)
 
       !> The Chebyshev rule carries a common factor pi/n_nodes and a common

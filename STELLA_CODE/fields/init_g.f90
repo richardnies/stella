@@ -438,12 +438,11 @@ contains
       integer :: ikxkyz, iz, it, iky, ikx, is, ie, iseg, ia
       integer :: itmod
 
-      !> RN: a prescribed zonal profile used to force the fallback to ginit_default here,
-      !> but dist_fn::init_gxyz overwrites the whole zonal component of g with the
-      !> prescribed profile after ginit has run, so noise cannot corrupt the zonal
-      !> background any more. Noise is the useful seed for a tertiary run: it is broad
-      !> in x, whereas ginit_default is nearly kx-independent and therefore piles the
-      !> initial non-zonal perturbation up at x = 0, i.e. inside the sponge region.
+      !> Noise is the useful seed for a tertiary run: it is broad in x, whereas
+      !> ginit_default is nearly kx-independent and so piles the initial
+      !> non-zonal perturbation up at x = 0, inside the sponge region.  A
+      !> prescribed zonal profile is safe here because dist_fn::init_gxyz
+      !> overwrites the whole zonal component of g after ginit has run.
       if ((naky == 1 .and. nakx == 1) .or. (.not. nonlinear)) then
          if (proc0) then
             write (*, *) 'Noise initialization option is not suited for single mode simulations,'
