@@ -137,10 +137,9 @@ contains
       ! Calculate the RH inertia (kx,tube,s); RH fluxes(kx,tube,s)
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_integrands'
 
-      !> Flux tube only; init_rosenbluth_hinton aborts for full_flux_surface and
-      !> radial_variation, so this is reached only where that form is right.
-
-      ! Put the RH_integrands in form expected in stella_io
+      !> Put the RH_integrands in the form stella_io expects.  The flux-tube
+      !> shape assumed here always holds: init_rosenbluth_hinton aborts for
+      !> full_flux_surface and radial_variation.
       do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
          iv = iv_idx(vmu_lo, ivmu)
          imu = imu_idx(vmu_lo, ivmu)

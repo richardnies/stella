@@ -396,10 +396,6 @@ contains
 
    end subroutine finish_rosenbluth_hinton
 
-   !> Whether anything has asked for a quantity built on the drift-orbit phase.
-   !> The bounce-averaged radial drift is not one of them: it needs only the
-   !> geometry, which is what lets it be diagnosed in a stellarator where the
-
    !============================================================================
    !=========== IS THE ROSENBLUTH-HINTON MACHINERY NEEDED AT ALL? ==============
    !============================================================================
@@ -447,9 +443,6 @@ contains
       use arrays_dist_fn, only: integrand_vpamu => g1
 
       implicit none
-
-!      ! The RH inertia is returned with dimensions (kx, z, tube, spec)
-!      complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_inertia
 
       ! Temp variable holding RH inertia with dimensions (ky, kx, z, tube, spec) (1st is dummy)
       complex, dimension(:, :, :, :, :), allocatable :: RH_inertia_tmp
@@ -610,8 +603,8 @@ contains
       do_LW = write_RH_asymptotics .and. present(RH_fluxes_phi_even_LW)
       do_coll_LW = write_RH_asymptotics .and. present(RH_fluxes_coll_even_LW)
 
-      !> Must be allocated before the nonlinear block below, which is the first
-      !> user of these arrays.
+      !> The LW/SW accumulators must exist before the nonlinear block below,
+      !> which is their first user.
       if (do_LW) then
          RH_fluxes_phi_even_SW = 0.; RH_fluxes_phi_odd_SW = 0.
          allocate (SW_int_even(naky, nakx, -nzgrid:nzgrid, ntubes, vmu_lo%llim_proc:vmu_lo%ulim_alloc))
@@ -1135,10 +1128,8 @@ contains
    !> The nonlinear flux is optionally returned split by which field of chi_s
    !> supplied the advecting velocity.  Since
    !> <chi_s>_R = J0 dphi - vpa J0 dApar + (2 J1 / a)(mu/Z) dBpar and the flux is
-   !> linear in the velocity, the three pieces add to the total.  The split says
-   !> WHICH field is responsible when an electromagnetic budget misbehaves; the
-   !> potential-like invariant has carried it since it was written and the
-   !> momentum one did not.
+   !> linear in the velocity, the three pieces add to the total.  The split
+   !> says which field is responsible when an electromagnetic budget misbehaves.
    subroutine get_RH_omega_fluxes_fluxtube(g, RH_omega_flux_nl, RH_omega_flux_coll, RH_omega_flux_drift, &
                                            RH_omega_flux_nl_phi, RH_omega_flux_nl_apar, &
                                            RH_omega_flux_nl_bpar)
