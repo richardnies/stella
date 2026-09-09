@@ -253,8 +253,6 @@ contains
       ! Write to netcdf file 
       use stella_io, only: write_RH_fluxes_phi_nc, write_RH_fluxes_apar_nc, write_RH_fluxes_bpar_nc, write_RH_fluxes_coll_nc
       use stella_io, only: write_RH_fluxes_coll_split_nc, write_RH_fluxes_LW_nc
-      use stella_io, only: write_RH_fluxes_stress_nc
-      use parameters_diagnostics, only: write_RH_stress_split
       use parameters_diagnostics, only: write_RH_asymptotics
       use stella_io, only: write_RH_fluxes_drift_nc
       
@@ -285,8 +283,6 @@ contains
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs
-      complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs
-      complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_drift_trapped_vs_kxzts
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_drift_passing_vs_kxzts
 
@@ -316,10 +312,6 @@ contains
       allocate (RH_fluxes_phi_odd_SW_vs( naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_even_SW_vs(nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_odd_SW_vs( nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_phi_even_rey_vs(naky, nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_phi_odd_rey_vs( naky, nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_phi_even_dia_vs(naky, nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_phi_odd_dia_vs( naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_drift_trapped_vs_kxzts(            nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_drift_passing_vs_kxzts(            nakx, nztot, ntubes, nspec))
 
@@ -339,9 +331,7 @@ contains
                 RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs, &
                 RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs, &
                 RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs, &
-                RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs, &
-                RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs, &
-                RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs)
+                RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs)
       end if
 
       ! Write the RH_fluxes to the netcdf file
@@ -356,9 +346,6 @@ contains
               RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs, &
               RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs, &
               RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs)
-         if (write_RH_stress_split) call write_RH_fluxes_stress_nc(nout, &
-              RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs, &
-              RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs)
          call write_RH_fluxes_drift_nc(nout, RH_fluxes_drift_trapped_vs_kxzts, RH_fluxes_drift_passing_vs_kxzts)
 
       end if
@@ -372,8 +359,6 @@ contains
       deallocate (RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs)
       deallocate (RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs)
       deallocate (RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs)
-      deallocate (RH_fluxes_phi_even_rey_vs, RH_fluxes_phi_odd_rey_vs)
-      deallocate (RH_fluxes_phi_even_dia_vs, RH_fluxes_phi_odd_dia_vs)
       deallocate (RH_fluxes_drift_trapped_vs_kxzts)
       deallocate (RH_fluxes_drift_passing_vs_kxzts)
 
