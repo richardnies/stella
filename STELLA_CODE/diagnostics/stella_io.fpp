@@ -67,13 +67,15 @@ module stella_io
    public :: write_RH_fluxes_phi_nc
    public :: write_RH_fluxes_apar_nc
    public :: write_RH_fluxes_bpar_nc
-   public :: write_RH_fluxes_coll_nc
    public :: write_RH_fluxes_coll_split_nc
    public :: write_RH_fluxes_LW_nc
    public :: write_RH_fluxes_drift_nc
    public :: write_RH_phi_I_nc
    public :: write_RH_omega_nc
    public :: write_RH_omega_fluxes_nc
+   public :: write_RH_omega_flux_apar_nc
+   public :: write_RH_omega_flux_bpar_nc
+   public :: write_RH_omega_flux_drift_nc
    public :: write_RH_omega_inertia_nc
    public :: write_RH_inertia_nc
    public :: write_RH_integrands_nc
@@ -909,27 +911,10 @@ contains
    end subroutine write_RH_fluxes_coll_split_nc
 
 
-   subroutine write_RH_fluxes_coll_nc(nout, RH_fluxes_coll)
-      implicit none
-
-      integer, intent(in) :: nout
-      complex, dimension(:, :, :, :), intent(in) :: RH_fluxes_coll
-
-#ifdef NETCDF
-
-      ! Define the dimensions and starting pointer
-      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
-      integer, dimension(6) :: start
-      start = [1, 1, 1, 1, 1, nout]
-
-      ! Write the RH collisional flux (kx,z,tube,s,t,ri)
-      call netcdf_write_complex(ncid, "RH_fluxes_collisional",  RH_fluxes_coll, &
-               dim_names=dims, start=start, &
-               long_name="Rosenbluth-Hinton collisional Fluxes to ZF with kx")
-
-#endif
-
-   end subroutine write_RH_fluxes_coll_nc
+   !> The whole collisional flux used to be written here as well, under the name
+   !> RH_fluxes_collisional.  It is the sum of the two parity halves written by
+   !> write_RH_fluxes_coll_split_nc, so it was one array of redundant output and
+   !> one redundant velocity integral; add the halves instead.
 
    !============================================================================
    !=================== WRITE RH DRIFT FLUX TO NETCDF FILE =====================
@@ -1018,14 +1003,17 @@ contains
    end subroutine write_RH_omega_nc
 
 
-   subroutine write_RH_omega_fluxes_nc(nout, flux_nl, flux_coll, flux_drift, &
-                                       flux_nl_phi, flux_nl_apar, flux_nl_bpar)
+   !> Always written: the collisional flux, and the dphi part of the nonlinear
+   !> flux, which is the whole of it in an electrostatic run.  The nonlinear flux
+   !> is never written as a total, because the total is the sum of the three field
+   !> pieces; the other two have writers of their own and are called only when
+   !> that field is evolved, so an electrostatic run carries no arrays of zeros.
+   subroutine write_RH_omega_fluxes_nc(nout, flux_nl_phi, flux_coll)
       implicit none
 
       integer, intent(in) :: nout
-      complex, dimension(:, :, :, :, :), intent(in) :: flux_nl
-      complex, dimension(:, :, :, :), intent(in) :: flux_coll, flux_drift
-      complex, dimension(:, :, :, :, :), intent(in), optional :: flux_nl_phi, flux_nl_apar, flux_nl_bpar
+      complex, dimension(:, :, :, :, :), intent(in) :: flux_nl_phi
+      complex, dimension(:, :, :, :), intent(in) :: flux_coll
 
 #ifdef NETCDF
       character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
@@ -1035,33 +1023,72 @@ contains
       start = [1, 1, 1, 1, 1, nout]
       start_nl = [1, 1, 1, 1, 1, 1, nout]
 
-      call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear", flux_nl, dim_names=dims_nl, start=start_nl, &
-              long_name="Nonlinear flux driving the RH toroidal-momentum invariant")
       call netcdf_write_complex(ncid, "RH_omega_flux_collisional", flux_coll, dim_names=dims, start=start, &
               long_name="Collisional flux driving the RH toroidal-momentum invariant")
-      !> The nonlinear flux split by which field of chi supplied the advecting
-      !> velocity.  Written only when the caller asks for it, so an
-      !> electrostatic run does not carry three arrays of zeros.
-      if (present(flux_nl_phi)) then
-         call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_phi", flux_nl_phi, &
-                                   dim_names=dims_nl, start=start_nl, &
-                                   long_name="dApar=dBpar=0 part of the momentum nonlinear flux")
-      end if
-      if (present(flux_nl_apar)) then
-         call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_apar", flux_nl_apar, &
-                                   dim_names=dims_nl, start=start_nl, &
-                                   long_name="dApar part of the momentum nonlinear flux")
-      end if
-      if (present(flux_nl_bpar)) then
-         call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_bpar", flux_nl_bpar, &
-                                   dim_names=dims_nl, start=start_nl, &
-                                   long_name="dBpar part of the momentum nonlinear flux")
-      end if
+      call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_phi", flux_nl_phi, &
+                                dim_names=dims_nl, start=start_nl, &
+                                long_name="dphi part of the momentum nonlinear flux (the whole of it electrostatically)")
+#endif
+
+   end subroutine write_RH_omega_fluxes_nc
+
+   !> The dApar part of the nonlinear momentum flux.  Call only when apar is evolved.
+   subroutine write_RH_omega_flux_apar_nc(nout, flux_nl_apar)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: flux_nl_apar
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dims_nl = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: start_nl
+      start_nl = [1, 1, 1, 1, 1, 1, nout]
+
+      call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_apar", flux_nl_apar, &
+                                dim_names=dims_nl, start=start_nl, &
+                                long_name="dApar part of the momentum nonlinear flux")
+#endif
+
+   end subroutine write_RH_omega_flux_apar_nc
+
+   !> The dBpar part of the nonlinear momentum flux.  Call only when bpar is evolved.
+   subroutine write_RH_omega_flux_bpar_nc(nout, flux_nl_bpar)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :, :), intent(in) :: flux_nl_bpar
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dims_nl = [character(7)::"ri", "ky", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(7) :: start_nl
+      start_nl = [1, 1, 1, 1, 1, 1, nout]
+
+      call netcdf_write_complex(ncid, "RH_omega_flux_nonlinear_bpar", flux_nl_bpar, &
+                                dim_names=dims_nl, start=start_nl, &
+                                long_name="dBpar part of the momentum nonlinear flux")
+#endif
+
+   end subroutine write_RH_omega_flux_bpar_nc
+
+   !> The transit-averaged drift flux.  Call only where it is not identically
+   !> zero, i.e. where Q was integrated along the field line rather than taken
+   !> from the closed form.
+   subroutine write_RH_omega_flux_drift_nc(nout, flux_drift)
+      implicit none
+
+      integer, intent(in) :: nout
+      complex, dimension(:, :, :, :), intent(in) :: flux_drift
+
+#ifdef NETCDF
+      character(*), dimension(*), parameter :: dims = [character(7)::"ri", "kx", "zed", "tube", "species", "t"]
+      integer, dimension(6) :: start
+      start = [1, 1, 1, 1, 1, nout]
+
       call netcdf_write_complex(ncid, "RH_omega_flux_drift", flux_drift, dim_names=dims, start=start, &
               long_name="Transit-averaged magnetic drift flux driving the RH toroidal-momentum invariant")
 #endif
 
-   end subroutine write_RH_omega_fluxes_nc
+   end subroutine write_RH_omega_flux_drift_nc
 
 
    subroutine write_RH_omega_inertia_nc(RH_omega_inertia)

@@ -45,6 +45,9 @@ module rosenbluth_hinton
    public :: RH_drift_bounce_avg
    public :: RH_drift_is_trapped
    public :: eval_bounce_averaged_drift
+   !> Whether the drift fluxes are identically zero by construction, so that the
+   !> diagnostics can leave them out of the netCDF file instead of writing zeros.
+   public :: use_analytic_drift_phase
 
    real, dimension(:,:), allocatable :: RH_U_parallel_fac
    ! (-nzgrid:nzgrid, -vmu-layout-)
@@ -506,7 +509,7 @@ contains
    subroutine get_RH_fluxes_fluxtube(g, RH_fluxes_phi_even,  RH_fluxes_phi_odd, &
                                         RH_fluxes_apar_even, RH_fluxes_apar_odd, &
                                         RH_fluxes_bpar_even, RH_fluxes_bpar_odd, &
-                                        RH_fluxes_coll, RH_fluxes_drift_trapped, RH_fluxes_drift_passing, &
+                                        RH_fluxes_drift_trapped, RH_fluxes_drift_passing, &
                                         RH_fluxes_coll_even, RH_fluxes_coll_odd, &
                                         RH_fluxes_phi_even_LW, RH_fluxes_phi_odd_LW, &
                                         RH_fluxes_coll_even_LW, RH_fluxes_coll_odd_LW, &
@@ -564,7 +567,9 @@ contains
       ! Copies shielding the simulation state from the collision time-advance
       complex, dimension(:, :, :, :), allocatable :: phi_copy, apar_copy, bpar_copy
       complex, dimension(:, :, :), allocatable :: gvmu_saved
-      complex, dimension(   :, -nzgrid:, :, :), intent(out) :: RH_fluxes_coll
+      !> The collisional flux is returned split by parity only.  The sum of the
+      !> two is the whole collisional flux, so returning it as well would be one
+      !> more velocity integral and one more array for nothing.
       complex, dimension(   :, -nzgrid:, :, :), intent(out), optional :: RH_fluxes_coll_even, RH_fluxes_coll_odd
       !> The same fluxes formed with the long-wavelength weights instead of the
       !> exact ones.  Comparing the two is a test of the expansion that does not
@@ -760,7 +765,6 @@ contains
 
       ! Only compute RH collisional flux when collisions are included
       if (.not. include_collisions) then
-         RH_fluxes_coll = 0.
          if (allocated(work_coll)) deallocate (work_coll)
       else
 
@@ -824,16 +828,12 @@ contains
             end if
          end if
 
-         ! Evaluate integrand in RH collisional flux
-         integrand_odd = 1/code_dt * integrand_even * spread(RH_integrand_even+RH_integrand_odd, 1, naky)
+         !> The whole collisional flux is RH_fluxes_coll_even + RH_fluxes_coll_odd,
+         !> the two weights being RH_integrand_even and RH_integrand_odd and the
+         !> integral being linear in the weight.  It is left to the consumer to
+         !> add them rather than integrated a third time here.
 
-         ! Integrate over velocity space
-         call integrate_vmu(integrand_odd, spec%dens_psi0*spec%z, RH_fluxes_coll_tmp)
-         RH_fluxes_coll = RH_fluxes_coll_tmp(1,:,:,:,:)
-
-         ! Note : extra factor of -1/(1j*kx) to match definition of nonlinear fluxes
-         call normalise_RH_flux_by_ikx(RH_fluxes_coll)
-
+         !> Note : extra factor of -1/(1j*kx) to match definition of nonlinear fluxes.
          !> The asymptotic versions take the same -1/(i kx) as the exact ones.
          if (do_coll_LW) then
             call normalise_RH_flux_by_ikx(RH_fluxes_coll_even_LW)
@@ -1122,9 +1122,8 @@ contains
    !> <chi_s>_R = J0 dphi - vpa J0 dApar + (2 J1 / a)(mu/Z) dBpar and the flux is
    !> linear in the velocity, the three pieces add to the total.  The split
    !> says which field is responsible when an electromagnetic budget misbehaves.
-   subroutine get_RH_omega_fluxes_fluxtube(g, RH_omega_flux_nl, RH_omega_flux_coll, RH_omega_flux_drift, &
-                                           RH_omega_flux_nl_phi, RH_omega_flux_nl_apar, &
-                                           RH_omega_flux_nl_bpar)
+   subroutine get_RH_omega_fluxes_fluxtube(g, RH_omega_flux_nl_phi, RH_omega_flux_coll, RH_omega_flux_drift, &
+                                           RH_omega_flux_nl_apar, RH_omega_flux_nl_bpar)
 
       use zgrid, only: nzgrid, ntubes
       use species, only: spec, nspec
@@ -1156,16 +1155,20 @@ contains
       !> ky beat, and vchix ~ i ky phi is identically zero on the ky = 0 row, so
       !> collapsing to that row would discard the whole term.  The consumer sums
       !> over ky, exactly as for the potential-like nonlinear fluxes.
-      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_omega_flux_nl
+      !> The nonlinear flux is returned split by which field of chi supplied the
+      !> advecting velocity.  The whole nonlinear flux is the sum of the pieces,
+      !> so it is not formed here as well: that would be one more velocity
+      !> integral and one more (ky, kx, z, tube, s) array for nothing.  The phi
+      !> piece is always returned; the other two only when that field is evolved.
+      complex, dimension(:, :, -nzgrid:, :, :), intent(out) :: RH_omega_flux_nl_phi
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_omega_flux_coll
       complex, dimension(:, -nzgrid:, :, :), intent(out) :: RH_omega_flux_drift
-      complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_omega_flux_nl_phi
       complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_omega_flux_nl_apar
       complex, dimension(:, :, -nzgrid:, :, :), intent(out), optional :: RH_omega_flux_nl_bpar
-      complex, dimension(:, :, :, :, :), allocatable :: int_phi, int_apar, int_bpar
-      logical :: do_field_split
+      complex, dimension(:, :, :, :, :), allocatable :: int_apar, int_bpar
+      logical :: do_apar_split, do_bpar_split
 
-      complex, dimension(naky, nakx) :: vchix_gyro, vchix_part, NL_term
+      complex, dimension(naky, nakx) :: vchix_part, NL_term
       complex, dimension(naky, nakx) :: h_slice
       complex, dimension(naky, nx)   :: vchix_gyro_ky_x, g_ky_x, NL_term_ky_x
       complex, dimension(:, :, :, :, :), allocatable :: flux_tmp
@@ -1180,27 +1183,30 @@ contains
       ia = 1
       allocate (flux_tmp(naky, nakx, -nzgrid:nzgrid, ntubes, nspec))
 
-      do_field_split = present(RH_omega_flux_nl_phi) .and. present(RH_omega_flux_nl_apar) &
-                       .and. present(RH_omega_flux_nl_bpar)
+      do_apar_split = present(RH_omega_flux_nl_apar) .and. include_apar
+      do_bpar_split = present(RH_omega_flux_nl_bpar) .and. include_bpar
 
       !----------------------------- nonlinear -------------------------------
-      RH_omega_flux_nl = 0.
-      if (do_field_split) then
-         RH_omega_flux_nl_phi = 0.; RH_omega_flux_nl_apar = 0.; RH_omega_flux_nl_bpar = 0.
-      end if
+      !> The phi piece accumulates straight into the shared module scratch
+      !> <integrand>; only the pieces that are actually evolved get an array of
+      !> their own.
+      RH_omega_flux_nl_phi = 0.
+      if (present(RH_omega_flux_nl_apar)) RH_omega_flux_nl_apar = 0.
+      if (present(RH_omega_flux_nl_bpar)) RH_omega_flux_nl_bpar = 0.
       if (nonlinear) then
          integrand = 0.
-         if (do_field_split) then
-            !> Explicit bounds, not source=integrand: `integrand` is the shared
-            !> module scratch g0 aliased in above, whose bounds need not match
-            !> what omega_flux_piece declares.
-            allocate (int_phi(naky, nakx, -nzgrid:nzgrid, ntubes, &
-                              vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+         !> Explicit bounds, not source=integrand: `integrand` is the shared
+         !> module scratch g0 aliased in above, whose bounds need not match
+         !> what omega_flux_piece declares.
+         if (do_apar_split) then
             allocate (int_apar(naky, nakx, -nzgrid:nzgrid, ntubes, &
                                vmu_lo%llim_proc:vmu_lo%ulim_alloc))
+            int_apar = 0.
+         end if
+         if (do_bpar_split) then
             allocate (int_bpar(naky, nakx, -nzgrid:nzgrid, ntubes, &
                                vmu_lo%llim_proc:vmu_lo%ulim_alloc))
-            int_phi = 0.; int_apar = 0.; int_bpar = 0.
+            int_bpar = 0.
          end if
          do ivmu = vmu_lo%llim_proc, vmu_lo%ulim_proc
             iv = iv_idx(vmu_lo, ivmu)
@@ -1221,41 +1227,30 @@ contains
                   !> linear in the velocity each one's flux can be formed on the
                   !> way past, which is what the optional split returns.
                   call gyro_average(zi*fphi*spread(aky,2,nakx)*phi(:,:,iz,it), iz, ivmu, vchix_part)
-                  vchix_gyro = vchix_part
-                  if (do_field_split) call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_phi)
+                  call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, integrand)
 
-                  if (include_apar) then
+                  if (do_apar_split) then
                      call gyro_average(-2.0 * vpa(iv)*spec(is)%stm_psi0 &
                                        * zi*spread(aky,2,nakx)*apar(:,:,iz,it), iz, ivmu, vchix_part)
-                     vchix_gyro = vchix_gyro + vchix_part
-                     if (do_field_split) call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_apar)
+                     call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_apar)
                   end if
 
-                  if (include_bpar) then
+                  if (do_bpar_split) then
                      call gyro_average_j1(4.0*mu(imu)*spec(is)%tz &
                                           * zi*spread(aky,2,nakx)*bpar(:,:,iz,it), iz, ivmu, vchix_part)
-                     vchix_gyro = vchix_gyro + vchix_part
-                     if (do_field_split) call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_bpar)
+                     call omega_flux_piece(vchix_part, g_ky_x, iz, it, ivmu, int_bpar)
                   end if
-
-                  call omega_flux_piece(vchix_gyro, g_ky_x, iz, it, ivmu, integrand)
                end do
             end do
          end do
-         call integrate_vmu(integrand, spec%dens_psi0, RH_omega_flux_nl)
-         if (do_field_split) then
-            call integrate_vmu(int_phi, spec%dens_psi0, RH_omega_flux_nl_phi)
-            if (include_apar) then
-               call integrate_vmu(int_apar, spec%dens_psi0, RH_omega_flux_nl_apar)
-            else
-               RH_omega_flux_nl_apar = 0.
-            end if
-            if (include_bpar) then
-               call integrate_vmu(int_bpar, spec%dens_psi0, RH_omega_flux_nl_bpar)
-            else
-               RH_omega_flux_nl_bpar = 0.
-            end if
-            deallocate (int_phi, int_apar, int_bpar)
+         call integrate_vmu(integrand, spec%dens_psi0, RH_omega_flux_nl_phi)
+         if (do_apar_split) then
+            call integrate_vmu(int_apar, spec%dens_psi0, RH_omega_flux_nl_apar)
+            deallocate (int_apar)
+         end if
+         if (do_bpar_split) then
+            call integrate_vmu(int_bpar, spec%dens_psi0, RH_omega_flux_nl_bpar)
+            deallocate (int_bpar)
          end if
       end if
 

@@ -16,7 +16,8 @@
 ! The RH_fluxes_apar_odd_vs_kykxzts       is denoted by RH_fluxes_apar_odd
 ! The RH_fluxes_bpar_even_vs_kykxzts      is denoted by RH_fluxes_bpar_even
 ! The RH_fluxes_bpar_odd_vs_kykxzts       is denoted by RH_fluxes_bpar_odd
-! The RH_fluxes_coll_vs_kxzts             is denoted by RH_fluxes_coll
+! The RH_fluxes_coll_even_vs              is denoted by RH_fluxes_coll_even
+! The RH_fluxes_coll_odd_vs               is denoted by RH_fluxes_coll_odd
 ! 
 !###############################################################################
  
@@ -250,10 +251,11 @@ contains
       use parameters_physics, only: full_flux_surface
 
       ! Write to netcdf file 
-      use stella_io, only: write_RH_fluxes_phi_nc, write_RH_fluxes_apar_nc, write_RH_fluxes_bpar_nc, write_RH_fluxes_coll_nc
+      use stella_io, only: write_RH_fluxes_phi_nc, write_RH_fluxes_apar_nc, write_RH_fluxes_bpar_nc
       use stella_io, only: write_RH_fluxes_coll_split_nc, write_RH_fluxes_LW_nc
       use parameters_diagnostics, only: write_RH_asymptotics
       use stella_io, only: write_RH_fluxes_drift_nc
+      use rosenbluth_hinton, only: use_analytic_drift_phase
       
       ! Routines
       use job_manage, only: time_message
@@ -276,7 +278,6 @@ contains
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_vs_kykxzts,  RH_fluxes_phi_odd_vs_kykxzts
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts
-      complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_vs_kxzts
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs
       complex, dimension(:, :, :, :, :), allocatable :: RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs
       complex, dimension(:, :, :, :),    allocatable :: RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs
@@ -300,7 +301,6 @@ contains
       allocate (RH_fluxes_apar_odd_vs_kykxzts( naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_bpar_even_vs_kykxzts(naky, nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_bpar_odd_vs_kykxzts( naky, nakx, nztot, ntubes, nspec))
-      allocate (RH_fluxes_coll_vs_kxzts(                     nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_even_vs(nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_coll_odd_vs( nakx, nztot, ntubes, nspec))
       allocate (RH_fluxes_phi_even_LW_vs(naky, nakx, nztot, ntubes, nspec))
@@ -325,7 +325,7 @@ contains
                 RH_fluxes_phi_even_vs_kykxzts,  RH_fluxes_phi_odd_vs_kykxzts, &
                 RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts, &
                 RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts, &
-                RH_fluxes_coll_vs_kxzts, RH_fluxes_drift_trapped_vs_kxzts, RH_fluxes_drift_passing_vs_kxzts, &
+                RH_fluxes_drift_trapped_vs_kxzts, RH_fluxes_drift_passing_vs_kxzts, &
                 RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs, &
                 RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs, &
                 RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs, &
@@ -338,14 +338,18 @@ contains
          call write_RH_fluxes_phi_nc(nout, RH_fluxes_phi_even_vs_kykxzts, RH_fluxes_phi_odd_vs_kykxzts)
          if (include_apar) call write_RH_fluxes_apar_nc(nout, RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts)
          if (include_bpar) call write_RH_fluxes_bpar_nc(nout, RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts)
-         if (include_collisions) call write_RH_fluxes_coll_nc(nout, RH_fluxes_coll_vs_kxzts)
+         !> Split by parity only; the whole collisional flux is the sum of the two.
          if (include_collisions) call write_RH_fluxes_coll_split_nc(nout, RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs)
          if (write_RH_asymptotics) call write_RH_fluxes_LW_nc(nout, &
               RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs, &
               RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs, &
               RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs, &
               RH_fluxes_coll_even_SW_vs, RH_fluxes_coll_odd_SW_vs)
-         call write_RH_fluxes_drift_nc(nout, RH_fluxes_drift_trapped_vs_kxzts, RH_fluxes_drift_passing_vs_kxzts)
+         !> With the closed form for Q the transit-averaged drift vanishes by
+         !> construction and both drift fluxes are identically zero, so they are
+         !> not written at all rather than written as zeros.
+         if (.not. use_analytic_drift_phase) &
+            call write_RH_fluxes_drift_nc(nout, RH_fluxes_drift_trapped_vs_kxzts, RH_fluxes_drift_passing_vs_kxzts)
 
       end if
 
@@ -353,7 +357,7 @@ contains
       deallocate (RH_fluxes_phi_even_vs_kykxzts,  RH_fluxes_phi_odd_vs_kykxzts)
       deallocate (RH_fluxes_apar_even_vs_kykxzts, RH_fluxes_apar_odd_vs_kykxzts)
       deallocate (RH_fluxes_bpar_even_vs_kykxzts, RH_fluxes_bpar_odd_vs_kykxzts)
-      deallocate (RH_fluxes_coll_vs_kxzts, RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs)
+      deallocate (RH_fluxes_coll_even_vs, RH_fluxes_coll_odd_vs)
       deallocate (RH_fluxes_phi_even_LW_vs, RH_fluxes_phi_odd_LW_vs)
       deallocate (RH_fluxes_coll_even_LW_vs, RH_fluxes_coll_odd_LW_vs)
       deallocate (RH_fluxes_phi_even_SW_vs, RH_fluxes_phi_odd_SW_vs)
@@ -383,6 +387,10 @@ contains
       use species, only: nspec
       use stella_io, only: write_RH_omega_nc, write_RH_omega_inertia_nc
       use stella_io, only: write_RH_omega_fluxes_nc
+      use stella_io, only: write_RH_omega_flux_apar_nc, write_RH_omega_flux_bpar_nc
+      use stella_io, only: write_RH_omega_flux_drift_nc
+      use rosenbluth_hinton, only: use_analytic_drift_phase
+      use parameters_physics, only: include_apar, include_bpar
       use job_manage, only: time_message
       use mp, only: proc0
       use parameters_diagnostics, only: write_RH_inertia_fluxes
@@ -393,7 +401,9 @@ contains
       integer, intent(in) :: nout
 
       complex, dimension(:, :, :, :), allocatable :: RH_omega_vs_kxzts, RH_omega_g_vs_kxzts
-      complex, dimension(:, :, :, :, :), allocatable :: flux_nl
+      !> The nonlinear flux is kept split by field; the total is their sum, and is
+      !> neither formed nor written.  The two electromagnetic pieces exist only
+      !> when that field is evolved.
       complex, dimension(:, :, :, :, :), allocatable :: flux_nl_phi, flux_nl_apar, flux_nl_bpar
       complex, dimension(:, :, :, :), allocatable :: flux_coll, flux_drift
       logical, save :: inertia_written = .false.
@@ -404,7 +414,6 @@ contains
 
       allocate (RH_omega_vs_kxzts(nakx, nztot, ntubes, nspec))
       allocate (RH_omega_g_vs_kxzts(nakx, nztot, ntubes, nspec))
-      allocate (flux_nl(naky, nakx, nztot, ntubes, nspec))
       allocate (flux_nl_phi(naky, nakx, nztot, ntubes, nspec))
       allocate (flux_nl_apar(naky, nakx, nztot, ntubes, nspec))
       allocate (flux_nl_bpar(naky, nakx, nztot, ntubes, nspec))
@@ -414,20 +423,27 @@ contains
       if (debug) write (*, *) 'diagnostics::diagnostics_stella::write_RH_omega'
 
       call get_RH_omega(gnew, RH_omega_vs_kxzts, RH_omega_g_vs_kxzts)
-      call get_RH_omega_fluxes_fluxtube(gnew, flux_nl, flux_coll, flux_drift, &
-                                       flux_nl_phi, flux_nl_apar, flux_nl_bpar)
+      call get_RH_omega_fluxes_fluxtube(gnew, flux_nl_phi, flux_coll, flux_drift, &
+                                        flux_nl_apar, flux_nl_bpar)
 
       if (proc0) then
          call write_RH_omega_nc(nout, RH_omega_vs_kxzts, RH_omega_g_vs_kxzts)
-         call write_RH_omega_fluxes_nc(nout, flux_nl, flux_coll, flux_drift, &
-                                       flux_nl_phi, flux_nl_apar, flux_nl_bpar)
+         !> What goes into the file is decided here, not in the writer: the phi
+         !> piece and the collisional flux always; the two electromagnetic pieces
+         !> only when that field is evolved; the drift flux only where it is not
+         !> identically zero.  The whole nonlinear flux is the sum of the pieces
+         !> and is not written.
+         call write_RH_omega_fluxes_nc(nout, flux_nl_phi, flux_coll)
+         if (include_apar) call write_RH_omega_flux_apar_nc(nout, flux_nl_apar)
+         if (include_bpar) call write_RH_omega_flux_bpar_nc(nout, flux_nl_bpar)
+         if (.not. use_analytic_drift_phase) call write_RH_omega_flux_drift_nc(nout, flux_drift)
          if (.not. inertia_written) then
             call write_RH_omega_inertia_nc(RH_omega_inertia)
             inertia_written = .true.
          end if
       end if
 
-      deallocate (RH_omega_vs_kxzts, RH_omega_g_vs_kxzts, flux_nl, flux_coll, flux_drift)
+      deallocate (RH_omega_vs_kxzts, RH_omega_g_vs_kxzts, flux_coll, flux_drift)
       deallocate (flux_nl_phi, flux_nl_apar, flux_nl_bpar)
 
       if (proc0) call time_message(.false., timer(:), 'Write RH_omega')
