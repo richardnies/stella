@@ -77,7 +77,18 @@ contains
       integer :: is
       real :: vnew_max
 
-      if (dougherty_initialized) return
+      !> Everything this routine builds carries the time step: the tridiagonal matrices
+      !> are (I - code_dt * nu * L), and the conservation response matrices are built
+      !> from them.  reset_dt clears `collisions_initialized` and calls init_collisions
+      !> again precisely so that they follow a changed code_dt, so this routine must not
+      !> short-circuit on a flag of its own.  It used to: `if (dougherty_initialized) return`
+      !> froze the matrices at the code_dt of the first call, which is the input `delt`,
+      !> and init_cfl lowers code_dt to the CFL value immediately afterwards.  Each implicit
+      !> collision step then applied (I - delt*nu*L)^-1 once per CFL step, i.e. an effective
+      !> collision frequency nu * delt / code_dt.
+      !> The flag is kept so that
+      !> finish_collisions_dougherty knows there is something to tear down; every allocation
+      !> below is guarded by `.not. allocated`.
       dougherty_initialized = .true.
 
       if (collisions_implicit) then
@@ -244,16 +255,19 @@ contains
 
       if (.not. allocated(vpadiff_response)) then
          allocate (vpadiff_response(nresponse_vpa, nresponse_vpa, kxkyz_lo%llim_proc:kxkyz_lo%ulim_alloc))
-         vpadiff_response = 0.
          allocate (vpadiff_idx(nresponse_vpa, kxkyz_lo%llim_proc:kxkyz_lo%ulim_alloc))
       end if
+      !> zero on every call, not only on allocation: the routine is re-entered from reset_dt,
+      !> it accumulates into the response matrices and factorises them in place, so a rebuild
+      !> must not start from the previous factorisation.
+      vpadiff_response = 0.
 
       if (.not. has_electron_species(spec) .and. adiabatic_option_switch == adiabatic_option_fieldlineavg) then
          if (.not. allocated(vpadiff_zf_response)) then
             allocate (vpadiff_zf_response(nresponse_vpa, nresponse_vpa, nakx))
-            vpadiff_zf_response = 0.
             allocate (vpadiff_zf_idx(nresponse_vpa, nakx))
          end if
+         vpadiff_zf_response = 0.
       end if
 
       allocate (dum1(naky, nakx, -nzgrid:nzgrid, ntubes))
@@ -497,16 +511,16 @@ contains
 
       if (.not. allocated(mudiff_response)) then
          allocate (mudiff_response(nresponse_mu, nresponse_mu, kxkyz_lo%llim_proc:kxkyz_lo%ulim_alloc))
-         mudiff_response = 0.
          allocate (mudiff_idx(nresponse_mu, kxkyz_lo%llim_proc:kxkyz_lo%ulim_alloc))
       end if
+      mudiff_response = 0.
 
       if (.not. has_electron_species(spec) .and. adiabatic_option_switch == adiabatic_option_fieldlineavg) then
          if (.not. allocated(mudiff_zf_response)) then
             allocate (mudiff_zf_response(nresponse_mu, nresponse_mu, nakx))
-            mudiff_zf_response = 0.
             allocate (mudiff_zf_idx(nresponse_mu, nakx))
          end if
+         mudiff_zf_response = 0.
       end if
 
       allocate (dum1(naky, nakx, -nzgrid:nzgrid, ntubes))
